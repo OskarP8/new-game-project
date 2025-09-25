@@ -59,10 +59,6 @@ offset_top = -183.0
 offset_right = -79.0
 offset_bottom = -61.0
 
-[node name="Resources" type="Node2D" parent="."]
-top_level = true
-z_index = 2
-
 [node name="layers" type="Node2D" parent="."]
 y_sort_enabled = true
 
@@ -72,3 +68,7 @@ inv = ExtResource("2_6g14s")
 [node name="Chest" parent="layers" instance=ExtResource("5_ixe8f")]
 y_sort_enabled = false
 scale = Vector2(0.6, 0.6)
+
+[node name="Resources" type="Node2D" parent="layers"]
+top_level = true
+z_index = 2

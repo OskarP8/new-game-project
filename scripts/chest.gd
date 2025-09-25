@@ -42,7 +42,7 @@ func spawn_and_collect(player: Node2D, entry: InventoryEntry) -> void:
 
 		sprite.global_position = item_start_pos.global_position + offset
 		var resources_node = get_tree().get_root().get_node("world/layers/Resources")
-		add_child(sprite)  # Add it as sibling to chest & player, inside YSort
+		resources_node.add_child(sprite)  # Add it as sibling to chest & player, inside YSort
 
 
 		# Tween: chest → end position
