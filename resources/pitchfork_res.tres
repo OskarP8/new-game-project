@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="InvItem" load_steps=5 format=3 uid="uid://chg8qlokgknrt"]
+
+[ext_resource type="Texture2D" uid="uid://b0c6l2qff7tcv" path="res://sprites/icons/pitchfork_icon.kra" id="1_7sl5a"]
+[ext_resource type="Script" path="res://inventory/inventory_item.gd" id="1_bi3nf"]
+[ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="2_oo366"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_d438q"]
+atlas = ExtResource("2_oo366")
+region = Rect2(8, 16, 7, 15)
+
+[resource]
+script = ExtResource("1_bi3nf")
+name = ""
+texture = SubResource("AtlasTexture_d438q")
+icon = ExtResource("1_7sl5a")
