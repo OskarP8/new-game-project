@@ -1,6 +1,6 @@
 extends Panel
 
-@onready var item_visual: Sprite2D = $CenterContainer/Panel/item_display      # adjust path to your Sprite2D
+@onready var item_visual: TextureRect = $CenterContainer/Panel/ItemDisplay
 @onready var quantity_label: Label = $QuantityLabel # optional, for showing amounts
 
 func update(slot: InvSlot):

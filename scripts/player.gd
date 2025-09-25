@@ -391,3 +391,9 @@ func collect(item):
 
 func get_inventory() -> Inv:
 	return inventory
+
+func add_to_inventory(item: InvItem, quantity: int) -> void:
+	var entry = InventoryEntry.new()
+	entry.item = item
+	entry.quantity = quantity
+	inventory.add_item(entry)   # emits signal → UI updates
