@@ -37,10 +37,12 @@ var attack_angle: float = 0.0     # stored attack angle
 # ----------------------
 func _ready() -> void:
 	if body_anim:
-		# Connect body animation finished so we can end attacks
-		body_anim.connect("animation_finished", Callable(self, "_on_body_animation_finished"))
-	else:
-		push_warning("Body AnimatedSprite2D not found at $Body")
+		body_anim.z_as_relative = true
+	if head_anim:
+		head_anim.z_as_relative = true
+	if weapon_pivot:
+		weapon_pivot.z_as_relative = true
+
 
 # ----------------------
 # MAIN LOOP

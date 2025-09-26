@@ -63,6 +63,8 @@ offset_bottom = -61.0
 y_sort_enabled = true
 
 [node name="player" parent="layers" instance=ExtResource("1_5c8af")]
+z_index = 0
+y_sort_enabled = false
 inv = ExtResource("2_6g14s")
 
 [node name="Chest" parent="layers" instance=ExtResource("5_ixe8f")]
@@ -71,4 +73,3 @@ scale = Vector2(0.6, 0.6)
 
 [node name="Resources" type="Node2D" parent="layers"]
 top_level = true
-z_index = 2
