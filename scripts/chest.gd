@@ -59,4 +59,5 @@ func spawn_and_collect(player: Node2D, entry: InventoryEntry) -> void:
 
 
 func _process(delta):
-	print("Chest Y:", global_position.y)
+	#print("Chest Y:", global_position.y)
+	z_index = int(global_position.y)

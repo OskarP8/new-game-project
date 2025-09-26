@@ -584,7 +584,7 @@ animations = [{
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_i7h4v")
 }],
-"loop": true,
+"loop": false,
 "name": &"attack",
 "speed": 10.0
 }, {
@@ -621,6 +621,7 @@ animations = [{
 }]
 
 [node name="player" type="CharacterBody2D"]
+y_sort_enabled = true
 position = Vector2(0, -3)
 script = ExtResource("1_gjq3l")
 
@@ -642,12 +643,10 @@ shape = SubResource("CapsuleShape2D_o42l5")
 [node name="Graphics" type="Node2D" parent="."]
 
 [node name="Body" type="AnimatedSprite2D" parent="Graphics"]
-y_sort_enabled = true
+z_as_relative = false
 position = Vector2(0, 3)
 sprite_frames = SubResource("SpriteFrames_7k18h")
-animation = &"attack_down_right_weapon"
-frame = 3
-frame_progress = 1.0
+animation = &"attack_up_right_weapon"
 offset = Vector2(0, -16)
 
 [node name="Camera2D" type="Camera2D" parent="Graphics/Body"]
@@ -656,18 +655,21 @@ zoom = Vector2(7, 7)
 position_smoothing_enabled = true
 
 [node name="Head" type="AnimatedSprite2D" parent="Graphics"]
-y_sort_enabled = true
+z_as_relative = false
 position = Vector2(0, 3)
 sprite_frames = SubResource("SpriteFrames_8ngrp")
-animation = &"walk_down_right_weapon"
+animation = &"attack_down_right_weapon"
 offset = Vector2(0, -16)
 
 [node name="WeaponPivot" type="Node2D" parent="Graphics"]
+y_sort_enabled = true
 
 [node name="Weapon" type="AnimatedSprite2D" parent="Graphics/WeaponPivot"]
+y_sort_enabled = true
 position = Vector2(0, 3)
 sprite_frames = SubResource("SpriteFrames_r7mta")
-animation = &"idle"
-frame_progress = 0.625271
+animation = &"attack"
 centered = false
 offset = Vector2(-9, -30)
+
+[connection signal="animation_finished" from="Graphics/Body" to="." method="_on_body_animation_finished"]

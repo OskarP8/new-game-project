@@ -61,7 +61,9 @@ func _process(delta):
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
-	print("Player Y:", global_position.y)
+	z_index = int(global_position.y)
+	update_layers()
+	#print("Player Y:", global_position.y)
 # ----------------------
 # INPUT
 # ----------------------
