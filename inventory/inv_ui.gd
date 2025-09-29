@@ -1,6 +1,6 @@
 extends Control
 
-@onready var inv: Inv
+@export var inv: Inv
 @onready var isgc = preload("res://scenes/item_stack_ui.tscn")
 @onready var slots: Array = $NinePatchRect/GridContainer.get_children()
 
@@ -24,6 +24,7 @@ func _process(delta):
 func update_slots() -> void:
 	for i in range(slots.size()):
 		var inv_slot: InvSlot = inv.slots[i]
+		print("Slot", i, " item:", inv_slot.item, " amount:", inv_slot.amount)
 		if inv_slot.item == null:
 			continue
 
