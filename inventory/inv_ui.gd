@@ -1,13 +1,17 @@
 extends Control
 
-@onready var inv: Inv = preload("res://inventory/playerinv.tres")
+@onready var inv: Inv = Inv.new()
+@onready var isgc = preload("res://scenes/item_stack_ui.tscn")
 @onready var slots: Array = $NinePatchRect/GridContainer.get_children()
 
 var is_open = false
+var item_in_hand: ItemStackUI
 
 func _ready():
-	inv.changed.connect(update_slots)
+	inv.inventory_changed.connect(update_slots)
+	print("Inv slots on ready:", inv.slots.size())
 	update_slots()
+	connect_slots()
 	close()
 
 func _process(delta):
@@ -19,10 +23,18 @@ func _process(delta):
 
 func update_slots() -> void:
 	for i in range(slots.size()):
-		if i < inv.slots.size():
-			slots[i].update(inv.slots[i])
-		else:
-			slots[i].update(null)  # empty slot
+		var inv_slot: InvSlot = inv.slots[i]
+		if inv_slot.item == null:
+			continue
+
+		var item_stack: ItemStackUI = slots[i].item_stack
+		if !item_stack:
+			item_stack = isgc.instantiate()
+			slots[i].insert(item_stack)
+
+		item_stack.slot = inv_slot   # ✅ correct assignment
+		item_stack.update()
+
 
 func open() -> void:
 	visible = true
@@ -32,3 +44,13 @@ func open() -> void:
 func close() -> void:
 	visible = false
 	is_open = false
+
+func connect_slots():
+	for slot in slots:
+		var callable = Callable(on_slot_clicked)
+		callable = callable.bind(slot)
+		slot.pressed.connect(callable)
+
+func on_slot_clicked(slot):
+	item_in_hand = slot.take_item()
+	add_child(item_in_hand)

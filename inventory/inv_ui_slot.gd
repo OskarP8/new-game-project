@@ -1,16 +1,16 @@
-extends Panel
+extends Button
 
-@onready var item_visual: TextureRect = $CenterContainer/Panel/ItemDisplay
-@onready var quantity_label: Label = $QuantityLabel # optional, for showing amounts
+@onready var container: CenterContainer = $CenterContainer
 
-func update(slot: InvSlot):
-	if slot == null or slot.item == null:
-		item_visual.visible = false
-		if quantity_label:
-			quantity_label.visible = false
-	else:
-		item_visual.visible = true
-		item_visual.texture = slot.item.icon   # use icon for inventory display
-		if quantity_label:
-			quantity_label.visible = true
-			quantity_label.text = str(slot.amount)
+var item_stack : ItemStackUI
+
+func insert(isg: ItemStackUI):
+	item_stack = isg
+	container.add_child(item_stack)
+
+func take_item():
+	var item = item_stack
+	
+	container.remove_child(item_stack)
+	item_stack = null
+	return item

@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3 uid="uid://bydtyrreptnt0"]
+
+[ext_resource type="Script" path="res://scenes/item_stack_ui.gd" id="1_kieig"]
+
+[node name="ItemStackUI" type="Panel"]
+script = ExtResource("1_kieig")
+
+[node name="Label" type="Label" parent="."]
+custom_minimum_size = Vector2(20, 23)
+layout_mode = 0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = 25.0
+offset_bottom = 28.0
+scale = Vector2(0.35, 0.35)
+horizontal_alignment = 2
+max_lines_visible = 1
+visible_characters = 2
+
+[node name="ItemDisplay" type="TextureRect" parent="."]
+layout_mode = 0
+offset_left = -16.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = 16.0
+stretch_mode = 5

@@ -18,3 +18,8 @@ func add_item(entry: InventoryEntry) -> void:
 	new_slot.amount = entry.quantity
 	slots.append(new_slot)
 	emit_signal("inventory_changed")
+
+func _init(slot_count: int = 20):
+	slots.resize(slot_count)
+	for i in range(slot_count):
+		slots[i] = InvSlot.new()
