@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="InvItem" load_steps=5 format=3 uid="uid://dxangxod61kb2"]
 
-[ext_resource type="Script" path="res://inventory/inventory_item.gd" id="1_o3dmt"]
+[ext_resource type="Script" uid="uid://cra455dn4vv1i" path="res://inventory/inventory_item.gd" id="1_o3dmt"]
 [ext_resource type="Texture2D" uid="uid://8xfrhkuf5w3x" path="res://sprites/pitchfork_icon.kra" id="1_wirck"]
 [ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="3_0frxh"]
 

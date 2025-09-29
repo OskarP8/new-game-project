@@ -1,6 +1,6 @@
 extends Control
 
-@onready var inv: Inv = Inv.new()
+@onready var inv: Inv
 @onready var isgc = preload("res://scenes/item_stack_ui.tscn")
 @onready var slots: Array = $NinePatchRect/GridContainer.get_children()
 

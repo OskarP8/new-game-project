@@ -8,18 +8,30 @@ const InvSlotRes = preload("res://inventory/inv_slot.gd")
 @export var slots: Array[InvSlot] = []
 
 func add_item(entry: InventoryEntry) -> void:
+	# Try to stack onto an existing slot with the same item
 	for slot in slots:
 		if slot.item == entry.item:
 			slot.amount += entry.quantity
 			emit_signal("inventory_changed")
 			return
+
+	# Otherwise, find the first empty slot
+	for slot in slots:
+		if slot.item == null:
+			slot.item = entry.item
+			slot.amount = entry.quantity
+			emit_signal("inventory_changed")
+			return
+
+	# If no empty slot found, you could expand (optional)
 	var new_slot = InvSlot.new()
 	new_slot.item = entry.item
 	new_slot.amount = entry.quantity
 	slots.append(new_slot)
 	emit_signal("inventory_changed")
 
-func _init(slot_count: int = 20):
+
+func _init(slot_count: int = 12):
 	slots.resize(slot_count)
 	for i in range(slot_count):
 		slots[i] = InvSlot.new()

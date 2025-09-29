@@ -1,7 +1,6 @@
-[gd_scene load_steps=8 format=4 uid="uid://danlo4u14ys00"]
+[gd_scene load_steps=7 format=4 uid="uid://danlo4u14ys00"]
 
 [ext_resource type="PackedScene" uid="uid://dwgo1s0vppabn" path="res://scenes/player.tscn" id="1_5c8af"]
-[ext_resource type="Resource" uid="uid://dfdhsvuohr1yl" path="res://inventory/playerinv.tres" id="2_6g14s"]
 [ext_resource type="Texture2D" uid="uid://bm4c7tmq6qur6" path="res://sprites/road_tileset1.kra" id="2_lbp6r"]
 [ext_resource type="PackedScene" uid="uid://bbdgfmv21n0be" path="res://scenes/inv_ui.tscn" id="4_uat3m"]
 [ext_resource type="PackedScene" uid="uid://bbfq50yyk3pwu" path="res://scenes/chest.tscn" id="5_ixe8f"]
@@ -64,7 +63,6 @@ offset_bottom = -61.0
 y_sort_enabled = true
 
 [node name="player" parent="layers" instance=ExtResource("1_5c8af")]
-inv = ExtResource("2_6g14s")
 
 [node name="Chest" parent="layers" instance=ExtResource("5_ixe8f")]
 scale = Vector2(0.6, 0.6)

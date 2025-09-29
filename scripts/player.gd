@@ -1,6 +1,6 @@
 extends CharacterBody2D
 
-@export var inv: Inv
+#@export var inv: Inv
 @export var inventory: Inv = preload("res://inventory/playerinv.tres")
 
 # ----------------------
@@ -58,6 +58,10 @@ func _physics_process(delta):
 
 func _process(delta):
 	# weapon pivot and player flip are updated every frame; during attack weapon uses stored angle
+	if Input.is_action_just_pressed("test_add_item"):
+		print("Adding test item to inventory")
+		var test_item: InvItem = preload("res://resources/pitchfork_res.tres")
+		collect(test_item)
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
@@ -390,8 +394,11 @@ func update_player_flip() -> void:
 	if head_anim:
 		head_anim.flip_h = facing_left
 
-func collect(item):
-	inv.insert(item)
+func collect(item: InvItem, quantity: int = 1) -> void:
+	var entry = InventoryEntry.new()
+	entry.item = item
+	entry.quantity = quantity
+	inventory.add_item(entry)   # ✅ correct method
 
 func get_inventory() -> Inv:
 	return inventory
