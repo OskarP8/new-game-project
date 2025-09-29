@@ -23,17 +23,21 @@ func _process(delta):
 
 func update_slots() -> void:
 	for i in range(slots.size()):
+		if i >= inv.slots.size():
+			break
+
 		var inv_slot: InvSlot = inv.slots[i]
-		if !inv_slot.item:
+		if inv_slot == null or inv_slot.item == null:
 			continue
 
 		var item_stack: ItemStackUI = slots[i].item_stack
-		if !item_stack:
+		if item_stack == null:
 			item_stack = isgc.instantiate()
 			slots[i].insert(item_stack)
 
-		item_stack.slot = inv_slot   # ✅ correct assignment
+		item_stack.slot = inv_slot
 		item_stack.update()
+
 
 
 func open() -> void:
