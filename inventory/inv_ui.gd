@@ -24,8 +24,7 @@ func _process(delta):
 func update_slots() -> void:
 	for i in range(slots.size()):
 		var inv_slot: InvSlot = inv.slots[i]
-		print("Slot", i, " item:", inv_slot.item, " amount:", inv_slot.amount)
-		if inv_slot.item == null:
+		if !inv_slot.item:
 			continue
 
 		var item_stack: ItemStackUI = slots[i].item_stack

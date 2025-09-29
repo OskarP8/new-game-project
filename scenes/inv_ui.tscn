@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3 uid="uid://bbdgfmv21n0be"]
+[gd_scene load_steps=5 format=3 uid="uid://bbdgfmv21n0be"]
 
 [ext_resource type="Script" path="res://inventory/inv_ui.gd" id="1_k0oip"]
+[ext_resource type="Resource" uid="uid://dfdhsvuohr1yl" path="res://inventory/playerinv.tres" id="2_2fdb5"]
 [ext_resource type="Texture2D" uid="uid://bjjnqr4jlswcq" path="res://sprites/inv.kra" id="2_ejo43"]
 [ext_resource type="PackedScene" uid="uid://dsibk3lgkgky5" path="res://inventory/inv_ui_slot.tscn" id="3_2k4l8"]
 
@@ -20,6 +21,7 @@ grow_vertical = 2
 scale = Vector2(3, 3)
 size_flags_horizontal = 4
 script = ExtResource("1_k0oip")
+inv = ExtResource("2_2fdb5")
 
 [node name="NinePatchRect" type="NinePatchRect" parent="."]
 layout_mode = 0
