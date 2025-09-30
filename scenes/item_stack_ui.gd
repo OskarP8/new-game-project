@@ -6,7 +6,19 @@ signal clicked(item_stack)
 @onready var item_visual: TextureRect = $ItemDisplay
 @onready var quantity_label: Label = $Label
 
-var slot: InvSlot
+var slot: InvSlot = null
+var origin_slot: InvSlot = null
+
+# Store actual item & amount when dragging so we don't depend on InvSlot existing
+var origin_item: InvItem = null
+var origin_amount: int = 0
+
+func _on_pressed():
+	if slot and slot.item:
+		print("Clicked valid stack:", slot.item)
+		clicked.emit(self)
+	else:
+		print("Clicked empty stack – ignoring")
 
 func update():
 	if slot == null or slot.item == null:

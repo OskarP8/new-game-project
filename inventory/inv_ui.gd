@@ -71,92 +71,117 @@ func close() -> void:
 # -------------------
 # DRAG & DROP
 # -------------------
+var ghost_item: Control = null
+var picked_slot: InvSlot = null
+
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
-	if item_in_hand: # already holding something
+	if item_stack == null or not is_instance_valid(item_stack):
+		print("⚠️ Tried to click a null item_stack!")
 		return
 
-	print("Picked up item:", item_stack.slot.item)
+	if ghost_item: # already dragging something
+		return
 
-	# detach from slot
-	var parent = item_stack.get_parent()
-	if parent:
-		parent.remove_child(item_stack)
+	# remember which slot we picked from
+	picked_slot = item_stack.slot
 
-	# move into drag_layer (so it's always on top)
-	drag_layer.add_child(item_stack)
-	item_stack.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	# hide the real item temporarily
+	if is_instance_valid(item_stack):
+		item_stack.visible = false
 
-	# reset offsets
-	item_stack.offset_left = 0
-	item_stack.offset_top = 0
-	item_stack.offset_right = 0
-	item_stack.offset_bottom = 0
+	# create ghost
+	ghost_item = isgc.instantiate()
+	ghost_item.slot = picked_slot
+	ghost_item.update()
 
-	item_in_hand = item_stack
-	item_in_hand.visible = true
-
+	drag_layer.add_child(ghost_item)
+	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_update_item_in_hand()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not item_in_hand:
+	if not ghost_item:
 		return
 
 	if event is InputEventMouseButton and not event.pressed:
 		var mouse_pos = get_viewport().get_mouse_position()
 
-		# Try dropping on slots
+		var dropped = false
 		for slot in slots:
 			if slot.get_global_rect().has_point(mouse_pos):
-				drop_into_slot(slot, item_in_hand)
-				return
+				# move inventory data to target slot
+				var target_slot: InvSlot = inv.slots[slot.index]
+				target_slot.item = picked_slot.item
+				target_slot.amount = picked_slot.amount
 
-		# Dropped outside inventory → destroy safely
-		print("Dropped outside inventory:", item_in_hand.slot.item)
+				# clear old slot
+				picked_slot.item = null
+				picked_slot.amount = 0
 
-		# clear inventory data if still linked
-		if item_in_hand.slot:
-			item_in_hand.slot.item = null
-			item_in_hand.slot.amount = 0
+				dropped = true
+				break
 
-		if is_instance_valid(item_in_hand):
-			item_in_hand.queue_free()
-		item_in_hand = null
+		# cleanup
+		if ghost_item:
+			ghost_item.queue_free()
+			ghost_item = null
 
+		# refresh all UI
 		update_slots()
-
-func drop_into_slot(slot, item_stack: ItemStackUI):
-	# remove from old parent
-	if item_stack.get_parent():
-		item_stack.get_parent().remove_child(item_stack)
-
-	# insert visually
-	slot.insert(item_stack)
-
-	# --- update inventory data ---
-	if slot.index < inv.slots.size() and item_stack.slot:
-		# move item reference from old slot to new slot
-		var old_slot: InvSlot = item_stack.slot
-		var new_slot: InvSlot = inv.slots[slot.index]
-
-		new_slot.item = old_slot.item
-		new_slot.amount = old_slot.amount
-
-		# clear the old slot
-		old_slot.item = null
-		old_slot.amount = 0
-
-		# reassign the item_stack to new slot
-		item_stack.slot = new_slot
-
-	item_in_hand = null
-	update_slots()
 
 
 func _update_item_in_hand():
-	if item_in_hand == null:
+	if ghost_item == null:
 		return
 	var mouse_pos = get_viewport().get_mouse_position()
-	var offset = Vector2.ZERO
-	if item_in_hand is Control:
-		offset = item_in_hand.size * 0.5
-	item_in_hand.global_position = mouse_pos - offset
+	var offset = ghost_item.size * 0.5
+	ghost_item.global_position = mouse_pos - offset
+
+
+func drop_into_slot(slot_button, item_stack: ItemStackUI) -> void:
+	if item_stack == null:
+		return
+	if inv == null:
+		# safety
+		print("No inv resource")
+		return
+
+	# ensure inv.slots array is large enough
+	var dest_idx = int(slot_button.index)
+	if dest_idx >= inv.slots.size():
+		# expand and fill with new InvSlot objects up to dest_idx
+		var needed = dest_idx + 1 - inv.slots.size()
+		for i in range(needed):
+			inv.slots.append(InvSlot.new())
+
+	# ensure the destination slot object exists
+	var new_slot: InvSlot = inv.slots[dest_idx]
+	if new_slot == null:
+		new_slot = InvSlot.new()
+		inv.slots[dest_idx] = new_slot
+
+	# move UI node visually into the slot
+	if item_stack.get_parent():
+		item_stack.get_parent().remove_child(item_stack)
+	slot_button.insert(item_stack)
+
+	# write item data into destination using the stored origin_item/amount
+	new_slot.item = item_stack.origin_item
+	new_slot.amount = item_stack.origin_amount
+
+	# clear the origin slot if it still exists and isn't the same as new_slot
+	if item_stack.origin_slot and item_stack.origin_slot != new_slot:
+		item_stack.origin_slot.item = null
+		item_stack.origin_slot.amount = 0
+
+	# reassign item_stack bookkeeping
+	item_stack.slot = new_slot
+	item_stack.origin_slot = new_slot
+	item_stack.origin_item = new_slot.item
+	item_stack.origin_amount = new_slot.amount
+
+	item_in_hand = null
+
+	# refresh UI / inventory
+	update_slots()
+	if inv:
+		inv.emit_signal("inventory_changed")
