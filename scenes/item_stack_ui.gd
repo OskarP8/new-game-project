@@ -21,16 +21,31 @@ func _on_pressed():
 		print("Clicked empty stack – ignoring")
 
 func update():
-	if slot == null or slot.item == null:
-		item_visual.visible = false
+	# prefer data from linked slot, otherwise fall back to origin stored values
+	var the_item: InvItem = null
+	var the_amount: int = 0
+
+	if slot != null and slot.item != null:
+		the_item = slot.item
+		the_amount = slot.amount
+	elif origin_item != null:
+		the_item = origin_item
+		the_amount = origin_amount
+
+	if the_item == null:
+		if is_instance_valid(item_visual):
+			item_visual.visible = false
 		if quantity_label:
 			quantity_label.visible = false
-	else:
+		return
+
+	# safe: item_visual may not be ready if update() is called before _ready
+	if is_instance_valid(item_visual):
 		item_visual.visible = true
-		item_visual.texture = slot.item.icon
-		if quantity_label:
-			quantity_label.visible = true
-			quantity_label.text = str(slot.amount)
+		item_visual.texture = the_item.icon
+	if quantity_label:
+		quantity_label.visible = true
+		quantity_label.text = str(the_amount)
 
 func _gui_input(event):
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:

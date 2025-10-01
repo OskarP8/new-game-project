@@ -85,17 +85,25 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	# remember which slot we picked from
 	picked_slot = item_stack.slot
 
-	# hide the real item temporarily
+	# create ghost first (but don't call update yet)
+	ghost_item = isgc.instantiate()
+
+	# copy concrete item data into ghost so it doesn't depend on InvSlot
+	ghost_item.origin_item = picked_slot.item if picked_slot else null
+	ghost_item.origin_amount = picked_slot.amount if picked_slot else 0
+	ghost_item.origin_slot = picked_slot
+
+	# add ghost to drag_layer (now _ready has run and onready nodes are valid)
+	drag_layer.add_child(ghost_item)
+	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+
+	# now it's safe to call update (do deferred to be extra safe)
+	ghost_item.call_deferred("update")
+
+	# hide the real slot's UI so it looks picked up (safe check)
 	if is_instance_valid(item_stack):
 		item_stack.visible = false
 
-	# create ghost
-	ghost_item = isgc.instantiate()
-	ghost_item.slot = picked_slot
-	ghost_item.update()
-
-	drag_layer.add_child(ghost_item)
-	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_update_item_in_hand()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -110,23 +118,29 @@ func _unhandled_input(event: InputEvent) -> void:
 			if slot.get_global_rect().has_point(mouse_pos):
 				# move inventory data to target slot
 				var target_slot: InvSlot = inv.slots[slot.index]
-				target_slot.item = picked_slot.item
-				target_slot.amount = picked_slot.amount
+				if target_slot == null:
+					target_slot = InvSlot.new()
+					inv.slots[slot.index] = target_slot
+				if picked_slot != null and picked_slot.item != null:
+					target_slot.item = picked_slot.item
+					target_slot.amount = picked_slot.amount
 
-				# clear old slot
-				picked_slot.item = null
-				picked_slot.amount = 0
+					# clear old slot
+					picked_slot.item = null
+					picked_slot.amount = 0
 
 				dropped = true
 				break
 
-		# cleanup
+		# cleanup ghost
 		if ghost_item:
 			ghost_item.queue_free()
 			ghost_item = null
 
-		# refresh all UI
+		# un-hide the original item UI if it still exists
+		# (update_slots() will recreate visuals; keep this safe)
 		update_slots()
+
 
 
 func _update_item_in_hand():
