@@ -21,7 +21,7 @@ func _on_pressed():
 		print("Clicked empty stack – ignoring")
 
 func update():
-	# prefer data from linked slot, otherwise fall back to origin stored values
+	# ✅ Prefer slot data if available, else use ghost origin data
 	var the_item: InvItem = null
 	var the_amount: int = 0
 
@@ -39,7 +39,7 @@ func update():
 			quantity_label.visible = false
 		return
 
-	# safe: item_visual may not be ready if update() is called before _ready
+	# ✅ Show texture safely
 	if is_instance_valid(item_visual):
 		item_visual.visible = true
 		item_visual.texture = the_item.icon

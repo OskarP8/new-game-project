@@ -7,7 +7,6 @@ extends Control
 var is_open := false
 var drag_layer: CanvasLayer
 
-# Dragging state
 var ghost_item: ItemStackUI = null
 var picked_slot: InvSlot = null
 
@@ -23,7 +22,6 @@ func _ready():
 		inv.inventory_changed.connect(update_slots)
 	update_slots()
 	close()
-
 
 func _process(_delta):
 	if Input.is_action_just_pressed("i"):
@@ -47,14 +45,17 @@ func update_slots() -> void:
 
 		var inv_slot: InvSlot = inv.slots[i]
 
-		# clear empty slots
-		if inv_slot == null or inv_slot.item == null:
+		# 🔑 ensure slot object always exists
+		if inv_slot == null:
+			inv_slot = InvSlot.new()
+			inv.slots[i] = inv_slot
+
+		if inv_slot.item == null:
 			if slots[i].item_stack and is_instance_valid(slots[i].item_stack):
 				slots[i].item_stack.queue_free()
 			slots[i].item_stack = null
 			continue
 
-		# spawn or update item_stack
 		var item_stack: ItemStackUI = slots[i].item_stack
 		if item_stack == null or not is_instance_valid(item_stack):
 			item_stack = isgc.instantiate()
@@ -78,30 +79,30 @@ func close() -> void:
 # DRAG & DROP
 # -------------------
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
-	if not item_stack or not is_instance_valid(item_stack):
+	if item_stack == null or not is_instance_valid(item_stack):
+		print("⚠️ Tried to click a null item_stack!")
 		return
+
 	if ghost_item: # already dragging something
 		return
 
-	# remember original slot
 	picked_slot = item_stack.slot
 
 	# create ghost
 	ghost_item = isgc.instantiate()
-	ghost_item.origin_item = picked_slot.item
-	ghost_item.origin_amount = picked_slot.amount
+	ghost_item.slot = null
+	ghost_item.origin_item = picked_slot.item if picked_slot else null
+	ghost_item.origin_amount = picked_slot.amount if picked_slot else 0
 	ghost_item.origin_slot = picked_slot
-	ghost_item.update()
 
-	# add to drag layer
 	drag_layer.add_child(ghost_item)
 	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	ghost_item.update()
 
-	# hide the real one
-	item_stack.visible = false
+	if is_instance_valid(item_stack):
+		item_stack.visible = false
 
 	_update_item_in_hand()
-
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not ghost_item:
@@ -114,39 +115,35 @@ func _unhandled_input(event: InputEvent) -> void:
 		for slot in slots:
 			if slot.get_global_rect().has_point(mouse_pos):
 				var target_slot: InvSlot = inv.slots[slot.index]
+
+				# 🔑 ensure target_slot always exists
 				if target_slot == null:
 					target_slot = InvSlot.new()
 					inv.slots[slot.index] = target_slot
 
-				# ✅ use ghost data, not picked_slot
-				target_slot.item = ghost_item.origin_item
-				target_slot.amount = ghost_item.origin_amount
+				# copy data into target
+				if picked_slot and picked_slot.item:
+					target_slot.item = picked_slot.item
+					target_slot.amount = picked_slot.amount
 
-				# clear original slot
-				if picked_slot:
+					# clear old slot (but keep it valid)
 					picked_slot.item = null
 					picked_slot.amount = 0
 
 				dropped = true
 				break
 
-		# dropped outside → just clear the old slot
-		if not dropped:
-			if picked_slot:
-				picked_slot.item = null
-				picked_slot.amount = 0
-			print("Dropped outside:", ghost_item.origin_item)
+		# dropped outside → clear picked slot safely
+		if not dropped and picked_slot:
+			picked_slot.item = null
+			picked_slot.amount = 0
 
 		# cleanup ghost
 		if ghost_item:
 			ghost_item.queue_free()
 			ghost_item = null
 
-		# refresh visuals
 		update_slots()
-		if inv:
-			inv.emit_signal("inventory_changed")
-
 
 func _update_item_in_hand():
 	if ghost_item == null:
