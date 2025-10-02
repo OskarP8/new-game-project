@@ -43,10 +43,24 @@ func update():
 	if is_instance_valid(item_visual):
 		item_visual.visible = true
 		item_visual.texture = the_item.icon
+	# Update the quantity label to hide the number when there is only one item
 	if quantity_label:
-		quantity_label.visible = true
-		quantity_label.text = str(the_amount)
+		if the_amount == 1:
+			quantity_label.visible = false
+		else:
+			quantity_label.visible = true
+			quantity_label.text = str(the_amount)
 
 func _gui_input(event):
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		emit_signal("clicked", self)
+
+@onready var amount_label: Label = $AmountLabel
+
+func hide_amount():
+	if amount_label:
+		amount_label.visible = false
+
+func show_amount():
+	if amount_label:
+		amount_label.visible = true

@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://bydtyrreptnt0"]
 
-[ext_resource type="Script" path="res://scenes/item_stack_ui.gd" id="1_kieig"]
+[ext_resource type="Script" path="res://scripts/item_stack_ui.gd" id="1_kieig"]
 
 [node name="ItemStackUI" type="Panel"]
 script = ExtResource("1_kieig")

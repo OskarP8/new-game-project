@@ -116,7 +116,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if slot.get_global_rect().has_point(mouse_pos):
 				var target_slot: InvSlot = inv.slots[slot.index]
 
-				# 🔑 ensure target_slot always exists
+				# Ensure target_slot always exists
 				if target_slot == null:
 					target_slot = InvSlot.new()
 					inv.slots[slot.index] = target_slot
@@ -149,16 +149,32 @@ func _unhandled_input(event: InputEvent) -> void:
 				dropped = true
 				break
 
-		# dropped outside → clear picked slot safely
+		# Dropped outside → clear picked slot safely
 		if not dropped and picked_slot:
 			picked_slot.item = null
 			picked_slot.amount = 0
 
-		# cleanup ghost
+		# Cleanup ghost
 		if ghost_item:
 			ghost_item.queue_free()
 			ghost_item = null
 
+		# Dropped outside → return to the original slot if not dropped into a valid slot
+		if not dropped and picked_slot:
+			if ghost_item:
+				# Restore the original item and amount if dropped into the same slot
+				if ghost_item.origin_slot == picked_slot:
+					picked_slot.item = ghost_item.origin_item
+					picked_slot.amount = ghost_item.origin_amount
+
+				# Cleanup ghost
+				ghost_item.queue_free()
+				ghost_item = null
+
+			# Reset picked_slot to allow further interactions
+			picked_slot = null
+
+		# Refresh the UI
 		update_slots()
 
 func _update_item_in_hand():
