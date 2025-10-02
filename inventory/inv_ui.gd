@@ -121,14 +121,30 @@ func _unhandled_input(event: InputEvent) -> void:
 					target_slot = InvSlot.new()
 					inv.slots[slot.index] = target_slot
 
-				# copy data into target
 				if picked_slot and picked_slot.item:
-					target_slot.item = picked_slot.item
-					target_slot.amount = picked_slot.amount
+					# --- STACK (if same item type & stackable) ---
+					if target_slot.item \
+					and target_slot.item.id == picked_slot.item.id \
+					and not _is_non_stackable(target_slot.item):
+						target_slot.amount += picked_slot.amount
+						picked_slot.item = null
+						picked_slot.amount = 0
 
-					# clear old slot (but keep it valid)
-					picked_slot.item = null
-					picked_slot.amount = 0
+					# --- SWAP (different item or non-stackable) ---
+					elif target_slot.item:
+						var temp_item = target_slot.item
+						var temp_amount = target_slot.amount
+						target_slot.item = picked_slot.item
+						target_slot.amount = picked_slot.amount
+						picked_slot.item = temp_item
+						picked_slot.amount = temp_amount
+
+					# --- MOVE (empty slot) ---
+					else:
+						target_slot.item = picked_slot.item
+						target_slot.amount = picked_slot.amount
+						picked_slot.item = null
+						picked_slot.amount = 0
 
 				dropped = true
 				break
@@ -151,3 +167,8 @@ func _update_item_in_hand():
 	var mouse_pos = get_viewport().get_mouse_position()
 	var offset = ghost_item.size * 0.5
 	ghost_item.global_position = mouse_pos - offset
+
+func _is_non_stackable(item: InvItem) -> bool:
+	if not item:
+		return false
+	return item.type == "weapon" or item.type == "armor"
