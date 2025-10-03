@@ -1,0 +1,33 @@
+[gd_scene load_steps=2 format=3 uid="uid://cqlnk6vf6c6i5"]
+
+[ext_resource type="PackedScene" uid="uid://dsibk3lgkgky5" path="res://inventory/inv_ui_slot.tscn" id="1_oykf1"]
+
+[node name="PlayerInv" type="NinePatchRect"]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="WeaponSlot" parent="." instance=ExtResource("1_oykf1")]
+layout_mode = 0
+script = null
+
+[node name="SecondarySlot" parent="." instance=ExtResource("1_oykf1")]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 35.0
+offset_right = 47.0
+offset_bottom = 67.0
+script = null
+
+[node name="ArmorSlot" parent="." instance=ExtResource("1_oykf1")]
+layout_mode = 0
+offset_left = 15.0
+offset_top = -35.0
+offset_right = 47.0
+offset_bottom = -3.0
+script = null
+
+[node name="ConsumableSlot" parent="." instance=ExtResource("1_oykf1")]
+layout_mode = 0
+offset_left = 37.0
+offset_right = 69.0
+script = null
