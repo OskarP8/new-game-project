@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/chest.gd" id="1_lo1v6"]
 [ext_resource type="Script" path="res://scripts/inventory_entry.gd" id="2_4iuki"]
 [ext_resource type="Texture2D" uid="uid://cuu0ihm24v1aa" path="res://sprites/chest.kra" id="2_8bi4d"]
-[ext_resource type="Resource" uid="uid://dxangxod61kb2" path="res://sprites/icons/pitchfork.tres" id="3_gpag6"]
+[ext_resource type="Resource" uid="uid://dxangxod61kb2" path="res://sprites/resources/pitchfork.tres" id="3_gpag6"]
 
 [sub_resource type="Resource" id="Resource_fuo5p"]
 script = ExtResource("2_4iuki")

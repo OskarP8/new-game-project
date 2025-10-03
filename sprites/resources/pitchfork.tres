@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="InvItem" load_steps=3 format=3 uid="uid://dxangxod61kb2"]
+
+[ext_resource type="Texture2D" uid="uid://8xfrhkuf5w3x" path="res://sprites/pitchfork_icon.kra" id="1_1pnkq"]
+[ext_resource type="Script" path="res://inventory/inventory_item.gd" id="2_py3xl"]
+
+[resource]
+script = ExtResource("2_py3xl")
+id = ""
+name = "Pitchfork"
+icon = ExtResource("1_1pnkq")
+type = "weapon"
+max_stack = 1

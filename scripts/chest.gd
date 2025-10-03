@@ -22,7 +22,13 @@ func interact(player: Node2D) -> void:
 	# Add items to player inventory
 	if player.has_method("add_to_inventory"):
 		for entry in slots:
-			player.add_to_inventory(entry.item, entry.quantity)
+			if entry.item and player.has_method("_is_non_stackable") and player._is_non_stackable(entry.item):
+				# Add non-stackable items one by one
+				for i in range(entry.quantity):
+					player.add_to_inventory(entry.item, 1)
+			else:
+				# Add stackable items normally
+				player.add_to_inventory(entry.item, entry.quantity)
 
 	slots.clear()
 
