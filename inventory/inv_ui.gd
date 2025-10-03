@@ -39,27 +39,35 @@ func update_slots() -> void:
 	if inv == null:
 		return
 
+	# ensure inventory array is at least as big as UI slots
+	if inv.slots.size() < slots.size():
+		for i in range(slots.size() - inv.slots.size()):
+			inv.slots.append(InvSlot.new())
+
 	for i in range(slots.size()):
 		if i >= inv.slots.size():
 			break
 
 		var inv_slot: InvSlot = inv.slots[i]
 
-		# 🔑 ensure slot object always exists
+		# ensure slot object always exists
 		if inv_slot == null:
 			inv_slot = InvSlot.new()
 			inv.slots[i] = inv_slot
 
+		# clear visuals for empty inventory slots
 		if inv_slot.item == null:
 			if slots[i].item_stack and is_instance_valid(slots[i].item_stack):
 				slots[i].item_stack.queue_free()
 			slots[i].item_stack = null
 			continue
 
+		# create visual if missing
 		var item_stack: ItemStackUI = slots[i].item_stack
 		if item_stack == null or not is_instance_valid(item_stack):
 			item_stack = isgc.instantiate()
 			slots[i].insert(item_stack)
+			# connect once
 			if not item_stack.clicked.is_connected(Callable(self, "_on_item_clicked")):
 				item_stack.clicked.connect(Callable(self, "_on_item_clicked"))
 
@@ -80,25 +88,42 @@ func close() -> void:
 # -------------------
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	if item_stack == null or not is_instance_valid(item_stack):
-		print("⚠️ Tried to click a null item_stack!")
 		return
-
 	if ghost_item: # already dragging something
 		return
 
+	# origin slot object (may be cleared immediately)
 	picked_slot = item_stack.slot
 
-	# create ghost
+	# save concrete item data from origin
+	var moving_item: InvItem = null
+	var moving_amount: int = 0
+	if picked_slot:
+		moving_item = picked_slot.item
+		moving_amount = picked_slot.amount
+
+	# instantiate ghost and stash concrete data on it
 	ghost_item = isgc.instantiate()
 	ghost_item.slot = null
-	ghost_item.origin_item = picked_slot.item if picked_slot else null
-	ghost_item.origin_amount = picked_slot.amount if picked_slot else 0
+	ghost_item.origin_item = moving_item
+	ghost_item.origin_amount = moving_amount
 	ghost_item.origin_slot = picked_slot
 
+	# Immediately clear origin slot so UI shows empty while dragging
+	if picked_slot:
+		picked_slot.item = null
+		picked_slot.amount = 0
+
+	# refresh visuals so origin looks empty right away
+	update_slots()
+
+	# add ghost to drag layer then update it (deferred to ensure onready nodes exist)
 	drag_layer.add_child(ghost_item)
 	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	ghost_item.update()
+	ghost_item.call_deferred("update")
+	ghost_item.visible = true
 
+	# hide the real UI item if it's still around (safe)
 	if is_instance_valid(item_stack):
 		item_stack.visible = false
 
@@ -112,76 +137,101 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mouse_pos = get_viewport().get_mouse_position()
 		var dropped = false
 
+		# data being moved comes from ghost (we cleared origin already)
+		var moving_item: InvItem = ghost_item.origin_item
+		var moving_amount: int = ghost_item.origin_amount
+
 		for slot in slots:
 			if slot.get_global_rect().has_point(mouse_pos):
-				var target_slot: InvSlot = inv.slots[slot.index]
+				# ensure inv.slots has that index
+				if slot.index >= inv.slots.size():
+					var needed = slot.index + 1 - inv.slots.size()
+					for i in range(needed):
+						inv.slots.append(InvSlot.new())
 
-				# Ensure target_slot always exists
+				var target_slot: InvSlot = inv.slots[slot.index]
 				if target_slot == null:
 					target_slot = InvSlot.new()
 					inv.slots[slot.index] = target_slot
 
-				if picked_slot and picked_slot.item:
-					# --- STACK (if same item type & stackable) ---
-					if target_slot.item \
-					and target_slot.item.id == picked_slot.item.id \
-					and not _is_non_stackable(target_slot.item):
-						target_slot.amount += picked_slot.amount
-						picked_slot.item = null
-						picked_slot.amount = 0
+				# If nothing to move, bail
+				if moving_item == null:
+					dropped = true
+					break
 
-					# --- SWAP (different item or non-stackable) ---
-					elif target_slot.item:
-						var temp_item = target_slot.item
-						var temp_amount = target_slot.amount
-						target_slot.item = picked_slot.item
-						target_slot.amount = picked_slot.amount
+				# SAME SLOT: if target is the same InvSlot object as origin -> return item
+				if picked_slot != null and target_slot == picked_slot:
+					target_slot.item = moving_item
+					target_slot.amount = moving_amount
+					dropped = true
+					break
+
+				# STACK: same id & stackable
+				if target_slot.item and target_slot.item.id == moving_item.id and not _is_non_stackable(moving_item):
+					target_slot.amount += moving_amount
+					# origin already cleared
+				# SWAP: target occupied and not stackable with moving item (or different)
+				elif target_slot.item:
+					var temp_item = target_slot.item
+					var temp_amount = target_slot.amount
+
+					# place moving into target
+					target_slot.item = moving_item
+					target_slot.amount = moving_amount
+
+					# put replaced item into origin (picked_slot) if available, otherwise find first empty
+					if picked_slot != null:
 						picked_slot.item = temp_item
 						picked_slot.amount = temp_amount
-
-					# --- MOVE (empty slot) ---
 					else:
-						target_slot.item = picked_slot.item
-						target_slot.amount = picked_slot.amount
-						picked_slot.item = null
-						picked_slot.amount = 0
+						# fallback: place into the first empty inv slot (ensure exists)
+						var placed = false
+						for i in range(inv.slots.size()):
+							if inv.slots[i] == null:
+								inv.slots[i] = InvSlot.new()
+							if inv.slots[i].item == null:
+								inv.slots[i].item = temp_item
+								inv.slots[i].amount = temp_amount
+								placed = true
+								break
+						if not placed:
+							var new_slot = InvSlot.new()
+							new_slot.item = temp_item
+							new_slot.amount = temp_amount
+							inv.slots.append(new_slot)
+				# MOVE into empty target
+				else:
+					target_slot.item = moving_item
+					target_slot.amount = moving_amount
 
 				dropped = true
 				break
 
-		# Dropped outside → clear picked slot safely
-		if not dropped and picked_slot:
-			picked_slot.item = null
-			picked_slot.amount = 0
+		# Dropped outside → item discarded (origin already cleared)
+		if not dropped:
+			# nothing to do: item removed from inventory
+			pass
 
-		# Cleanup ghost
+		# cleanup ghost
 		if ghost_item:
 			ghost_item.queue_free()
 			ghost_item = null
 
-		# Dropped outside → return to the original slot if not dropped into a valid slot
-		if not dropped and picked_slot:
-			if ghost_item:
-				# Restore the original item and amount if dropped into the same slot
-				if ghost_item.origin_slot == picked_slot:
-					picked_slot.item = ghost_item.origin_item
-					picked_slot.amount = ghost_item.origin_amount
+		# reset picked slot reference
+		picked_slot = null
 
-				# Cleanup ghost
-				ghost_item.queue_free()
-				ghost_item = null
-
-			# Reset picked_slot to allow further interactions
-			picked_slot = null
-
-		# Refresh the UI
+		# refresh UI and notify
 		update_slots()
+		if inv:
+			inv.emit_signal("inventory_changed")
 
 func _update_item_in_hand():
 	if ghost_item == null:
 		return
 	var mouse_pos = get_viewport().get_mouse_position()
-	var offset = ghost_item.size * 0.5
+	var offset = Vector2.ZERO
+	if ghost_item is Control:
+		offset = ghost_item.size * 0.5
 	ghost_item.global_position = mouse_pos - offset
 
 func _is_non_stackable(item: InvItem) -> bool:
