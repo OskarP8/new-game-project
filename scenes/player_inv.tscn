@@ -1,33 +1,97 @@
-[gd_scene load_steps=2 format=3 uid="uid://cqlnk6vf6c6i5"]
+[gd_scene load_steps=9 format=3 uid="uid://cqlnk6vf6c6i5"]
 
 [ext_resource type="PackedScene" uid="uid://dsibk3lgkgky5" path="res://inventory/inv_ui_slot.tscn" id="1_oykf1"]
+[ext_resource type="Texture2D" uid="uid://bjjnqr4jlswcq" path="res://sprites/inv.kra" id="1_vfmov"]
+[ext_resource type="Texture2D" uid="uid://b1ejqqdie4odp" path="res://sprites/icons/player_inv_slots.kra" id="2_enmkv"]
+[ext_resource type="Script" path="res://scenes/player_inv.gd" id="2_jswy2"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_c8rtm"]
+atlas = ExtResource("2_enmkv")
+region = Rect2(96, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_qmly5"]
+atlas = ExtResource("2_enmkv")
+region = Rect2(64, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_dk0qi"]
+atlas = ExtResource("2_enmkv")
+region = Rect2(0, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_peq4r"]
+atlas = ExtResource("2_enmkv")
+region = Rect2(32, 0, 32, 32)
 
 [node name="PlayerInv" type="NinePatchRect"]
-offset_right = 40.0
-offset_bottom = 40.0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -45.0
+offset_right = 46.0
+offset_bottom = 77.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("1_vfmov")
+patch_margin_left = 6
+patch_margin_top = 6
+patch_margin_right = 6
+patch_margin_bottom = 6
+script = ExtResource("2_jswy2")
 
 [node name="WeaponSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 9.0
+offset_top = 45.0
+offset_right = 41.0
+offset_bottom = 77.0
+grow_horizontal = 1
+grow_vertical = 1
+texture_normal = SubResource("AtlasTexture_c8rtm")
 script = null
 
 [node name="SecondarySlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
-offset_left = 15.0
-offset_top = 35.0
-offset_right = 47.0
-offset_bottom = 67.0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 45.0
+offset_top = 45.0
+offset_right = 77.0
+offset_bottom = 77.0
+grow_horizontal = 1
+grow_vertical = 1
+texture_normal = SubResource("AtlasTexture_qmly5")
 script = null
 
 [node name="ArmorSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
-offset_left = 15.0
-offset_top = -35.0
-offset_right = 47.0
-offset_bottom = -3.0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 27.0
+offset_top = 9.0
+offset_right = 59.0
+offset_bottom = 41.0
+grow_horizontal = 1
+grow_vertical = 1
+texture_normal = SubResource("AtlasTexture_dk0qi")
 script = null
 
 [node name="ConsumableSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
-offset_left = 37.0
-offset_right = 69.0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 27.0
+offset_top = 81.0
+offset_right = 59.0
+offset_bottom = 113.0
+grow_horizontal = 1
+grow_vertical = 1
+texture_normal = SubResource("AtlasTexture_peq4r")
 script = null
