@@ -134,25 +134,42 @@ func handle_attack() -> void:
 	if Input.is_action_just_pressed("attack"):
 		attacking = true
 
+		# compute facing & angle first
 		var mouse_pos = get_global_mouse_position()
 		var dir = mouse_pos - weapon_pivot.global_position
 		attack_angle = dir.angle()
 
-		# Make sure pivot rotates immediately
-		weapon_pivot.rotation = attack_angle
-
 		if dir.x < 0:
 			facing_left = true
+			hor_dir = "left"
 		else:
 			facing_left = false
+			hor_dir = "right"
 
 		_update_last_dir()
 
-		# Play animation
+		# ensure sprite flip is set before playing attack
+		if weapon_sprite:
+			weapon_sprite.flip_h = facing_left
+
+		# Play attack using AnimationPlayer if present, else AnimatedSprite2D
 		if weapon_anim_player and weapon_anim_player.has_animation("attack"):
+			print("[player] weapon: playing AnimationPlayer attack")
 			weapon_anim_player.play("attack")
-		elif weapon_sprite:
+		elif weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation("attack"):
+			print("[player] weapon: playing AnimatedSprite2D attack")
 			weapon_sprite.play("attack")
+		else:
+			print("[player] No weapon attack animation found; will still set attacking flag")
+
+		# Play body & head attack animations as before (safe-checked)
+		var suffix = "_weapon"
+		var base_dir = last_dir.replace("_left", "_right")
+		var body_attack_name = "attack_" + base_dir + suffix
+		if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(body_attack_name):
+			body_anim.play(body_attack_name)
+		if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(body_attack_name):
+			head_anim.play(body_attack_name)
 
 # single handler connected in _ready
 func _on_body_animation_finished() -> void:
@@ -300,25 +317,29 @@ func sync_head_to_body() -> void:
 # ----------------------
 # WEAPON ROTATION (attack uses stored angle; idle/walk has rotation 0)
 # ----------------------
-func update_weapon_rotation() -> void:
-	if not has_weapon or not weapon_anim or not weapon_pivot:
+func update_weapon_rotation():
+	if not has_weapon or not weapon_pivot or not weapon_anim:
 		return
 
 	if attacking:
-		# apply stored attack angle (so it points toward mouse)
-		if facing_left:
-			weapon_pivot.rotation = attack_angle + PI
+		# Rotate weapon toward cursor during attack
+		var mouse_pos = get_global_mouse_position()
+		var dir = mouse_pos - weapon_pivot.global_position
+		var angle = dir.angle()
+
+		if dir.x < 0:
 			weapon_anim.scale.x = -1
+			weapon_pivot.rotation = angle + PI
 		else:
-			weapon_pivot.rotation = attack_angle
 			weapon_anim.scale.x = 1
+			weapon_pivot.rotation = angle
 	else:
-		# reset only when idle or walking (not attacking)
-		weapon_pivot.rotation = 0
+		# Idle/walk: flip weapon with player movement
 		if facing_left:
 			weapon_anim.scale.x = -1
 		else:
 			weapon_anim.scale.x = 1
+		weapon_pivot.rotation = 0
 
 # ----------------------
 # PLAYER FLIP
