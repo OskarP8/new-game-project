@@ -5,234 +5,155 @@ extends Control
 @onready var slots: Array = $".".get_children()
 
 var is_open := false
-var ghost_item: ItemStackUI = null
+var ghost_item: Control = null
 var picked_slot: InvSlot = null
-var drag_layer: CanvasLayer = null
 
 func _ready():
-	# ✅ Ensure inventory exists
-	if inv == null:
-		inv = Inv.new()
-		print("[player_inv] created internal Inv")
-
-	# ✅ Ensure inv.slots array exists and matches UI size
-	if inv.slots == null:
-		inv.slots = []
-	if inv.slots.size() < slots.size():
-		for i in range(slots.size() - inv.slots.size()):
-			inv.slots.append(InvSlot.new())
-		print("[player_inv] filled inv.slots to size", inv.slots.size())
-
-	# ✅ Assign indices to each UI slot (for reference)
-	for i in range(slots.size()):
-		if not slots[i].has_meta("index"):
-			slots[i].set_meta("index", i)
-
-	# create drag layer for ghost visuals
-	drag_layer = CanvasLayer.new()
-	get_tree().root.call_deferred("add_child", drag_layer)
-
-	close()
+	if inv:
+		inv.inventory_changed.connect(update_slots)
 	update_slots()
-	print("[player_inv] ready: slots_count =", slots.size(), "inv_slots_count =", inv.slots.size())
+	close()
 
 func _process(_delta):
-	if Input.is_action_just_pressed("i"):
+	if Input.is_action_just_pressed("i"): # or "i" if preferred
 		if is_open:
 			close()
 		else:
 			open()
-	_update_item_in_hand()
+	if ghost_item:
+		_update_ghost_position()
 
+# --- Inventory toggle ---
 func open():
 	visible = true
 	is_open = true
-	print("[player_inv] open()")
 	update_slots()
 
 func close():
 	visible = false
 	is_open = false
-	print("[player_inv] close()")
 
-# ---------------------------
-# ITEM CLICK / DRAG START
-# ---------------------------
+# --- Update UI ---
+func update_slots() -> void:
+	for i in range(slots.size()):
+		if i >= inv.slots.size():
+			break
+
+		var inv_slot: InvSlot = inv.slots[i]
+		if inv_slot == null:
+			inv_slot = InvSlot.new()
+			inv.slots[i] = inv_slot
+
+		# Remove old visual if invalid
+		if slots[i].item_stack and not is_instance_valid(slots[i].item_stack):
+			slots[i].item_stack = null
+
+		# Skip empty
+		if inv_slot.item == null:
+			if slots[i].item_stack:
+				slots[i].container.remove_child(slots[i].item_stack)
+				slots[i].item_stack = null
+			continue
+
+		# Create or reuse item_stack_ui
+		var item_stack: ItemStackUI = slots[i].item_stack
+		if item_stack == null:
+			item_stack = isgc.instantiate()
+			slots[i].insert(item_stack)
+			item_stack.connect("clicked", Callable(self, "_on_item_clicked").bind(item_stack))
+		item_stack.slot = inv_slot
+		item_stack.update()
+
+# --- Picking up item ---
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
-	print("[player_inv] _on_item_clicked called. item_stack:", item_stack)
-	if ghost_item:
-		print("[player_inv]  -> already dragging ghost_item, ignoring click")
-		return
-
-	if item_stack == null or not is_instance_valid(item_stack):
-		print("[player_inv]  -> item_stack null or invalid")
-		return
-
+	print("[player_inv] Picked up:", item_stack.slot.item)
 	picked_slot = item_stack.slot
-	if picked_slot == null:
-		print("[player_inv]    WARNING: picked_slot is null for this item_stack.")
-		return
 
-	if not picked_slot.item:
-		print("[player_inv]  -> no item in picked_slot to pick up")
-		return
+	# detach from slot
+	if item_stack.get_parent():
+		item_stack.get_parent().remove_child(item_stack)
 
-	print("[player_inv]  -> picking item id:", picked_slot.item.id, "amount:", picked_slot.amount)
-
-	ghost_item = isgc.instantiate()
-	ghost_item.slot = null
-	ghost_item.origin_item = picked_slot.item
-	ghost_item.origin_amount = picked_slot.amount
-	ghost_item.origin_slot = picked_slot
-
-	picked_slot.item = null
-	picked_slot.amount = 0
-
-	drag_layer.add_child(ghost_item)
+	# create ghost item for dragging
+	ghost_item = item_stack
+	add_child(ghost_item)
 	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	ghost_item.call_deferred("update")
-	ghost_item.visible = true
+	ghost_item.z_index = 999
+	_update_ghost_position()
 
-	item_stack.visible = false
-	print("[player_inv]  -> ghost created, following mouse.")
+func _update_ghost_position():
+	if ghost_item:
+		ghost_item.global_position = get_viewport().get_mouse_position() - ghost_item.size * 0.5
 
-	_update_item_in_hand()
-
-# ---------------------------
-# ITEM DROP
-# ---------------------------
+# --- Drop handling ---
 func _unhandled_input(event: InputEvent) -> void:
-	if not ghost_item:
+	if ghost_item == null or picked_slot == null:
 		return
 
 	if event is InputEventMouseButton and not event.pressed:
-		print("[player_inv] _unhandled_input: mouse release detected")
 		var mouse_pos = get_viewport().get_mouse_position()
-		var dropped = false
+		var dropped := false
+		var moving_item := picked_slot.item
+		var moving_amount := picked_slot.amount
 
-		var moving_item: InvItem = ghost_item.origin_item
-		var moving_amount: int = ghost_item.origin_amount
+		# Declare inv_ui up front so it's visible everywhere
+		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
 
+		# Clear picked slot temporarily
+		picked_slot.item = null
+		picked_slot.amount = 0
+
+		# --- 1️⃣ Check if dropped on player inventory slots ---
 		for idx in range(slots.size()):
 			var slot_node = slots[idx]
-			if not slot_node or not slot_node.has_method("get_global_rect"):
-				continue
-			if not slot_node.get_global_rect().has_point(mouse_pos):
-				continue
+			if slot_node.get_global_rect().has_point(mouse_pos):
+				var target_slot: InvSlot = inv.slots[idx]
 
-			print("[player_inv]  -> drop target:", slot_node.name, "index:", idx)
+				if target_slot == picked_slot:
+					print("[player_inv] same slot, snapping back")
+					target_slot.item = moving_item
+					target_slot.amount = moving_amount
+					dropped = true
+					break
 
-			# ✅ Ensure target InvSlot exists
-			if idx >= inv.slots.size():
-				for i in range(idx - inv.slots.size() + 1):
-					inv.slots.append(InvSlot.new())
-			if inv.slots[idx] == null:
-				inv.slots[idx] = InvSlot.new()
+				if target_slot.item == null:
+					target_slot.item = moving_item
+					target_slot.amount = moving_amount
+					print("[player_inv] moved into empty slot")
+					dropped = true
+					break
 
-			var target_slot: InvSlot = inv.slots[idx]
-
-			# Handle same-slot drop
-			if target_slot == picked_slot:
-				print("[player_inv] same slot -> return item")
+				# Swap
+				print("[player_inv] swapping items")
+				var tmp_item = target_slot.item
+				var tmp_amt = target_slot.amount
 				target_slot.item = moving_item
 				target_slot.amount = moving_amount
+				picked_slot.item = tmp_item
+				picked_slot.amount = tmp_amt
 				dropped = true
 				break
 
-			# Weapon Slot rule
-			if slot_node.name == "WeaponSlot":
-				if moving_item.type == "weapon":
-					target_slot.item = moving_item
-					target_slot.amount = moving_amount
-					print("[player_inv] equipped weapon")
-					dropped = true
-				else:
-					print("[player_inv] cannot equip non-weapon to WeaponSlot")
-				break
-
-			# Armor Slot rule
-			if slot_node.name == "ArmorSlot":
-				if moving_item.type == "armor":
-					target_slot.item = moving_item
-					target_slot.amount = moving_amount
-					print("[player_inv] equipped armor")
-					dropped = true
-				else:
-					print("[player_inv] cannot equip non-armor to ArmorSlot")
-				break
-
-			# Empty slot
-			if target_slot.item == null:
-				target_slot.item = moving_item
-				target_slot.amount = moving_amount
-				print("[player_inv] moved item into empty slot")
-				dropped = true
-				break
-
-			# Swap items
-			print("[player_inv] swapping items")
-			var temp_item = target_slot.item
-			var temp_amount = target_slot.amount
-			target_slot.item = moving_item
-			target_slot.amount = moving_amount
-
-			if picked_slot:
-				picked_slot.item = temp_item
-				picked_slot.amount = temp_amount
+		# --- 2️⃣ Check if dropped inside main inventory (cross-transfer) ---
+		if not dropped and inv_ui and inv_ui.visible and inv_ui.get_global_rect().has_point(mouse_pos):
+			print("[player_inv] dropped inside main inventory -> transfer there")
+			if inv_ui.inv:
+				var entry := InventoryEntry.new()
+				entry.item = moving_item
+				entry.quantity = moving_amount
+				inv_ui.inv.add_item(entry)
 			dropped = true
-			break
 
+		# --- 3️⃣ Dropped completely outside both inventories ---
 		if not dropped:
-			print("[player_inv] dropped outside -> restoring origin")
-			if picked_slot:
-				picked_slot.item = ghost_item.origin_item
-				picked_slot.amount = ghost_item.origin_amount
+			print("[player_inv] dropped outside all inventories -> discard")
+			# Optionally: spawn it in the world here
 
-		if ghost_item:
+		# --- Cleanup ---
+		if ghost_item and is_instance_valid(ghost_item):
 			ghost_item.queue_free()
 			ghost_item = null
 		picked_slot = null
+
 		update_slots()
-
-# ---------------------------
-# UI HELPERS
-# ---------------------------
-func update_slots():
-	print("[player_inv] update_slots: inv.slots.size =", (inv.slots.size() if inv else "nil"), "ui slots.size =", slots.size())
-	if inv == null or slots.size() == 0:
-		return
-
-	for i in range(slots.size()):
-		if i >= inv.slots.size():
-			inv.slots.append(InvSlot.new())
-
-		var inv_slot: InvSlot = inv.slots[i]
-
-		if inv_slot.item == null:
-			if slots[i].item_stack and is_instance_valid(slots[i].item_stack):
-				slots[i].item_stack.queue_free()
-			slots[i].item_stack = null
-			continue
-
-		var item_stack: ItemStackUI = slots[i].item_stack
-		if item_stack == null or not is_instance_valid(item_stack):
-			item_stack = isgc.instantiate()
-			slots[i].insert(item_stack)
-			item_stack.clicked.connect(Callable(self, "_on_item_clicked"))
-
-		item_stack.slot = inv_slot
-		item_stack.call_deferred("update")
-
-func _update_item_in_hand():
-	if ghost_item == null:
-		return
-	var mouse_pos = get_viewport().get_mouse_position()
-	var offset = Vector2.ZERO
-	if ghost_item is Control:
-		offset = ghost_item.size * 0.5
-	ghost_item.global_position = mouse_pos - offset
-
-func _is_non_stackable(item: InvItem) -> bool:
-	if not item:
-		return false
-	return item.type == "weapon" or item.type == "armor"
+		if inv_ui:
+			inv_ui.update_slots()

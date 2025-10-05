@@ -207,23 +207,27 @@ func _unhandled_input(event: InputEvent) -> void:
 				dropped = true
 				break
 
-		# Dropped outside → item discarded (origin already cleared)
-		if not dropped:
-			# nothing to do: item removed from inventory
-			pass
+		# Dropped outside → clear picked slot safely if outside inventory border
+		if not dropped and picked_slot:
+			if not get_global_rect().has_point(mouse_pos):
+				# Clear the picked slot if dropped outside inventory
+				picked_slot.item = null
+				picked_slot.amount = 0
+			else:
+				# Restore the original item and amount
+				picked_slot.item = ghost_item.origin_item
+				picked_slot.amount = ghost_item.origin_amount
 
-		# cleanup ghost
+		# Cleanup ghost
 		if ghost_item:
 			ghost_item.queue_free()
 			ghost_item = null
 
-		# reset picked slot reference
+		# Reset picked_slot
 		picked_slot = null
 
-		# refresh UI and notify
+		# Refresh the UI
 		update_slots()
-		if inv:
-			inv.emit_signal("inventory_changed")
 
 func _update_item_in_hand():
 	if ghost_item == null:

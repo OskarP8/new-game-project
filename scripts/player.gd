@@ -24,6 +24,10 @@ var has_weapon = true
 var facing_left = false           # persistent facing state (keeps after attack)
 var attack_angle: float = 0.0     # stored attack angle
 
+var current_weapon_scene: Node = null
+var weapon_sprite: AnimatedSprite2D = null
+var weapon_anim_player: AnimationPlayer = null
+
 # ----------------------
 # NODES
 # ----------------------
@@ -31,6 +35,7 @@ var attack_angle: float = 0.0     # stored attack angle
 @onready var head_anim := $Graphics/Head as AnimatedSprite2D
 @onready var weapon_pivot := $Graphics/WeaponPivot as Node2D
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
+@onready var sword_anim_player := $Graphics/WeaponPivot/Sword/AnimationPlayer
 
 # ----------------------
 # READY (connect once to avoid repeated connects)
@@ -42,6 +47,8 @@ func _ready() -> void:
 		head_anim.z_as_relative = true
 	if weapon_pivot:
 		weapon_pivot.z_as_relative = true
+	var sword_scene: PackedScene = preload("res://scenes/Weapons/sword.tscn")
+	equip_weapon(sword_scene)
 
 
 # ----------------------
@@ -121,20 +128,17 @@ func _update_last_dir() -> void:
 # ATTACK
 # ----------------------
 func handle_attack() -> void:
-	if not has_weapon or attacking or not body_anim:
+	if not has_weapon or attacking:
 		return
-
-	var show_head = has_weapon and (vert_dir == "down")
 
 	if Input.is_action_just_pressed("attack"):
 		attacking = true
 
-		# store attack angle once (weapon will point once then play attack anim)
+		# compute facing & angle first
 		var mouse_pos = get_global_mouse_position()
 		var dir = mouse_pos - weapon_pivot.global_position
 		attack_angle = dir.angle()
 
-		# determine attack-facing and persist it
 		if dir.x < 0:
 			facing_left = true
 			hor_dir = "left"
@@ -144,23 +148,28 @@ func handle_attack() -> void:
 
 		_update_last_dir()
 
+		# ensure sprite flip is set before playing attack
+		if weapon_sprite:
+			weapon_sprite.flip_h = facing_left
+
+		# Play attack using AnimationPlayer if present, else AnimatedSprite2D
+		if weapon_anim_player and weapon_anim_player.has_animation("attack"):
+			print("[player] weapon: playing AnimationPlayer attack")
+			weapon_anim_player.play("attack")
+		elif weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation("attack"):
+			print("[player] weapon: playing AnimatedSprite2D attack")
+			weapon_sprite.play("attack")
+		else:
+			print("[player] No weapon attack animation found; will still set attacking flag")
+
+		# Play body & head attack animations as before (safe-checked)
 		var suffix = "_weapon"
 		var base_dir = last_dir.replace("_left", "_right")
-
-		# play body attack animation if exists
 		var body_attack_name = "attack_" + base_dir + suffix
-		if body_anim.sprite_frames and body_anim.sprite_frames.has_animation(body_attack_name):
+		if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(body_attack_name):
 			body_anim.play(body_attack_name)
-
-		# play weapon attack animation (weapon will use stored rotation)
-		if weapon_anim.sprite_frames and weapon_anim.sprite_frames.has_animation("attack"):
-			weapon_anim.play("attack")
-
-		# head attack
-		if show_head and head_anim and head_anim.sprite_frames:
-			var head_attack_name = "attack_" + base_dir + suffix
-			if head_anim.sprite_frames.has_animation(head_attack_name):
-				head_anim.play(head_attack_name)
+		if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(body_attack_name):
+			head_anim.play(body_attack_name)
 
 # single handler connected in _ready
 func _on_body_animation_finished() -> void:
@@ -176,97 +185,41 @@ func _on_attack_finished() -> void:
 # ----------------------
 # ANIMATION (body & head & weapon idle/walk)
 # ----------------------
-func update_animation():
+func update_animation() -> void:
 	if attacking or not body_anim:
 		return
 
+	# --- Setup ---
 	var suffix = "_weapon" if has_weapon else ""
 	var show_head = has_weapon and ("down_left" in last_dir or "down_right" in last_dir)
 	if head_anim:
 		head_anim.visible = show_head
 
+	# --- Determine movement state ---
+	var is_idle = input == Vector2.ZERO
 	var base_dir = last_dir.replace("_left", "_right")
 
-	if input == Vector2.ZERO:
-		# idle
-		var body_idle = "idle_" + base_dir + suffix
-		if body_anim.sprite_frames and body_anim.sprite_frames.has_animation(body_idle):
-			body_anim.play(body_idle)
+	# --- Choose animation prefix ---
+	var prefix = "idle_" if is_idle else "walk_"
+	var anim_name = prefix + base_dir + suffix
 
-		if show_head and head_anim and head_anim.sprite_frames:
-			if head_anim.sprite_frames.has_animation(body_idle):
-				head_anim.play(body_idle)
-	else:
-		# diagonal movement
-		if not has_weapon:
-			if input.x < 0:
-				last_dir = "down_left" if input.y >= 0 else "up_left"
-			elif input.x > 0:
-				last_dir = "down_right" if input.y >= 0 else "up_right"
-			else:
-				if input.y < 0:
-					last_dir = "up_left" if "left" in last_dir else "up_right"
-				elif input.y > 0:
-					last_dir = "down_left" if "left" in last_dir else "down_right"
-
-		base_dir = last_dir.replace("_left", "_right")
-		var body_walk = "walk_" + base_dir + suffix
-		if body_anim.sprite_frames and body_anim.sprite_frames.has_animation(body_walk):
-			body_anim.play(body_walk)
-
-		if show_head and head_anim and head_anim.sprite_frames:
-			if head_anim.sprite_frames.has_animation(body_walk):
-				head_anim.play(body_walk)
-
-	if attacking or not body_anim:
-		# when attacking, we don't change body/weapon animations here
-		return
-
-	if head_anim:
-		head_anim.visible = show_head
-
-
-	# Build idle / walk animation names; prefer exact left/right anims if present,
-	# otherwise try right-side version and flip horizontally.
-	if input == Vector2.ZERO:
-		var target = "idle_" + base_dir + suffix
-		if _play_with_optional_flip(body_anim, target):
-			# body played
-			pass
-		else:
-			# fallback: try replacing _left with _right and flip horizontally
+	# --- BODY ANIMATION ---
+	if body_anim and body_anim.sprite_frames:
+		if not _play_with_optional_flip(body_anim, anim_name):
+			# Try right version + flip if left version missing
 			var alt = base_dir.replace("_left", "_right")
-			target = "idle_" + alt + suffix
-			if _play_with_optional_flip(body_anim, target, true):
-				pass
+			_play_with_optional_flip(body_anim, prefix + alt + suffix, true)
 
-		# head
-		if show_head and head_anim:
-			var head_target = "idle_" + base_dir + suffix
-			_play_with_optional_flip(head_anim, head_target)
+	# --- HEAD ANIMATION ---
+	if show_head and head_anim and head_anim.sprite_frames:
+		_play_with_optional_flip(head_anim, anim_name)
 
-		# weapon idle
-		if has_weapon and weapon_anim and weapon_anim.sprite_frames and weapon_anim.sprite_frames.has_animation("idle"):
-			weapon_anim.play("idle")
-	else:
-		# walking
-		var target_walk = "walk_" + base_dir + suffix
-		if _play_with_optional_flip(body_anim, target_walk):
-			pass
-		else:
-			var alt = base_dir.replace("_left", "_right")
-			target_walk = "walk_" + alt + suffix
-			if _play_with_optional_flip(body_anim, target_walk, true):
-				pass
+	# --- WEAPON ANIMATION ---
+	if has_weapon and weapon_anim and weapon_anim.sprite_frames:
+		var weapon_anim_name = "idle" if is_idle else "walk"
+		if weapon_anim.sprite_frames.has_animation(weapon_anim_name):
+			weapon_anim.play(weapon_anim_name)
 
-		# head
-		if show_head and head_anim:
-			var head_walk_target = "walk_" + base_dir + suffix
-			_play_with_optional_flip(head_anim, head_walk_target)
-
-		# weapon walk
-		if has_weapon and weapon_anim and weapon_anim.sprite_frames and weapon_anim.sprite_frames.has_animation("walk"):
-			weapon_anim.play("walk")
 
 # helper: try to play anim, if it's a 'left' variant not present try to play the right variant & flip
 func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, force_flip_if_left: bool=false) -> bool:
@@ -408,3 +361,62 @@ func add_to_inventory(item: InvItem, quantity: int) -> void:
 	entry.item = item
 	entry.quantity = quantity
 	inventory.add_item(entry)   # emits signal → UI updates
+
+# equip a weapon from a PackedScene or path (pass a PackedScene or a string path)
+func equip_weapon(packed_or_path) -> void:
+	# free old
+	if current_weapon_scene:
+		current_weapon_scene.queue_free()
+		current_weapon_scene = null
+		weapon_sprite = null
+		weapon_anim_player = null
+
+	var packed: PackedScene = null
+	if typeof(packed_or_path) == TYPE_STRING:
+		packed = load(packed_or_path)
+	elif packed_or_path is PackedScene:
+		packed = packed_or_path
+	else:
+		push_warning("equip_weapon: invalid argument")
+		return
+
+	if not packed:
+		push_warning("equip_weapon: could not load scene")
+		return
+
+	current_weapon_scene = packed.instantiate()
+	weapon_pivot.add_child(current_weapon_scene)
+	current_weapon_scene.position = Vector2.ZERO
+
+	# find sprite & animationplayer (recursive)
+	weapon_sprite = _find_child_of_type(current_weapon_scene, AnimatedSprite2D)
+	weapon_anim_player = _find_child_of_type(current_weapon_scene, AnimationPlayer)
+
+	# connect animation_finished if we have an AnimationPlayer
+	if weapon_anim_player:
+		# disconnect first to be safe
+		if weapon_anim_player.is_connected("animation_finished", Callable(self, "_on_weapon_animation_finished")):
+			weapon_anim_player.disconnect("animation_finished", Callable(self, "_on_weapon_animation_finished"))
+		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
+
+	has_weapon = weapon_sprite != null or weapon_anim_player != null
+	print("[player] equip_weapon. sprite:", weapon_sprite, "anim_player:", weapon_anim_player)
+
+# recursive search for first child of specific class
+func _find_child_of_type(node: Node, clazz: Object) -> Node:
+	if node is clazz:
+		return node
+	for child in node.get_children():
+		var found = _find_child_of_type(child, clazz)
+		if found:
+			return found
+	return null
+
+func _on_weapon_animation_finished(anim_name: String) -> void:
+	if anim_name == "attack":
+		attacking = false
+		# reset/return to idle/walk visuals
+		update_animation()
+		# ensure weapon pivot rotation reset
+		weapon_pivot.rotation = 0
+		print("[player] weapon attack finished; attacking set false")

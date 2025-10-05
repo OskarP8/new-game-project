@@ -1,9 +1,15 @@
-[gd_scene load_steps=9 format=3 uid="uid://cqlnk6vf6c6i5"]
+[gd_scene load_steps=12 format=3 uid="uid://cqlnk6vf6c6i5"]
 
 [ext_resource type="PackedScene" uid="uid://dsibk3lgkgky5" path="res://inventory/inv_ui_slot.tscn" id="1_oykf1"]
 [ext_resource type="Texture2D" uid="uid://bjjnqr4jlswcq" path="res://sprites/inv.kra" id="1_vfmov"]
 [ext_resource type="Texture2D" uid="uid://b1ejqqdie4odp" path="res://sprites/icons/player_inv_slots.kra" id="2_enmkv"]
 [ext_resource type="Script" path="res://scripts/player_inv.gd" id="2_jswy2"]
+[ext_resource type="Script" path="res://inventory/inventory.gd" id="3_bqqrr"]
+[ext_resource type="Script" path="res://inventory/inv_slot.gd" id="4_lhdil"]
+
+[sub_resource type="Resource" id="Resource_hgxcc"]
+script = ExtResource("3_bqqrr")
+slots = Array[ExtResource("4_lhdil")]([null, null, null, null])
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_c8rtm"]
 atlas = ExtResource("2_enmkv")
@@ -39,6 +45,7 @@ patch_margin_top = 6
 patch_margin_right = 6
 patch_margin_bottom = 6
 script = ExtResource("2_jswy2")
+inv = SubResource("Resource_hgxcc")
 
 [node name="WeaponSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
