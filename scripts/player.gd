@@ -289,7 +289,7 @@ func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, 
 			anim_sprite.flip_h = true
 			return true
 
-	return false
+		return false
 
 	# anim_name expected like "idle_down_left_weapon" or similar
 	if not anim_sprite or not anim_sprite.sprite_frames:

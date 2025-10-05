@@ -3,7 +3,7 @@
 [ext_resource type="PackedScene" uid="uid://dsibk3lgkgky5" path="res://inventory/inv_ui_slot.tscn" id="1_oykf1"]
 [ext_resource type="Texture2D" uid="uid://bjjnqr4jlswcq" path="res://sprites/inv.kra" id="1_vfmov"]
 [ext_resource type="Texture2D" uid="uid://b1ejqqdie4odp" path="res://sprites/icons/player_inv_slots.kra" id="2_enmkv"]
-[ext_resource type="Script" path="res://scenes/player_inv.gd" id="2_jswy2"]
+[ext_resource type="Script" path="res://scripts/player_inv.gd" id="2_jswy2"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_c8rtm"]
 atlas = ExtResource("2_enmkv")
@@ -52,7 +52,7 @@ offset_bottom = 77.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_c8rtm")
-script = null
+slot_icon = null
 
 [node name="SecondarySlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
@@ -66,7 +66,7 @@ offset_bottom = 77.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_qmly5")
-script = null
+slot_icon = null
 
 [node name="ArmorSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
@@ -80,7 +80,7 @@ offset_bottom = 41.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_dk0qi")
-script = null
+slot_icon = null
 
 [node name="ConsumableSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
@@ -94,4 +94,4 @@ offset_bottom = 113.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_peq4r")
-script = null
+slot_icon = null
