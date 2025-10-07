@@ -23,10 +23,17 @@ var attacking = false
 var has_weapon = true
 var facing_left = false           # persistent facing state (keeps after attack)
 var attack_angle: float = 0.0     # stored attack angle
+var attack_flip: bool = false   # true when attack was aimed to the left
 
 var current_weapon_scene: Node = null
 var weapon_sprite: AnimatedSprite2D = null
 var weapon_anim_player: AnimationPlayer = null
+# store facing at the start of the attack so it doesn't change mid-attack
+var attack_facing_left: bool = false
+
+# store base scale magnitude of the weapon sprite so flips preserve size
+var weapon_sprite_base_scale_x: float = 1.0
+
 
 # ----------------------
 # NODES
@@ -148,28 +155,25 @@ func handle_attack() -> void:
 
 		_update_last_dir()
 
-		# ensure sprite flip is set before playing attack
-		if weapon_sprite:
-			weapon_sprite.flip_h = facing_left
+		# Determine suffix for left or right animations
+		var direction_suffix = "_left" if facing_left else "_right"
 
-		# Play attack using AnimationPlayer if present, else AnimatedSprite2D
-		if weapon_anim_player and weapon_anim_player.has_animation("attack"):
-			print("[player] weapon: playing AnimationPlayer attack")
-			weapon_anim_player.play("attack")
-		elif weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation("attack"):
-			print("[player] weapon: playing AnimatedSprite2D attack")
-			weapon_sprite.play("attack")
-		else:
-			print("[player] No weapon attack animation found; will still set attacking flag")
+		# Play weapon attack animation
+		if weapon_anim and weapon_anim.sprite_frames:
+			var weapon_attack_name = "attack" + direction_suffix
+			if weapon_anim.sprite_frames.has_animation(weapon_attack_name):
+				weapon_anim.play(weapon_attack_name)
 
-		# Play body & head attack animations as before (safe-checked)
+		# Play body attack animation
 		var suffix = "_weapon"
-		var base_dir = last_dir.replace("_left", "_right")
-		var body_attack_name = "attack_" + base_dir + suffix
+		var body_attack_name = "attack_" + vert_dir + direction_suffix + suffix
 		if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(body_attack_name):
 			body_anim.play(body_attack_name)
-		if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(body_attack_name):
-			head_anim.play(body_attack_name)
+
+		# Play head attack animation
+		var head_attack_name = "attack_" + vert_dir + direction_suffix + suffix
+		if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(head_attack_name):
+			head_anim.play(head_attack_name)
 
 # single handler connected in _ready
 func _on_body_animation_finished() -> void:
@@ -318,38 +322,42 @@ func sync_head_to_body() -> void:
 # WEAPON ROTATION (attack uses stored angle; idle/walk has rotation 0)
 # ----------------------
 func update_weapon_rotation():
-	if not has_weapon or not weapon_pivot or not weapon_anim:
+	if not has_weapon or not weapon_pivot:
+		return
+
+	var sprite := weapon_sprite if weapon_sprite else weapon_anim
+	if not sprite:
 		return
 
 	if attacking:
-		# Rotate weapon toward cursor during attack
-		var mouse_pos = get_global_mouse_position()
-		var dir = mouse_pos - weapon_pivot.global_position
-		var angle = dir.angle()
+		# Use stored attack_angle instead of following the mouse
+		var angle = attack_angle
 
-		if dir.x < 0:
-			weapon_anim.scale.x = -1
+		# Flip sprite depending on original facing direction at attack start
+		if facing_left:
+			sprite.scale.x = -weapon_sprite_base_scale_x
 			weapon_pivot.rotation = angle + PI
 		else:
-			weapon_anim.scale.x = 1
+			sprite.scale.x = weapon_sprite_base_scale_x
 			weapon_pivot.rotation = angle
 	else:
-		# Idle/walk: flip weapon with player movement
-		if facing_left:
-			weapon_anim.scale.x = -1
-		else:
-			weapon_anim.scale.x = 1
+		# Idle/walk: keep weapon aligned with player facing
+		sprite.scale.x = -weapon_sprite_base_scale_x if facing_left else weapon_sprite_base_scale_x
 		weapon_pivot.rotation = 0
-
+# ----------------------
+# PLAYER FLIP
+# ----------------------
 # ----------------------
 # PLAYER FLIP
 # ----------------------
 func update_player_flip() -> void:
-	# use persistent facing_left so it doesn't revert after attack
+	# Flip body and head visually based on facing_left
 	if body_anim:
 		body_anim.flip_h = facing_left
 	if head_anim:
 		head_anim.flip_h = facing_left
+
+	# Important: weapon sprite flip handled only in update_weapon_rotation()
 
 func collect(item: InvItem, quantity: int = 1) -> void:
 	var entry = InventoryEntry.new()
@@ -395,6 +403,12 @@ func equip_weapon(packed_or_path) -> void:
 	# find sprite & animationplayer (recursive)
 	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
+	if weapon_sprite:
+	# keep the absolute base scale so we can flip by setting sign only
+		weapon_sprite_base_scale_x = abs(weapon_sprite.scale.x) if weapon_sprite.scale.x != 0 else 1.0
+	else:
+		weapon_sprite_base_scale_x = 1.0
+
 
 	# connect animation_finished if we have an AnimationPlayer
 	if weapon_anim_player:
@@ -424,6 +438,9 @@ func _on_weapon_animation_finished(anim_name: String) -> void:
 		attacking = false
 		# reset/return to idle/walk visuals
 		update_animation()
+		# ensure weapon pivot rotation reset
+		weapon_pivot.rotation = 0
+		print("[player] weapon attack finished; attacking set false")
 		# ensure weapon pivot rotation reset
 		weapon_pivot.rotation = 0
 		print("[player] weapon attack finished; attacking set false")
