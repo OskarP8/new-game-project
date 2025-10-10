@@ -137,69 +137,37 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mouse_pos = get_viewport().get_mouse_position()
 		var dropped = false
 
-		# data being moved comes from ghost (we cleared origin already)
 		var moving_item: InvItem = ghost_item.origin_item
 		var moving_amount: int = ghost_item.origin_amount
 
+		# Find reference to player inventory
+		var player_inv := get_tree().root.find_child("PlayerInv", true, false)
+
+		# 1️⃣ Drop inside main inventory (self)
 		for slot in slots:
 			if slot.get_global_rect().has_point(mouse_pos):
-				# ensure inv.slots has that index
-				if slot.index >= inv.slots.size():
-					var needed = slot.index + 1 - inv.slots.size()
-					for i in range(needed):
-						inv.slots.append(InvSlot.new())
-
 				var target_slot: InvSlot = inv.slots[slot.index]
-				if target_slot == null:
-					target_slot = InvSlot.new()
-					inv.slots[slot.index] = target_slot
-
-				# If nothing to move, bail
 				if moving_item == null:
 					dropped = true
 					break
 
-				# SAME SLOT: if target is the same InvSlot object as origin -> return item
 				if picked_slot != null and target_slot == picked_slot:
 					target_slot.item = moving_item
 					target_slot.amount = moving_amount
 					dropped = true
 					break
 
-				# STACK: same id & stackable
 				if target_slot.item and target_slot.item.id == moving_item.id and not _is_non_stackable(moving_item):
 					target_slot.amount += moving_amount
-					# origin already cleared
-				# SWAP: target occupied and not stackable with moving item (or different)
 				elif target_slot.item:
 					var temp_item = target_slot.item
 					var temp_amount = target_slot.amount
-
-					# place moving into target
 					target_slot.item = moving_item
 					target_slot.amount = moving_amount
 
-					# put replaced item into origin (picked_slot) if available, otherwise find first empty
-					if picked_slot != null:
+					if picked_slot:
 						picked_slot.item = temp_item
 						picked_slot.amount = temp_amount
-					else:
-						# fallback: place into the first empty inv slot (ensure exists)
-						var placed = false
-						for i in range(inv.slots.size()):
-							if inv.slots[i] == null:
-								inv.slots[i] = InvSlot.new()
-							if inv.slots[i].item == null:
-								inv.slots[i].item = temp_item
-								inv.slots[i].amount = temp_amount
-								placed = true
-								break
-						if not placed:
-							var new_slot = InvSlot.new()
-							new_slot.item = temp_item
-							new_slot.amount = temp_amount
-							inv.slots.append(new_slot)
-				# MOVE into empty target
 				else:
 					target_slot.item = moving_item
 					target_slot.amount = moving_amount
@@ -207,27 +175,30 @@ func _unhandled_input(event: InputEvent) -> void:
 				dropped = true
 				break
 
-		# Dropped outside → clear picked slot safely if outside inventory border
+		# 2️⃣ Drop into player inventory
+		if not dropped and player_inv and player_inv.visible and player_inv.is_mouse_over_ui(mouse_pos):
+			print("[inv_ui] dropped into player inventory → transferring")
+			if player_inv.inv:
+				var entry := InventoryEntry.new()
+				entry.item = moving_item
+				entry.quantity = moving_amount
+				player_inv.inv.add_item(entry)
+			dropped = true
+
+		# 3️⃣ Drop outside → restore original
 		if not dropped and picked_slot:
-			if not get_global_rect().has_point(mouse_pos):
-				# Clear the picked slot if dropped outside inventory
-				picked_slot.item = null
-				picked_slot.amount = 0
-			else:
-				# Restore the original item and amount
-				picked_slot.item = ghost_item.origin_item
-				picked_slot.amount = ghost_item.origin_amount
+			picked_slot.item = moving_item
+			picked_slot.amount = moving_amount
 
 		# Cleanup ghost
 		if ghost_item:
 			ghost_item.queue_free()
 			ghost_item = null
-
-		# Reset picked_slot
 		picked_slot = null
 
-		# Refresh the UI
 		update_slots()
+		if player_inv:
+			player_inv.update_slots()
 
 func _update_item_in_hand():
 	if ghost_item == null:
@@ -242,3 +213,19 @@ func _is_non_stackable(item: InvItem) -> bool:
 	if not item:
 		return false
 	return item.type == "weapon" or item.type == "armor"
+
+func get_slots_rects() -> Array[Rect2]:
+	var rects := []
+	for s in slots:
+		if s and s is Control:
+			rects.append(s.get_global_rect())
+	return rects
+
+func get_slot_under_mouse(pos: Vector2) -> int:
+	for i in range(slots.size()):
+		if slots[i].get_global_rect().has_point(pos):
+			return i
+	return -1
+
+func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
+	return get_global_rect().has_point(mouse_pos)

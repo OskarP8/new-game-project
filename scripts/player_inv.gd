@@ -95,47 +95,38 @@ func _unhandled_input(event: InputEvent) -> void:
 		var moving_item := picked_slot.item
 		var moving_amount := picked_slot.amount
 
-		# Declare inv_ui up front so it's visible everywhere
-		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
-
-		# Clear picked slot temporarily
+		# Clear origin slot
 		picked_slot.item = null
 		picked_slot.amount = 0
 
-		# --- 1️⃣ Check if dropped on player inventory slots ---
-		for idx in range(slots.size()):
-			var slot_node = slots[idx]
-			if slot_node.get_global_rect().has_point(mouse_pos):
-				var target_slot: InvSlot = inv.slots[idx]
+		# Find reference to main inventory UI
+		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
 
-				if target_slot == picked_slot:
-					print("[player_inv] same slot, snapping back")
-					target_slot.item = moving_item
-					target_slot.amount = moving_amount
-					dropped = true
-					break
+		# 1️⃣ Try dropping on player inventory slots
+		var target_idx := get_slot_under_mouse(mouse_pos)
+		if target_idx >= 0:
+			var target_slot: InvSlot = inv.slots[target_idx]
 
-				if target_slot.item == null:
-					target_slot.item = moving_item
-					target_slot.amount = moving_amount
-					print("[player_inv] moved into empty slot")
-					dropped = true
-					break
-
-				# Swap
-				print("[player_inv] swapping items")
-				var tmp_item = target_slot.item
-				var tmp_amt = target_slot.amount
+			if target_slot == picked_slot:
 				target_slot.item = moving_item
 				target_slot.amount = moving_amount
-				picked_slot.item = tmp_item
-				picked_slot.amount = tmp_amt
 				dropped = true
-				break
+			elif target_slot.item == null:
+				target_slot.item = moving_item
+				target_slot.amount = moving_amount
+				dropped = true
+			else:
+				var temp_item = target_slot.item
+				var temp_amount = target_slot.amount
+				target_slot.item = moving_item
+				target_slot.amount = moving_amount
+				picked_slot.item = temp_item
+				picked_slot.amount = temp_amount
+				dropped = true
 
-		# --- 2️⃣ Check if dropped inside main inventory (cross-transfer) ---
-		if not dropped and inv_ui and inv_ui.visible and inv_ui.get_global_rect().has_point(mouse_pos):
-			print("[player_inv] dropped inside main inventory -> transfer there")
+		# 2️⃣ Try dropping into main inventory UI
+		elif inv_ui and inv_ui.visible and inv_ui.get_global_rect().has_point(mouse_pos):
+			print("[player_inv] dropped into main inventory → transferring...")
 			if inv_ui.inv:
 				var entry := InventoryEntry.new()
 				entry.item = moving_item
@@ -143,17 +134,39 @@ func _unhandled_input(event: InputEvent) -> void:
 				inv_ui.inv.add_item(entry)
 			dropped = true
 
-		# --- 3️⃣ Dropped completely outside both inventories ---
-		if not dropped:
-			print("[player_inv] dropped outside all inventories -> discard")
-			# Optionally: spawn it in the world here
+		# 3️⃣ Try dropping into *another* player_inv (optional multiplayer support)
+		else:
+			# If we want to add later, we can detect others by name/tag
+			pass
 
-		# --- Cleanup ---
+		# 4️⃣ If dropped nowhere, restore to origin
+		if not dropped:
+			picked_slot.item = moving_item
+			picked_slot.amount = moving_amount
+
+		# Cleanup ghost
 		if ghost_item and is_instance_valid(ghost_item):
 			ghost_item.queue_free()
 			ghost_item = null
-		picked_slot = null
 
+		picked_slot = null
 		update_slots()
+
 		if inv_ui:
 			inv_ui.update_slots()
+
+func get_slots_rects() -> Array[Rect2]:
+	var rects := []
+	for s in slots:
+		if s and s is Control:
+			rects.append(s.get_global_rect())
+	return rects
+
+func get_slot_under_mouse(pos: Vector2) -> int:
+	for i in range(slots.size()):
+		if slots[i].get_global_rect().has_point(pos):
+			return i
+	return -1
+
+func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
+	return get_global_rect().has_point(mouse_pos)
