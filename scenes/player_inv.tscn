@@ -59,6 +59,7 @@ offset_bottom = 77.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_c8rtm")
+slot_type = "weapon"
 slot_icon = null
 
 [node name="SecondarySlot" parent="." instance=ExtResource("1_oykf1")]
@@ -73,6 +74,7 @@ offset_bottom = 77.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_qmly5")
+slot_type = "weapon"
 slot_icon = null
 
 [node name="ArmorSlot" parent="." instance=ExtResource("1_oykf1")]
@@ -87,6 +89,7 @@ offset_bottom = 41.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_dk0qi")
+slot_type = "armor"
 slot_icon = null
 
 [node name="ConsumableSlot" parent="." instance=ExtResource("1_oykf1")]
@@ -101,4 +104,5 @@ offset_bottom = 113.0
 grow_horizontal = 1
 grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_peq4r")
+slot_type = "consumable"
 slot_icon = null

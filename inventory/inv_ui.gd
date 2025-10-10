@@ -177,13 +177,32 @@ func _unhandled_input(event: InputEvent) -> void:
 
 		# 2️⃣ Drop into player inventory
 		if not dropped and player_inv and player_inv.visible and player_inv.is_mouse_over_ui(mouse_pos):
-			print("[inv_ui] dropped into player inventory → transferring")
-			if player_inv.inv:
-				var entry := InventoryEntry.new()
-				entry.item = moving_item
-				entry.quantity = moving_amount
-				player_inv.inv.add_item(entry)
-			dropped = true
+			for pslot in player_inv.slots:
+				if pslot.get_global_rect().has_point(mouse_pos):
+					# Check if this slot type accepts this item
+					var slot_t := str(pslot.slot_type).to_lower()
+					var item_t := str(moving_item.type).to_lower()
+					if not player_inv._can_accept_item(slot_t, item_t):
+						print("[inv_ui] ❌ Invalid drop —", moving_item.type, "cannot go into", pslot.slot_type)
+						continue
+
+					var idx = player_inv.slots.find(pslot)
+					var target_slot: InvSlot = player_inv.inv.slots[idx]
+					if target_slot.item == null:
+						print("[inv_ui] ✅ Placed", moving_item.name, "into", pslot.slot_type)
+						target_slot.item = moving_item
+						target_slot.amount = moving_amount
+					else:
+						print("[inv_ui] 🔄 Swapped with existing item in", pslot.slot_type)
+						var tmp_item = target_slot.item
+						var tmp_amt = target_slot.amount
+						target_slot.item = moving_item
+						target_slot.amount = moving_amount
+						picked_slot.item = tmp_item
+						picked_slot.amount = tmp_amt
+					dropped = true
+					break
+
 
 		# 3️⃣ Drop outside → restore original
 		if not dropped and picked_slot:
