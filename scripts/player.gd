@@ -1,7 +1,7 @@
 extends CharacterBody2D
 
 #@export var inv: Inv
-@export var inventory: Inv = preload("res://inventory/playerinv.tres")
+@export var inventory: Inv = preload("res://inventory/inv.tres")
 
 # ----------------------
 # CONFIG
@@ -417,14 +417,14 @@ func add_to_inventory(item: InvItem, quantity: int) -> void:
 # EQUIP WEAPON
 # -------------------------------------------------------------------------
 func equip_weapon(packed_or_path) -> void:
-	# Remove old weapon first
+	# --- 1️⃣ Remove old weapon if exists
 	if current_weapon_scene:
 		current_weapon_scene.queue_free()
 		current_weapon_scene = null
 		weapon_sprite = null
 		weapon_anim_player = null
 
-	# Load the PackedScene
+	# --- 2️⃣ Load PackedScene
 	var packed: PackedScene = null
 	if typeof(packed_or_path) == TYPE_STRING:
 		packed = load(packed_or_path)
@@ -438,39 +438,41 @@ func equip_weapon(packed_or_path) -> void:
 		push_warning("equip_weapon: could not load scene")
 		return
 
-	# Ensure there is a WeaponHolder inside WeaponPivot
+	# --- 3️⃣ Ensure WeaponHolder exists
 	var holder: Node2D = weapon_pivot.get_node_or_null("WeaponHolder")
 	if holder == null:
 		holder = Node2D.new()
 		holder.name = "WeaponHolder"
 		weapon_pivot.add_child(holder)
-		print("[equip_weapon] created WeaponHolder under WeaponPivot")
+		print("[equip_weapon] Created WeaponHolder under WeaponPivot")
 
-	# Instantiate and add weapon scene
+	holder.position = Vector2.ZERO
+	holder.rotation = 0
+	holder.scale.x = -1 if facing_left else 1  # maintain flip direction
+
+	# --- 4️⃣ Instantiate weapon and attach to holder
 	current_weapon_scene = packed.instantiate()
 	holder.add_child(current_weapon_scene)
 	current_weapon_scene.position = Vector2.ZERO
 	current_weapon_scene.rotation = 0
 
-	# Get components
+	# --- 5️⃣ Find important nodes
 	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
-	# Store clean base scale
+	# --- 6️⃣ Store clean base scale for flipping logic
 	if weapon_sprite:
 		weapon_sprite_base_scale_x = abs(weapon_sprite.scale.x) if weapon_sprite.scale.x != 0 else 1.0
 	else:
 		weapon_sprite_base_scale_x = 1.0
 
-	# Connect animation finished signal safely
+	# --- 7️⃣ Safely connect animation finished signal
 	if weapon_anim_player:
 		if weapon_anim_player.is_connected("animation_finished", Callable(self, "_on_weapon_animation_finished")):
 			weapon_anim_player.disconnect("animation_finished", Callable(self, "_on_weapon_animation_finished"))
 		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
 
-	# Set up flip
-	holder.scale.x = -1 if facing_left else 1
-
+	# --- 8️⃣ Store state
 	has_weapon = weapon_sprite != null or weapon_anim_player != null
 	print("[player] equip_weapon → sprite:", weapon_sprite, "anim_player:", weapon_anim_player, "holder.scale.x:", holder.scale.x)
 

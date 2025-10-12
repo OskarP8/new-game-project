@@ -7,3 +7,4 @@ class_name InvItem
 @export var icon: Texture2D       # item icon
 @export var type: String = "misc" # "consumable", "weapon", "armor", etc.
 @export var max_stack: int = 99   # how many can stack (1 for weapons/armor)
+@export var scene_path: String = ""  # path to .tscn if this item can be equipped
