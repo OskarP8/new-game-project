@@ -29,7 +29,7 @@ animations = [{
 "texture": SubResource("AtlasTexture_8krx6")
 }],
 "loop": true,
-"name": &"idle_down_right_weapon",
+"name": &"idle",
 "speed": 10.0
 }, {
 "frames": [{
@@ -37,7 +37,7 @@ animations = [{
 "texture": SubResource("AtlasTexture_6uxpq")
 }],
 "loop": true,
-"name": &"walk_down_right_weapon",
+"name": &"walk",
 "speed": 10.0
 }]
 
@@ -390,8 +390,7 @@ _data = {
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 position = Vector2(6, 0)
 sprite_frames = SubResource("SpriteFrames_rvsm4")
-animation = &"walk_down_right_weapon"
-frame_progress = 0.21809
+animation = &"walk"
 offset = Vector2(-5, -10)
 flip_h = true
 

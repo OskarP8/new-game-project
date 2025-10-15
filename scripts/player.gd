@@ -186,10 +186,23 @@ func handle_attack() -> void:
 		if weapon_anim_player:
 			if weapon_anim_player.has_animation("attack"):
 				weapon_anim_player.play("attack")
-		elif vis and vis.sprite_frames and vis.sprite_frames.has_animation("attack"):
-			vis.play("attack")
+		else:
+			# fallback to AnimatedSprite2D frames if present
+			var vis_weapon := weapon_sprite if weapon_sprite else weapon_anim
+			if vis_weapon and vis_weapon.sprite_frames:
+				if vis_weapon.sprite_frames.has_animation("attack"):
+					vis_weapon.play("attack")
+					# ensure we get notified when the anim finishes so we can reset state
+					if not vis_weapon.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
+						vis_weapon.animation_finished.connect(Callable(self, "_on_attack_finished"))
+				elif vis_weapon.sprite_frames.has_animation("attack_right") or vis_weapon.sprite_frames.has_animation("attack_left"):
+					var wanim := "attack_left" if facing_left else "attack_right"
+					if vis_weapon.sprite_frames.has_animation(wanim):
+						vis_weapon.play(wanim)
+						if not vis_weapon.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
+							vis_weapon.animation_finished.connect(Callable(self, "_on_attack_finished"))
 
-# --- Body/head attack animations (auto-flip if left anim missing) ---
+		# --- Body/head attack animations (auto-flip if left anim missing) ---
 		var suffix = "_weapon"
 		var body_attack_name = "attack_" + vert_dir + "_" + hor_dir + suffix
 
@@ -210,12 +223,31 @@ func _on_body_animation_finished() -> void:
 		_on_attack_finished()
 
 func _on_attack_finished() -> void:
+	# ✅ Reset attack state
 	attacking = false
-	# after attack, weapon & body return to idle/walk via update_animation()
+	facing_left = post_attack_left
+
+	# ✅ Reset pivot rotation (important for AnimatedSprite2D weapons)
+	if weapon_pivot:
+		weapon_pivot.rotation = 0
+
+	# ✅ Reset holder flip to match final facing
+	if weapon_holder:
+		weapon_holder.scale.x = -1 if facing_left else 1
+
+	# ✅ Play idle/walk animation again for weapon
+	if has_weapon:
+		if input == Vector2.ZERO:
+			_play_weapon_anim("idle")
+		else:
+			_play_weapon_anim("walk")
+
+	# ✅ Resume body/head animations
 	update_animation()
 	sync_head_to_body()
-	attack_facing_left = facing_left
 
+	if DEBUG:
+		print("[player] _on_attack_finished() — reset rotation, facing_left:", facing_left)
 # ----------------------
 # ANIMATION (body & head & weapon idle/walk)
 # ----------------------
