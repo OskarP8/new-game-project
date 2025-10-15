@@ -190,6 +190,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					var target_slot: InvSlot = player_inv.inv.slots[idx]
 					if target_slot.item == null:
 						print("[inv_ui] ✅ Placed", moving_item.name, "into", pslot.slot_type)
+
+						# ✅ Auto-equip weapons when dropped into weapon slot
+						if str(pslot.slot_type).to_lower() == "weapon":
+							var player := get_tree().root.find_child("Player", true, false)
+							if player and moving_item and moving_item.scene_path != "":
+								print("[inv_ui] 🗡 Equipping weapon from:", moving_item.scene_path)
+								player.equip_weapon(moving_item.scene_path)
+							else:
+								print("[inv_ui] ⚠️ Could not equip weapon — missing player or scene_path")
+
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
 					else:

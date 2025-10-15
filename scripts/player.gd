@@ -424,18 +424,26 @@ func equip_weapon(packed_or_path) -> void:
 		weapon_sprite = null
 		weapon_anim_player = null
 
-	# --- 2️⃣ Load PackedScene
-	var packed: PackedScene = null
+	# --- 2️⃣ Load scene safely
+	var packed = null
+
 	if typeof(packed_or_path) == TYPE_STRING:
 		packed = load(packed_or_path)
 	elif packed_or_path is PackedScene:
 		packed = packed_or_path
+	elif packed_or_path is InvItem:
+		if packed_or_path.scene_path != "":
+			packed = load(packed_or_path.scene_path)
+		else:
+			push_warning("equip_weapon: InvItem has no valid scene_path")
+			return
 	else:
-		push_warning("equip_weapon: invalid argument")
+		push_warning("equip_weapon: invalid argument type")
 		return
 
-	if not packed:
-		push_warning("equip_weapon: could not load scene")
+	# ✅ Extra type check
+	if not (packed is PackedScene):
+		push_warning("equip_weapon: loaded resource is not a PackedScene → " + str(packed))
 		return
 
 	# --- 3️⃣ Ensure WeaponHolder exists

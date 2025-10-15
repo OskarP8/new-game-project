@@ -16,3 +16,4 @@ name = "Pitchfork"
 icon = ExtResource("1_1pnkq")
 type = "weapon"
 max_stack = 1
+scene_path = ""

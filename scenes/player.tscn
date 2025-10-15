@@ -1,8 +1,7 @@
-[gd_scene load_steps=71 format=3 uid="uid://dwgo1s0vppabn"]
+[gd_scene load_steps=70 format=3 uid="uid://dwgo1s0vppabn"]
 
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="1_dmapu"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_gjq3l"]
-[ext_resource type="Resource" uid="uid://dfdhsvuohr1yl" path="res://inventory/playerinv.tres" id="2_t1a62"]
 [ext_resource type="PackedScene" uid="uid://dn71k4jsgs1rt" path="res://scenes/interaction_component.tscn" id="4_u73uf"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_s3y73"]
@@ -518,11 +517,10 @@ animations = [{
 "speed": 10.0
 }]
 
-[node name="player" type="CharacterBody2D"]
+[node name="Player" type="CharacterBody2D" groups=["Player"]]
 y_sort_enabled = true
 position = Vector2(0, -3)
 script = ExtResource("1_gjq3l")
-inventory = ExtResource("2_t1a62")
 
 [node name="InteractionComponent" parent="." instance=ExtResource("4_u73uf")]
 position = Vector2(0, -3)

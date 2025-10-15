@@ -79,7 +79,7 @@ scale = Vector2(3, 3)
 [node name="layers" type="Node2D" parent="."]
 y_sort_enabled = true
 
-[node name="player" parent="layers" instance=ExtResource("1_5c8af")]
+[node name="Player" parent="layers" instance=ExtResource("1_5c8af")]
 
 [node name="Chest" parent="layers" instance=ExtResource("5_ixe8f")]
 scale = Vector2(0.6, 0.6)

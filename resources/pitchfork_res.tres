@@ -16,4 +16,4 @@ name = "Pitchfork"
 icon = ExtResource("1_7sl5a")
 type = "weapon"
 max_stack = 1
-scene_path = "\"res://scenes/Weapons/pitchfork.tscn\""
+scene_path = "res://resources/pitchfork_res.tres"

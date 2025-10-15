@@ -56,3 +56,34 @@ func take_item() -> ItemStackUI:
 
 	item_stack = null
 	return item
+
+# ----------------------------------------------------------------
+# Handle drag & drop equipping
+# ----------------------------------------------------------------
+func can_drop_data(position, data) -> bool:
+	# Ensure we're dropping an InvItem (or ItemStackUI) with a valid item
+	if data is ItemStackUI and data.item:
+		var inv_item: InvItem = data.item
+		return inv_item.slot_type == slot_type
+	return false
+
+func drop_data(position, data) -> void:
+	print("[InvUISlot] drop_data triggered on:", slot_type)
+	if not can_drop_data(position, data):
+		return
+
+	var inv_item: InvItem = data.item
+
+	# Move visual stack to this slot
+	insert(data)
+
+	# Find player (must be in "Player" group)
+	var player := get_tree().get_first_node_in_group("Player")
+	if player == null:
+		push_warning("[InvUISlot] No Player found in scene tree!")
+		return
+
+	# Equip if it's a weapon
+	if slot_type == "weapon" and inv_item.scene_path != "":
+		print("[InvUISlot] Equipping weapon:", inv_item.scene_path)
+		player.equip_weapon(inv_item.scene_path)
