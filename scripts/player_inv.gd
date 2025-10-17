@@ -5,12 +5,15 @@ extends Control
 @onready var slots: Array = $".".get_children()
 
 var is_open := false
-var ghost_item: Control = null
+var ghost_item = null
 var picked_slot: InvSlot = null
 
 func _ready():
 	if inv:
 		inv.inventory_changed.connect(update_slots)
+	for s in slots:
+		if s is InvUISlot:
+			s.item_dropped_from_slot.connect(_on_item_dropped_from_slot)
 	update_slots()
 	close()
 
@@ -276,3 +279,27 @@ func get_slot_under_mouse(pos: Vector2) -> int:
 
 func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
 	return get_global_rect().has_point(mouse_pos)
+
+func _on_item_dropped_from_slot(slot: InvUISlot, item: InvItem, amount: int) -> void:
+	print("[player_inv] Item dragged out from", slot.slot_type, ":", item.name)
+
+	# Unequip logic when dragging from equipped slots
+	var player := get_tree().get_first_node_in_group("Player")
+	if player == null:
+		return
+
+	match slot.slot_type:
+		"weapon":
+			player.equip_weapon(null)
+		"armor":
+			if player.has_method("equip_armor"):
+				player.equip_armor(null)
+
+	# Create ghost item so player can drag it to inventory
+	var ghost := preload("res://scenes/item_stack_ui.tscn").instantiate()
+	ghost.origin_item = item
+	ghost.origin_amount = amount
+	ghost.slot = null
+	add_child(ghost)
+	ghost.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	ghost.global_position = get_viewport().get_mouse_position() - ghost.size * 0.5

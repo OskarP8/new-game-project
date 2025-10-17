@@ -1,5 +1,5 @@
 extends TextureButton
-class_name InvUISlot
+class_name PlayerInvSlot
 
 @export var slot_type: String = "generic"  # e.g. "weapon", "armor", "food", "inventory"
 @export var slot_icon: Texture2D = null    # optional icon / background for this slot
@@ -8,6 +8,8 @@ class_name InvUISlot
 
 var item_stack: ItemStackUI = null
 var index: int = -1  # assigned externally (e.g. in inv_ui.gd)
+
+signal slot_swapped(from_slot, to_slot)  # ⚡ Notify parent when items are swapped
 
 func _ready() -> void:
 	# If slot_icon is provided, use it as the button's normal texture
@@ -20,7 +22,7 @@ func _ready() -> void:
 	# Ensure CenterContainer exists
 	if not container:
 		push_warning("[InvUISlot] Missing CenterContainer in scene!")
-	
+
 	# Optional: remove focus outline for cleaner visuals
 	focus_mode = Control.FOCUS_NONE
 
@@ -57,33 +59,74 @@ func take_item() -> ItemStackUI:
 	item_stack = null
 	return item
 
+
 # ----------------------------------------------------------------
-# Handle drag & drop equipping
+# DRAG & DROP SUPPORT
 # ----------------------------------------------------------------
+func get_drag_data(position):
+	if item_stack == null:
+		return null
+
+	var data = {
+		"from_slot": self,
+		"item_stack": item_stack,
+		"item": item_stack.item,
+		"amount": item_stack.amount,
+	}
+
+	set_drag_preview(item_stack.duplicate())
+	return data
+
+
 func can_drop_data(position, data) -> bool:
-	# Ensure we're dropping an InvItem (or ItemStackUI) with a valid item
-	if data is ItemStackUI and data.item:
-		var inv_item: InvItem = data.item
-		return inv_item.slot_type == slot_type
-	return false
+	if not data.has("item_stack"):
+		return false
+
+	var inv_item: InvItem = data["item"]
+
+	# --- Custom rules for slot types ---
+	if slot_type == "weapon":
+		return inv_item.type == "weapon"
+	elif slot_type == "secondary":
+		return inv_item.type == "secondary"
+	elif slot_type == "armor":
+		return inv_item.type == "armor"
+	else:
+		return true
+
 
 func drop_data(position, data) -> void:
 	print("[InvUISlot] drop_data triggered on:", slot_type)
 	if not can_drop_data(position, data):
 		return
 
-	var inv_item: InvItem = data.item
+	var from_slot: InvUISlot = data["from_slot"]
+	if from_slot == self:
+		return
 
-	# Move visual stack to this slot
-	insert(data)
+	# --- Swap the items visually ---
+	var temp_stack = item_stack
+	item_stack = from_slot.item_stack
+	from_slot.item_stack = temp_stack
 
-	# Find player (must be in "Player" group)
+	# --- Update visuals ---
+	if item_stack:
+		insert(item_stack)
+	if from_slot.item_stack:
+		from_slot.insert(from_slot.item_stack)
+
+	# --- Notify parent (inv_ui.gd) ---
+	emit_signal("slot_swapped", from_slot, self)
+
+	# --- Handle equip logic if needed ---
 	var player := get_tree().get_first_node_in_group("Player")
-	if player == null:
+	if not player:
 		push_warning("[InvUISlot] No Player found in scene tree!")
 		return
 
-	# Equip if it's a weapon
-	if slot_type == "weapon" and inv_item.scene_path != "":
-		print("[InvUISlot] Equipping weapon:", inv_item.scene_path)
-		player.equip_weapon(inv_item.scene_path)
+	if slot_type == "weapon" and item_stack and item_stack.item and item_stack.item.scene_path != "":
+		print("[InvUISlot] 🗡 Equipping weapon:", item_stack.item.scene_path)
+		player.equip_weapon(item_stack.item.scene_path)
+	elif slot_type == "weapon" and not item_stack:
+		print("[InvUISlot] ⚪ Unequipping weapon")
+		player.has_weapon = false

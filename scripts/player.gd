@@ -20,7 +20,7 @@ var hor_dir := "right"        # "left" or "right"
 var last_dir := "down_right"  # combined for animation
 
 var attacking = false
-var has_weapon = true
+var has_weapon = false
 var facing_left = false           # persistent facing state (keeps after attack)
 var attack_angle: float = 0.0     # stored attack angle
 var attack_flip: bool = false   # true when attack was aimed to the left
@@ -44,8 +44,6 @@ var weapon_grip_node: Node2D = null
 var weapon_holder_base_scale := Vector2.ONE
 var weapon_root_base_pos := Vector2.ZERO
 
-
-
 # ----------------------
 # NODES
 # ----------------------
@@ -53,10 +51,13 @@ var weapon_root_base_pos := Vector2.ZERO
 @onready var head_anim := $Graphics/Head as AnimatedSprite2D
 @onready var weapon_pivot := $Graphics/WeaponPivot as Node2D
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
+# sword_anim_player node reference kept in case it exists in tree
 @onready var sword_anim_player := $Graphics/WeaponPivot/Sword/AnimationPlayer
 
+func _dummy_set(v): pass
+
 # ----------------------
-# READY (connect once to avoid repeated connects)
+# READY
 # ----------------------
 func _ready() -> void:
 	if body_anim:
@@ -65,9 +66,20 @@ func _ready() -> void:
 		head_anim.z_as_relative = true
 	if weapon_pivot:
 		weapon_pivot.z_as_relative = true
-	var sword_scene: PackedScene = preload("res://scenes/Weapons/sword.tscn")
-	equip_weapon(sword_scene)
 
+	# find existing holder if present (safety)
+	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder") if weapon_pivot else null
+	if not weapon_holder and weapon_pivot:
+		# create holder lazily so we always have a consistent node to flip/scale/position
+		weapon_holder = Node2D.new()
+		weapon_holder.name = "WeaponHolder"
+		weapon_pivot.add_child(weapon_holder)
+		weapon_holder.position = Vector2.ZERO
+		weapon_holder.rotation = 0
+		weapon_holder.scale = Vector2.ONE
+
+	# initial state: no weapon
+	has_weapon = false
 
 # ----------------------
 # MAIN LOOP
@@ -87,12 +99,14 @@ func _process(delta):
 		print("Adding test item to inventory")
 		var test_item: InvItem = preload("res://resources/pitchfork_res.tres")
 		collect(test_item)
+		var test_item2: InvItem = preload("res://resources/sword.tres")
+		collect(test_item2)
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
 	z_index = int(global_position.y)
 	update_layers()
-	#print("Player Y:", global_position.y)
+
 # ----------------------
 # INPUT
 # ----------------------
@@ -168,47 +182,49 @@ func handle_attack() -> void:
 		post_attack_left = facing_left
 		_update_last_dir()
 
-		# Rotate pivot to aim (optional)
+		# Rotate pivot to aim (AnimatedSprite weapons use pivot rotation; animation controls visuals)
 		weapon_pivot.rotation = attack_angle if not facing_left else attack_angle + PI
 
-		# Flip holder, not the sprite
-		var holder := weapon_pivot.get_node_or_null("WeaponHolder")
-		if holder:
-			holder.scale.x = -1 if facing_left else 1
+		# Ensure holder exists and flip it as necessary
+		if not weapon_holder and weapon_pivot:
+			weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
+		if weapon_holder:
+			weapon_holder.scale.x = -1 if facing_left else 1
 
-		# Normalize sprite scale
+		# Normalize inner visual scale and disable their own flip flags (we flip holder)
 		var vis := weapon_sprite if weapon_sprite else weapon_anim
 		if vis:
 			vis.scale.x = abs(vis.scale.x)
 			vis.flip_h = false
 
-		# --- Play single "attack" animation ---
+		# --- Play attack animation ---
 		if weapon_anim_player:
+			# prefer AnimationPlayer if present
 			if weapon_anim_player.has_animation("attack"):
 				weapon_anim_player.play("attack")
 		else:
-			# fallback to AnimatedSprite2D frames if present
+			# fallback to AnimatedSprite2D animations
 			var vis_weapon := weapon_sprite if weapon_sprite else weapon_anim
 			if vis_weapon and vis_weapon.sprite_frames:
+				# prefer unified "attack" frame animation, else directional ones
 				if vis_weapon.sprite_frames.has_animation("attack"):
 					vis_weapon.play("attack")
-					# ensure we get notified when the anim finishes so we can reset state
 					if not vis_weapon.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
 						vis_weapon.animation_finished.connect(Callable(self, "_on_attack_finished"))
-				elif vis_weapon.sprite_frames.has_animation("attack_right") or vis_weapon.sprite_frames.has_animation("attack_left"):
+				else:
 					var wanim := "attack_left" if facing_left else "attack_right"
 					if vis_weapon.sprite_frames.has_animation(wanim):
 						vis_weapon.play(wanim)
 						if not vis_weapon.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
 							vis_weapon.animation_finished.connect(Callable(self, "_on_attack_finished"))
 
-		# --- Body/head attack animations (auto-flip if left anim missing) ---
+		# --- Body/head attack animations (auto-choose/flip) ---
 		var suffix = "_weapon"
 		var body_attack_name = "attack_" + vert_dir + "_" + hor_dir + suffix
 
 		if body_anim and body_anim.sprite_frames:
 			if not _play_with_optional_flip(body_anim, body_attack_name):
-				# fallback to right version + flip if left version missing
+				# fallback to right version + flip if left missing
 				var alt = body_attack_name.replace("_left", "_right")
 				_play_with_optional_flip(body_anim, alt, true)
 
@@ -217,46 +233,46 @@ func handle_attack() -> void:
 				var alt = body_attack_name.replace("_left", "_right")
 				_play_with_optional_flip(head_anim, alt, true)
 
-# single handler connected in _ready
-func _on_body_animation_finished() -> void:
-	if attacking:
-		_on_attack_finished()
-
+# Called by AnimatedSprite2D animation_finished or body animation finished signal
 func _on_attack_finished() -> void:
-	# ✅ Reset attack state
+	# single handler for AnimatedSprite2D attack finished
+	# ensure the same cleanup as the AnimationPlayer path
 	attacking = false
-	facing_left = post_attack_left
-
-	# ✅ Reset pivot rotation (important for AnimatedSprite2D weapons)
+	# force reset of pivot and holder as used by attack
 	if weapon_pivot:
 		weapon_pivot.rotation = 0
-
-	# ✅ Reset holder flip to match final facing
 	if weapon_holder:
-		weapon_holder.scale.x = -1 if facing_left else 1
-
-	# ✅ Play idle/walk animation again for weapon
+		weapon_holder.scale.x = -1 if post_attack_left else 1
+	# resume weapon idle/walk
 	if has_weapon:
 		if input == Vector2.ZERO:
 			_play_weapon_anim("idle")
 		else:
 			_play_weapon_anim("walk")
-
-	# ✅ Resume body/head animations
+	# resume body/head
 	update_animation()
 	sync_head_to_body()
 
-	if DEBUG:
-		print("[player] _on_attack_finished() — reset rotation, facing_left:", facing_left)
+# single handler connected in _ready for body anim
+func _on_body_animation_finished() -> void:
+	if attacking:
+		# if body finished and we set attacking earlier, finalize cleanup
+		_on_attack_finished()
+
 # ----------------------
 # ANIMATION (body & head & weapon idle/walk)
 # ----------------------
 func update_animation() -> void:
+	# don't override while performing an attack
 	if attacking or not body_anim:
 		return
 
 	# --- Setup ---
-	var suffix = "_weapon" if has_weapon else ""
+	var suffix = ""
+	if has_weapon and current_weapon_scene:
+		suffix = "_weapon"
+
+	# show_head only when weapon equipped and look is 'down'
 	var show_head = has_weapon and ("down_left" in last_dir or "down_right" in last_dir)
 	if head_anim:
 		head_anim.visible = show_head
@@ -277,15 +293,32 @@ func update_animation() -> void:
 			_play_with_optional_flip(body_anim, prefix + alt + suffix, true)
 
 	# --- HEAD ANIMATION ---
-	if show_head and head_anim and head_anim.sprite_frames:
-		_play_with_optional_flip(head_anim, anim_name)
+	if head_anim and head_anim.sprite_frames:
+		if show_head:
+			_play_with_optional_flip(head_anim, anim_name)
+		else:
+			# head should return to non-weapon idle or stop
+			var idle_head = "idle_" + base_dir
+			if head_anim.sprite_frames.has_animation(idle_head):
+				# prefer non-weapon idle version (no suffix)
+				head_anim.play(idle_head)
+				head_anim.flip_h = idle_head.find("_left") != -1
+			else:
+				# no suitable idle -> stop playback to avoid leftover attack loop
+				head_anim.stop()
 
 	# --- WEAPON ANIMATION ---
-	if has_weapon and weapon_anim and weapon_anim.sprite_frames:
+	if has_weapon and (weapon_anim or weapon_sprite):
+		var vis := weapon_sprite if weapon_sprite else weapon_anim
 		var weapon_anim_name = "idle" if is_idle else "walk"
-		if weapon_anim.sprite_frames.has_animation(weapon_anim_name):
-			weapon_anim.play(weapon_anim_name)
-
+		if vis and vis.sprite_frames and vis.sprite_frames.has_animation(weapon_anim_name):
+			vis.play(weapon_anim_name)
+	else:
+		# ensure any leftover weapon visuals stop when unequipped
+		if weapon_anim:
+			weapon_anim.stop()
+		if weapon_sprite:
+			weapon_sprite.stop()
 
 # helper: try to play anim, if it's a 'left' variant not present try to play the right variant & flip
 func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, force_flip_if_left: bool=false) -> bool:
@@ -310,29 +343,12 @@ func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, 
 
 		return false
 
-	# anim_name expected like "idle_down_left_weapon" or similar
-	if not anim_sprite or not anim_sprite.sprite_frames:
-		return false
-
+	# Secondary check (defensive)
 	if anim_sprite.sprite_frames.has_animation(anim_name):
 		anim_sprite.play(anim_name)
-		# set flip state matching whether name contains "_left"
-		if anim_name.find("_left") != -1:
-			anim_sprite.flip_h = true
-		else:
-			anim_sprite.flip_h = false
+		anim_sprite.flip_h = anim_name.find("_left") != -1
 		return true
 
-	# if not found and caller requested fallback, attempt right-side version
-	if force_flip_if_left:
-		# replace "_left" with "_right" and play, but flip sprite horizontally
-		var alt_name = anim_name.replace("_left", "_right")
-		if anim_sprite.sprite_frames.has_animation(alt_name):
-			anim_sprite.play(alt_name)
-			anim_sprite.flip_h = true
-			return true
-
-	# not found
 	return false
 
 # ----------------------
@@ -355,7 +371,6 @@ func update_layers() -> void:
 
 	if head_anim:
 		head_anim.z_index = 2  # always top within player
-
 
 # ----------------------
 # HEAD SYNC
@@ -384,12 +399,15 @@ func sync_head_to_body() -> void:
 # UPDATE WEAPON ROTATION (flips from origin)
 # -------------------------------------------------------------------------
 func update_weapon_rotation():
+	# ensure holder is grabbed
+	if not weapon_holder and weapon_pivot:
+		weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
+
 	if not has_weapon or not weapon_pivot or not weapon_holder:
 		return
 
-	# Decide facing only when not attacking
+	# Don't override visuals mid-attack
 	if attacking:
-		# during an attack we keep the pivot/holder as set when attack started
 		return
 
 	if input != Vector2.ZERO:
@@ -400,18 +418,17 @@ func update_weapon_rotation():
 		# when idle keep whatever side we ended on
 		facing_left = post_attack_left
 
-	# set holder flip (flip the holder's x scale so the whole weapon scene mirrors around the pivot)
+	# flip holder (mirror entire weapon scene about pivot)
 	weapon_holder.scale.x = -1 if facing_left else 1
-	# ensure inner visuals don't do their own flip (we rely on holder)
+
+	# ensure inner visuals don't double-flip
 	if weapon_sprite:
 		weapon_sprite.flip_h = false
 	if weapon_anim:
 		weapon_anim.flip_h = false
 
-	# reset any pivot rotation for idle/walk
 	weapon_pivot.rotation = 0
 
-	# optional debug
 	if DEBUG:
 		print("[weapon] holder.scale.x:", weapon_holder.scale.x, "facing_left:", facing_left)
 
@@ -424,11 +441,8 @@ func update_player_flip() -> void:
 		body_anim.flip_h = facing_left
 	if head_anim:
 		head_anim.flip_h = facing_left
-	var holder := weapon_pivot.get_node_or_null("WeaponHolder")
-	if holder:
-		holder.scale.x = -1 if facing_left else 1
-
-	# Important: weapon sprite flip handled only in update_weapon_rotation()
+	if weapon_holder:
+		weapon_holder.scale.x = -1 if facing_left else 1
 
 func collect(item: InvItem, quantity: int = 1) -> void:
 	var entry = InventoryEntry.new()
@@ -446,25 +460,49 @@ func add_to_inventory(item: InvItem, quantity: int) -> void:
 	inventory.add_item(entry)   # emits signal → UI updates
 
 # -------------------------------------------------------------------------
-# EQUIP WEAPON
+# EQUIP / UNEQUIP WEAPON
 # -------------------------------------------------------------------------
-func equip_weapon(packed_or_path) -> void:
-	# --- 1️⃣ Remove old weapon if exists
+func unequip_weapon() -> void:
+	# clear current weapon
 	if current_weapon_scene:
 		current_weapon_scene.queue_free()
 		current_weapon_scene = null
-		weapon_sprite = null
-		weapon_anim_player = null
+	weapon_sprite = null
+	weapon_anim_player = null
+	current_weapon_root = null
+	weapon_grip_node = null
+	has_weapon = false
 
-	# --- 2️⃣ Load scene safely
+	# reset pivot and holder flips
+	if weapon_pivot:
+		weapon_pivot.rotation = 0
+	if weapon_holder:
+		weapon_holder.scale = Vector2.ONE
+
+	# update visuals immediately
+	update_animation()
+	sync_head_to_body()
+	print("[player] Unequipped weapon")
+
+func equip_weapon(packed_or_path) -> void:
+	# Remove old weapon first (use unequip to keep behavior consistent)
+	unequip_weapon()
+	if packed_or_path == null or packed_or_path == "":
+		# Unequip
+		if current_weapon_scene:
+			current_weapon_scene.queue_free()
+		current_weapon_scene = null
+		has_weapon = false
+		print("[player] Weapon unequipped")
+		return
+	# Load: accept string path, PackedScene, or InvItem with scene_path
 	var packed = null
-
 	if typeof(packed_or_path) == TYPE_STRING:
 		packed = load(packed_or_path)
 	elif packed_or_path is PackedScene:
 		packed = packed_or_path
 	elif packed_or_path is InvItem:
-		if packed_or_path.scene_path != "":
+		if "scene_path" in packed_or_path and packed_or_path.scene_path != "":
 			packed = load(packed_or_path.scene_path)
 		else:
 			push_warning("equip_weapon: InvItem has no valid scene_path")
@@ -473,49 +511,57 @@ func equip_weapon(packed_or_path) -> void:
 		push_warning("equip_weapon: invalid argument type")
 		return
 
-	# ✅ Extra type check
 	if not (packed is PackedScene):
-		push_warning("equip_weapon: loaded resource is not a PackedScene → " + str(packed))
+		push_warning("equip_weapon: loaded resource is not a PackedScene -> " + str(packed))
 		return
 
-	# --- 3️⃣ Ensure WeaponHolder exists
-	var holder: Node2D = weapon_pivot.get_node_or_null("WeaponHolder")
-	if holder == null:
-		holder = Node2D.new()
-		holder.name = "WeaponHolder"
-		weapon_pivot.add_child(holder)
-		print("[equip_weapon] Created WeaponHolder under WeaponPivot")
+	# Ensure holder exists and assign to weapon_holder
+	if not weapon_holder and weapon_pivot:
+		weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
+		if not weapon_holder:
+			weapon_holder = Node2D.new()
+			weapon_holder.name = "WeaponHolder"
+			weapon_pivot.add_child(weapon_holder)
+	weapon_holder.position = Vector2.ZERO
+	weapon_holder.rotation = 0
+	weapon_holder.scale.x = -1 if facing_left else 1
 
-	holder.position = Vector2.ZERO
-	holder.rotation = 0
-	holder.scale.x = -1 if facing_left else 1  # maintain flip direction
-
-	# --- 4️⃣ Instantiate weapon and attach to holder
+	# Instantiate scene under holder
 	current_weapon_scene = packed.instantiate()
-	holder.add_child(current_weapon_scene)
+	weapon_holder.add_child(current_weapon_scene)
 	current_weapon_scene.position = Vector2.ZERO
 	current_weapon_scene.rotation = 0
+	current_weapon_root = current_weapon_scene
 
-	# --- 5️⃣ Find important nodes
+	# find visuals
 	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
-	# --- 6️⃣ Store clean base scale for flipping logic
+	# store base scale for consistent flipping (magnitude only)
 	if weapon_sprite:
 		weapon_sprite_base_scale_x = abs(weapon_sprite.scale.x) if weapon_sprite.scale.x != 0 else 1.0
 	else:
 		weapon_sprite_base_scale_x = 1.0
 
-	# --- 7️⃣ Safely connect animation finished signal
+	# connect animation finished if AnimationPlayer used
 	if weapon_anim_player:
 		if weapon_anim_player.is_connected("animation_finished", Callable(self, "_on_weapon_animation_finished")):
 			weapon_anim_player.disconnect("animation_finished", Callable(self, "_on_weapon_animation_finished"))
 		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
 
-	# --- 8️⃣ Store state
-	has_weapon = weapon_sprite != null or weapon_anim_player != null
-	print("[player] equip_weapon → sprite:", weapon_sprite, "anim_player:", weapon_anim_player, "holder.scale.x:", holder.scale.x)
+	# when using AnimatedSprite2D we may need its animation_finished too (connect on demand)
+	if weapon_sprite:
+		if not weapon_sprite.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
+			weapon_sprite.animation_finished.connect(Callable(self, "_on_attack_finished"))
 
+	has_weapon = current_weapon_scene != null
+	print("[player] equip_weapon -> scene:", packed, " sprite:", weapon_sprite, " anim_player:", weapon_anim_player, " holder.scale.x:", weapon_holder.scale.x)
+
+	# Force animation update so head/body switch to weapon variants
+	update_animation()
+	sync_head_to_body()
+
+# helper to play either AnimationPlayer or AnimatedSprite2D animation
 func _play_weapon_anim(name: String) -> void:
 	if weapon_anim_player and weapon_anim_player.has_animation(name):
 		weapon_anim_player.play(name)
@@ -538,7 +584,7 @@ func _find_child_of_type(node: Node, target_class_name: String) -> Node:
 	return null
 
 # -------------------------------------------------------------------------
-# ON WEAPON ATTACK FINISHED
+# Weapon AnimationPlayer finished handler
 # -------------------------------------------------------------------------
 func _on_weapon_animation_finished(anim_name: String) -> void:
 	# only care about attack animations
@@ -548,23 +594,16 @@ func _on_weapon_animation_finished(anim_name: String) -> void:
 	# clear attacking state
 	attacking = false
 
-	# ensure we keep the facing that the attack used
+	# keep facing that the attack used
 	facing_left = post_attack_left
 
-	# Reset pivot rotation (attack used stored attack_angle)
-	weapon_pivot.rotation = 0
+	# Reset pivot rotation
+	if weapon_pivot:
+		weapon_pivot.rotation = 0
 
-	# After attack, set holder flip so weapon visually stays on attacked side
+	# Ensure holder flip matches final facing
 	if weapon_holder:
 		weapon_holder.scale.x = -1 if facing_left else 1
-
-	# If we had no Grip and recorded sprite offsets, ensure root/visual is mirrored properly
-	if not weapon_grip_node and current_weapon_root:
-		var sign = -1 if facing_left else 1
-		if weapon_sprite:
-			weapon_sprite.position.x = weapon_root_base_pos.x * sign
-		elif weapon_anim:
-			weapon_anim.position.x = weapon_root_base_pos.x * sign
 
 	# resume idle/walk weapon anim
 	if input == Vector2.ZERO:
