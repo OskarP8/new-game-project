@@ -101,6 +101,8 @@ func _process(delta):
 		collect(test_item)
 		var test_item2: InvItem = preload("res://resources/sword.tres")
 		collect(test_item2)
+	if Input.is_action_just_pressed("swap_weapon"):
+		swap_weapons()
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
@@ -628,3 +630,29 @@ func _find_child_named(node: Node, name: String) -> Node:
 		if found:
 			return found
 	return null
+
+func swap_weapons():
+	var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+	if inv_ui == null:
+		push_warning("swap_weapons: Inv_UI not found!")
+		return
+
+	var weapon_slot = inv_ui.get_slot_by_type("weapon")
+	var secondary_slot = inv_ui.get_slot_by_type("secondary")
+
+	if weapon_slot == null or secondary_slot == null:
+		return
+
+	var weapon_stack = weapon_slot.item_stack
+	var secondary_stack = secondary_slot.item_stack
+	weapon_slot.item_stack = secondary_stack
+	secondary_slot.item_stack = weapon_stack
+
+	weapon_slot.insert(weapon_slot.item_stack)
+	secondary_slot.insert(secondary_slot.item_stack)
+
+	# Equip whichever is now in the weapon slot
+	if weapon_slot.item_stack and weapon_slot.item_stack.item and weapon_slot.item_stack.item.scene_path != "":
+		equip_weapon(weapon_slot.item_stack.item.scene_path)
+	else:
+		unequip_weapon()
