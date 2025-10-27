@@ -31,7 +31,6 @@ func _ready():
 	if inv:
 		if not inv.is_connected("inventory_changed", Callable(self, "update_slots")):
 			inv.connect("inventory_changed", Callable(self, "update_slots"))
-
 	update_slots()
 	close()
 
@@ -287,8 +286,10 @@ func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
 
 func get_slot_by_type(slot_type: String) -> InvUISlot:
 	for slot in slots:
-		if slot and "slot_type" in slot and str(slot.slot_type).to_lower() == str(slot_type).to_lower():
+		if slot and str(slot.slot_type).to_lower() == str(slot_type).to_lower():
+			print("[get_slot_by_type] ✅ found", slot.name, "type:", slot.slot_type)
 			return slot
+	print("[get_slot_by_type] ❌ no slot of type", slot_type)
 	return null
 
 func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:

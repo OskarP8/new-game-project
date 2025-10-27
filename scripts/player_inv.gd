@@ -303,3 +303,13 @@ func _on_item_dropped_from_slot(slot: InvUISlot, item: InvItem, amount: int) -> 
 	add_child(ghost)
 	ghost.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	ghost.global_position = get_viewport().get_mouse_position() - ghost.size * 0.5
+func get_slot_by_type(slot_type: String) -> InvUISlot:
+	for slot in slots:
+		if slot and slot.has_meta("slot_type"):  # optional, if you store slot_type as metadata
+			if str(slot.get_meta("slot_type")).to_lower() == slot_type.to_lower():
+				return slot
+		elif "slot_type" in slot and slot.slot_type != null:
+			if str(slot.slot_type).to_lower() == slot_type.to_lower():
+				return slot
+	push_warning("[PlayerInv] ❌ No slot of type %s found" % slot_type)
+	return null
