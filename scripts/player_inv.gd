@@ -11,9 +11,13 @@ var picked_slot: InvSlot = null
 func _ready():
 	if inv:
 		inv.inventory_changed.connect(update_slots)
+	else:
+		print("[player_inv] ⚠ No Inv resource assigned!")
+
 	for s in slots:
 		if s is InvUISlot:
 			s.item_dropped_from_slot.connect(_on_item_dropped_from_slot)
+
 	update_slots()
 	close()
 
@@ -42,64 +46,118 @@ func update_slots() -> void:
 		print("[player_inv] ⚠ No inventory resource assigned!")
 		return
 
+	print("[player_inv] 🔄 Updating slots — total:", slots.size())
+
 	for i in range(slots.size()):
 		var ui_slot: InvUISlot = slots[i]
 
-		# ✅ Ensure inv.slots is large enough
+		# Ensure resource slot exists
 		while inv.slots.size() <= i:
 			inv.slots.append(InvSlot.new())
 
-		# ✅ Ensure slot object is never null
 		if inv.slots[i] == null:
 			inv.slots[i] = InvSlot.new()
 
 		var inv_slot: InvSlot = inv.slots[i]
 
-		# ✅ Clean up broken item_stack references
+		# Clean up invalid references
 		if ui_slot.item_stack and not is_instance_valid(ui_slot.item_stack):
 			ui_slot.item_stack = null
 
-		# ✅ If no item in this slot — remove any visible item stack
+		# No item → remove any visuals
 		if inv_slot.item == null:
 			if ui_slot.item_stack:
-				if ui_slot.container.has_node(ui_slot.item_stack.get_path()):
-					ui_slot.container.remove_child(ui_slot.item_stack)
+				print("[player_inv] 🧹 Clearing slot", i)
 				ui_slot.item_stack.queue_free()
 				ui_slot.item_stack = null
 			continue
 
-		# ✅ Create or reuse ItemStackUI visual
+		# Create or reuse ItemStackUI
 		var item_stack: ItemStackUI = ui_slot.item_stack
 		if item_stack == null:
 			item_stack = isgc.instantiate()
 			ui_slot.insert(item_stack)
 			ui_slot.item_stack = item_stack
-			# connect signal safely once
-			if not item_stack.clicked.is_connected(Callable(self, "_on_item_clicked")):
-				item_stack.clicked.connect(Callable(self, "_on_item_clicked").bind(item_stack))
+			print("[player_inv] 🧩 Created new ItemStackUI for slot", i)
+		else:
+			print("[player_inv] ♻ Reusing existing ItemStackUI for slot", i)
+
+		# Connect the click signal every time (safe rebind)
+		if not item_stack.clicked.is_connected(Callable(self, "_on_item_clicked")):
+			item_stack.clicked.connect(Callable(self, "_on_item_clicked").bind(item_stack))
+			print("[player_inv] ✅ Connected clicked signal for slot", i, "→", inv_slot.item.name)
+		else:
+			print("[player_inv] (already connected) slot", i)
 
 		item_stack.slot = inv_slot
 		item_stack.update()
 
-# --- Picking up item ---
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
-	print("[player_inv] Picked up:", item_stack.slot.item)
+	# Basic guard
+	if item_stack == null or not is_instance_valid(item_stack):
+		print("[player_inv][_on_item_clicked] ❌ item_stack invalid or null")
+		return
+
+	# Already dragging?
+	if ghost_item:
+		print("[player_inv][_on_item_clicked] ❌ already dragging a ghost:", ghost_item)
+		return
+
+	# Report click
+	print("[player_inv][_on_item_clicked] clicked ItemStackUI:", item_stack, " parent:", item_stack.get_parent())
+
+	# Resolve origin slot reference
 	picked_slot = item_stack.slot
+	print("[player_inv][_on_item_clicked] picked_slot:", picked_slot)
 
-	# detach from slot
-	if item_stack.get_parent():
-		item_stack.get_parent().remove_child(item_stack)
+	if picked_slot == null:
+		print("[player_inv][_on_item_clicked] ⚠ picked_slot is null — aborting")
+		return
 
-	# create ghost item for dragging
+	# Print slot contents before clearing
+	print("[player_inv][_on_item_clicked] origin slot contents BEFORE clear -> item:", picked_slot.item, " amount:", picked_slot.amount)
+
+	# Create ghost reference (reuse the visual node)
 	ghost_item = item_stack
 	ghost_item.origin_item = picked_slot.item
 	ghost_item.origin_amount = picked_slot.amount
 	ghost_item.origin_slot = picked_slot
 
-	add_child(ghost_item)
-	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	ghost_item.z_index = 999
-	_update_ghost_position()
+	# Immediately clear the origin slot so UI shows empty while dragging
+	picked_slot.item = null
+	picked_slot.amount = 0
+	print("[player_inv][_on_item_clicked] origin slot cleared -> now item:", picked_slot.item, " amount:", picked_slot.amount)
+
+	# Refresh visuals so the original slot immediately appears empty
+	update_slots()
+	print("[player_inv][_on_item_clicked] update_slots() called")
+
+	# Move the ghost to the scene root (top-level) so it draws above UI
+	var root = get_tree().root
+	# remove from previous parent if necessary
+	if is_instance_valid(ghost_item.get_parent()):
+		var prev_parent = ghost_item.get_parent()
+		prev_parent.remove_child(ghost_item)
+		print("[player_inv][_on_item_clicked] removed ghost from previous parent:", prev_parent)
+
+	root.add_child(ghost_item)
+	print("[player_inv][_on_item_clicked] added ghost to root:", ghost_item.get_parent())
+
+	# Configure ghost as Control (positioning and z)
+	if ghost_item is Control:
+		ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		ghost_item.z_index = 999
+		_update_ghost_position()
+		print("[player_inv][_on_item_clicked] ghost positioned at:", ghost_item.global_position)
+	else:
+		print("[player_inv][_on_item_clicked] ⚠ ghost_item is not Control, class:", ghost_item.get_class())
+
+	# Hide the real UI instance if it still exists (defensive)
+	if is_instance_valid(item_stack):
+		item_stack.visible = false
+		print("[player_inv][_on_item_clicked] hid original item_stack visual:", item_stack)
+
+	print("[player_inv][_on_item_clicked] ghost origin_item:", ghost_item.origin_item, " origin_amount:", ghost_item.origin_amount)
 
 func _update_ghost_position():
 	if ghost_item:
