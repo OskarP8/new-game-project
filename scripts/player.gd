@@ -631,57 +631,54 @@ func _find_child_named(node: Node, name: String) -> Node:
 			return found
 	return null
 
-func swap_weapons() -> void:
+var last_equipped_scene_path: String = ""  # store the last equipped weapon’s scene path
+var using_secondary: bool = false          # track which weapon is active
+
+func swap_weapons():
 	print("\n--- swap_weapons() start ---")
 
-	var player_inv := get_tree().root.find_child("PlayerInv", true, false)
+	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
 	if player_inv == null:
-		push_warning("[swap_weapons] ❌ PlayerInv not found!")
+		push_warning("[swap_weapons] ⚠ PlayerInv not found!")
 		return
-
-	print("[swap_weapons] ✅ Using PlayerInv:%s" % player_inv.name)
+	print("[swap_weapons] ✅ Using PlayerInv:", player_inv.name)
 
 	var weapon_slot_ui: InvUISlot = player_inv.get_slot_by_type("weapon")
 	var secondary_slot_ui: InvUISlot = player_inv.get_slot_by_type("secondary")
 
-	print("[swap_weapons] weapon_slot_ui:%s" % str(weapon_slot_ui))
-	print("[swap_weapons] secondary_slot_ui:%s" % str(secondary_slot_ui))
-
 	if not weapon_slot_ui or not secondary_slot_ui:
-		push_warning("[swap_weapons] ❌ One or both slots missing")
+		print("[swap_weapons] ⚠ Missing one of the slots — aborting.")
 		return
 
-	print("[swap_weapons] ✅ Both slots found, proceeding with swap...")
+	var weapon_item: InvItem = null
+	var secondary_item: InvItem = null
 
-	# --- Get the inventory slots these UI slots represent
-	var weapon_slot: InvSlot = player_inv.inv.slots[player_inv.slots.find(weapon_slot_ui)]
-	var secondary_slot: InvSlot = player_inv.inv.slots[player_inv.slots.find(secondary_slot_ui)]
+	if weapon_slot_ui.item_stack and weapon_slot_ui.item_stack.slot:
+		weapon_item = weapon_slot_ui.item_stack.slot.item
+	if secondary_slot_ui.item_stack and secondary_slot_ui.item_stack.slot:
+		secondary_item = secondary_slot_ui.item_stack.slot.item
 
-	if weapon_slot == null or secondary_slot == null:
-		push_warning("[swap_weapons] ❌ Slot data not found")
-		return
+	print("[swap_weapons] current_weapon:", weapon_item, " secondary:", secondary_item)
 
-	# --- Swap the actual inventory data
-	var tmp_item = weapon_slot.item
-	var tmp_amt = weapon_slot.amount
+	# --- Logic ---
+	if not using_secondary:
+		# switching to secondary
+		if not secondary_item:
+			print("[swap_weapons] ⚠ No secondary weapon equipped.")
+			return
+		# remember current (main) weapon’s scene path
+		if weapon_item and weapon_item.scene_path != "":
+			last_equipped_scene_path = weapon_item.scene_path
+		print("[swap_weapons] 🎯 Equipping secondary visually:", secondary_item.scene_path)
+		equip_weapon(secondary_item.scene_path)
+		using_secondary = true
+	else:
+		# switching back to main
+		if last_equipped_scene_path != "":
+			print("[swap_weapons] 🔁 Switching back to main:", last_equipped_scene_path)
+			equip_weapon(last_equipped_scene_path)
+			using_secondary = false
+		else:
+			print("[swap_weapons] ⚠ No previous main weapon stored.")
 
-	weapon_slot.item = secondary_slot.item
-	weapon_slot.amount = secondary_slot.amount
-
-	secondary_slot.item = tmp_item
-	secondary_slot.amount = tmp_amt
-
-	print("[swap_weapons] ✅ Weapons swapped successfully!")
-
-	# --- Update visuals
-	player_inv.update_slots()
-
-	# --- Re-equip if necessary
-	var player_node := get_tree().root.find_child("Player", true, false)
-	if player_node:
-		if weapon_slot.item and weapon_slot.item.type == "weapon" and player_node.has_method("equip_weapon"):
-			print("[swap_weapons] -> Equipping new main weapon:", weapon_slot.item.name)
-			player_node.equip_weapon(weapon_slot.item.scene_path)
-		elif weapon_slot.item == null:
-			player_node.equip_weapon(null)
-	print("[DEBUG] After swap: weapon_slot =", weapon_slot.item, ", secondary_slot =", secondary_slot.item)
+	print("[swap_weapons] ✅ Weapon swap complete (visual only).")
