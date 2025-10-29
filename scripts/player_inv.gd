@@ -7,6 +7,7 @@ extends Control
 var is_open := false
 var ghost_item = null
 var picked_slot: InvSlot = null
+var drag_layer: CanvasLayer
 
 func _ready():
 	if inv:
@@ -17,7 +18,8 @@ func _ready():
 	for s in slots:
 		if s is InvUISlot:
 			s.item_dropped_from_slot.connect(_on_item_dropped_from_slot)
-
+	drag_layer = CanvasLayer.new()
+	get_tree().root.call_deferred("add_child", drag_layer)
 	update_slots()
 	close()
 
@@ -84,7 +86,7 @@ func update_slots() -> void:
 
 		# Connect the click signal every time (safe rebind)
 		if not item_stack.clicked.is_connected(Callable(self, "_on_item_clicked")):
-			item_stack.clicked.connect(Callable(self, "_on_item_clicked").bind(item_stack))
+			item_stack.clicked.connect(Callable(self, "_on_item_clicked"))
 			print("[player_inv] ✅ Connected clicked signal for slot", i, "→", inv_slot.item.name)
 		else:
 			print("[player_inv] (already connected) slot", i)
@@ -99,9 +101,12 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 		return
 
 	# Already dragging?
+	# Inside _on_item_clicked or _on_item_dropped_from_slot
 	if ghost_item:
-		print("[player_inv][_on_item_clicked] ❌ already dragging a ghost:", ghost_item)
-		return
+		if ghost_item.get_parent():
+			ghost_item.get_parent().remove_child(ghost_item)
+		drag_layer.add_child(ghost_item)
+		ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
 
 	# Report click
 	print("[player_inv][_on_item_clicked] clicked ItemStackUI:", item_stack, " parent:", item_stack.get_parent())
@@ -160,9 +165,8 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	print("[player_inv][_on_item_clicked] ghost origin_item:", ghost_item.origin_item, " origin_amount:", ghost_item.origin_amount)
 
 func _update_ghost_position():
-	if ghost_item:
+	if ghost_item and is_instance_valid(ghost_item):
 		ghost_item.global_position = get_viewport().get_mouse_position() - ghost_item.size * 0.5
-
 # --- Drop handling ---
 func _unhandled_input(event: InputEvent) -> void:
 	if ghost_item == null or picked_slot == null:
@@ -341,26 +345,50 @@ func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
 func _on_item_dropped_from_slot(slot: InvUISlot, item: InvItem, amount: int) -> void:
 	print("[player_inv] Item dragged out from", slot.slot_type, ":", item.name)
 
+	# Determine which resource slot (InvSlot) this UI slot corresponds to
+	var idx := slots.find(slot)
+	if idx == -1:
+		push_warning("[player_inv] ❌ Could not find UI slot index for: " + str(slot))
+		return
+
+	# store the InvSlot resource so subsequent drop logic can restore if needed
+	picked_slot = inv.slots[idx]
+	if picked_slot == null:
+		# create a placeholder slot if resource missing
+		picked_slot = InvSlot.new()
+		inv.slots[idx] = picked_slot
+
+	# DEBUG
+	print("[player_inv] _on_item_dropped_from_slot -> ui_index:", idx, " picked_slot:", picked_slot, " item:", item, "amount:", amount)
+
 	# Unequip logic when dragging from equipped slots
 	var player := get_tree().get_first_node_in_group("Player")
 	if player == null:
-		return
-
-	match slot.slot_type:
-		"weapon":
-			player.equip_weapon(null)
-		"armor":
-			if player.has_method("equip_armor"):
-				player.equip_armor(null)
+		print("[player_inv] ⚠ Player node not found")
+	else:
+		match slot.slot_type:
+			"weapon":
+				player.equip_weapon(null)
+			"armor":
+				if player.has_method("equip_armor"):
+					player.equip_armor(null)
 
 	# Create ghost item so player can drag it to inventory
 	var ghost := preload("res://scenes/item_stack_ui.tscn").instantiate()
 	ghost.origin_item = item
 	ghost.origin_amount = amount
 	ghost.slot = null
-	add_child(ghost)
+
+	# put the ghost at root so it draws above UI
+	get_tree().root.add_child(ghost)
 	ghost.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	ghost.global_position = get_viewport().get_mouse_position() - ghost.size * 0.5
+
+	# store it so the rest of your _unhandled_input logic can use it
+	ghost_item = ghost
+
+	print("[player_inv] ghost created and picked_slot stored.")
+
 func get_slot_by_type(slot_type: String) -> InvUISlot:
 	for slot in slots:
 		if slot and slot.has_meta("slot_type"):  # optional, if you store slot_type as metadata

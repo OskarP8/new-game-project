@@ -17,7 +17,7 @@ func _ready() -> void:
 	if not container:
 		push_warning("[InvUISlot] Missing CenterContainer!")
 	focus_mode = Control.FOCUS_NONE
-
+	mouse_filter = Control.MOUSE_FILTER_STOP
 # ---------------------------
 # Insert / remove visuals
 # ---------------------------
@@ -68,25 +68,38 @@ func drop_data(_pos, data) -> void:
 # Begin drag from this slot
 # ----------------------------------------------------------------
 func get_drag_data(_pos):
-	if item_stack == null or not item_stack.item:
+	if item_stack == null:
+		return null
+	var inv_item: InvItem = null
+	var amount := 0
+
+	if item_stack.slot:
+		inv_item = item_stack.slot.item
+		amount = item_stack.slot.amount
+	elif item_stack.origin_item:
+		inv_item = item_stack.origin_item
+		amount = item_stack.origin_amount
+
+	if inv_item == null:
 		return null
 
-	# Set the drag preview (optional but good UX)
+	# ✅ Create drag preview for nice visuals
 	var drag_preview := item_stack.duplicate()
 	set_drag_preview(drag_preview)
 
-	# Store this reference before we clear it
-	var dragged_stack := item_stack
+	# ✅ Emit signal so PlayerInv knows an item left this slot
+	emit_signal("item_dropped_from_slot", self, inv_item, amount)
 
-	# Emit optional signal (if you want to handle custom logic)
-	emit_signal("item_dropped_from_slot", self, dragged_stack.item, dragged_stack.slot.amount)
-
-	# Clear from slot visually
+	# ✅ Remove visual from slot
 	item_stack.queue_free()
 	item_stack = null
 
-	# Return the ItemStackUI node directly — this makes data.is ItemStackUI true
-	return dragged_stack
+	# ✅ Return actual data object
+	return {
+		"item": inv_item,
+		"amount": amount,
+		"from_slot": self
+	}
 
 # ----------------------------------------------------------------
 func _can_accept(inv_item: InvItem) -> bool:
