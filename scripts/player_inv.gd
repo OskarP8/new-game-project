@@ -5,9 +5,10 @@ extends Control
 @onready var slots: Array = $".".get_children()
 
 var is_open := false
-var ghost_item = null
 var picked_slot: InvSlot = null
 var drag_layer: CanvasLayer
+var dragging := false
+var ghost_item: ItemStackUI = null
 
 func _ready():
 	if inv:
@@ -24,13 +25,18 @@ func _ready():
 	close()
 
 func _process(_delta):
-	if Input.is_action_just_pressed("i"): # or "i" if preferred
+	if Input.is_action_just_pressed("i"):
 		if is_open:
 			close()
 		else:
 			open()
-	if ghost_item:
-		_update_ghost_position()
+
+	# update ghost position if dragging
+	if dragging and ghost_item and is_instance_valid(ghost_item):
+		if ghost_item.has_method("get_rect"):
+			ghost_item.global_position = get_viewport().get_mouse_position() - ghost_item.get_rect().size * 0.5
+		else:
+			ghost_item.global_position = get_viewport().get_mouse_position()
 
 # --- Inventory toggle ---
 func open():
@@ -95,74 +101,62 @@ func update_slots() -> void:
 		item_stack.update()
 
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
-	# Basic guard
 	if item_stack == null or not is_instance_valid(item_stack):
-		print("[player_inv][_on_item_clicked] ❌ item_stack invalid or null")
+		print("[player_inv][_on_item_clicked] ❌ invalid item_stack")
 		return
 
-	# Already dragging?
-	# Inside _on_item_clicked or _on_item_dropped_from_slot
-	if ghost_item:
-		if ghost_item.get_parent():
-			ghost_item.get_parent().remove_child(ghost_item)
-		drag_layer.add_child(ghost_item)
-		ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	var clicked_item: InvItem = null
+	if item_stack.slot and item_stack.slot.item:
+		clicked_item = item_stack.slot.item
+	elif item_stack.origin_item:
+		clicked_item = item_stack.origin_item
 
-	# Report click
-	print("[player_inv][_on_item_clicked] clicked ItemStackUI:", item_stack, " parent:", item_stack.get_parent())
+	if clicked_item:
+		print("[player_inv][_on_item_clicked] clicked valid item:", clicked_item.name)
+	else:
+		print("[player_inv][_on_item_clicked] clicked item_stack but no valid item found:", item_stack)
 
-	# Resolve origin slot reference
 	picked_slot = item_stack.slot
-	print("[player_inv][_on_item_clicked] picked_slot:", picked_slot)
-
 	if picked_slot == null:
-		print("[player_inv][_on_item_clicked] ⚠ picked_slot is null — aborting")
+		print("[player_inv][_on_item_clicked] ❌ picked_slot is null")
 		return
 
-	# Print slot contents before clearing
-	print("[player_inv][_on_item_clicked] origin slot contents BEFORE clear -> item:", picked_slot.item, " amount:", picked_slot.amount)
+	# Store item data before clearing the slot
+	var dragged_item := picked_slot.item
+	var dragged_amount := picked_slot.amount
 
-	# Create ghost reference (reuse the visual node)
-	ghost_item = item_stack
-	ghost_item.origin_item = picked_slot.item
-	ghost_item.origin_amount = picked_slot.amount
-	ghost_item.origin_slot = picked_slot
+	print("[player_inv][_on_item_clicked] origin slot BEFORE clear ->", dragged_item, dragged_amount)
 
-	# Immediately clear the origin slot so UI shows empty while dragging
+	# Clear the original slot visually and logically
 	picked_slot.item = null
 	picked_slot.amount = 0
-	print("[player_inv][_on_item_clicked] origin slot cleared -> now item:", picked_slot.item, " amount:", picked_slot.amount)
-
-	# Refresh visuals so the original slot immediately appears empty
 	update_slots()
-	print("[player_inv][_on_item_clicked] update_slots() called")
 
-	# Move the ghost to the scene root (top-level) so it draws above UI
-	var root = get_tree().root
-	# remove from previous parent if necessary
-	if is_instance_valid(ghost_item.get_parent()):
-		var prev_parent = ghost_item.get_parent()
-		prev_parent.remove_child(ghost_item)
-		print("[player_inv][_on_item_clicked] removed ghost from previous parent:", prev_parent)
+	print("[player_inv][_on_item_clicked] cleared slot, updating visuals...")
 
-	root.add_child(ghost_item)
-	print("[player_inv][_on_item_clicked] added ghost to root:", ghost_item.get_parent())
+	# ✅ Create a separate ghost (don't reuse item_stack!)
+	ghost_item = isgc.instantiate()
+	ghost_item.slot = null
+	ghost_item.origin_item = dragged_item
+	ghost_item.origin_amount = dragged_amount
+	ghost_item.update()
 
-	# Configure ghost as Control (positioning and z)
-	if ghost_item is Control:
-		ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		ghost_item.z_index = 999
-		_update_ghost_position()
-		print("[player_inv][_on_item_clicked] ghost positioned at:", ghost_item.global_position)
+	# Add ghost to root (deferred to avoid parent busy errors)
+	get_tree().root.call_deferred("add_child", ghost_item)
+	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	ghost_item.z_index = 999
+	ghost_item.visible = true
+
+	# Place ghost under mouse
+	if ghost_item.has_method("get_rect"):
+		ghost_item.global_position = get_viewport().get_mouse_position() - ghost_item.get_rect().size * 0.5
 	else:
-		print("[player_inv][_on_item_clicked] ⚠ ghost_item is not Control, class:", ghost_item.get_class())
+		ghost_item.global_position = get_viewport().get_mouse_position()
 
-	# Hide the real UI instance if it still exists (defensive)
-	if is_instance_valid(item_stack):
-		item_stack.visible = false
-		print("[player_inv][_on_item_clicked] hid original item_stack visual:", item_stack)
+	print("[player_inv][_on_item_clicked] ghost created:", ghost_item, "at", ghost_item.global_position)
 
-	print("[player_inv][_on_item_clicked] ghost origin_item:", ghost_item.origin_item, " origin_amount:", ghost_item.origin_amount)
+	# Start drag tracking
+	dragging = true
 
 func _update_ghost_position():
 	if ghost_item and is_instance_valid(ghost_item):
@@ -175,9 +169,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and not event.pressed:
 		var mouse_pos = get_viewport().get_mouse_position()
 		var dropped := false
-		var moving_item := picked_slot.item
-		var moving_amount := picked_slot.amount
-
+		var moving_item := ghost_item.origin_item
+		var moving_amount := ghost_item.origin_amount
 		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
 		var player := get_tree().root.find_child("Player", true, false)
 
@@ -267,7 +260,12 @@ func _unhandled_input(event: InputEvent) -> void:
 						inv_ui.inv.slots[inv_ui.slots.find(inv_slot_node)] = target_slot
 
 					if target_slot.item == null:
-						print("[player_inv] ✅ Moved", moving_item.name, "to inventory")
+						if moving_item == null:
+							print("[player_inv] ⚠ Tried to move null item")
+						elif "name" in moving_item:
+							print("[player_inv] ✅ Moved", moving_item.name, "to inventory")
+						else:
+							print("[player_inv] ✅ Moved unnamed item to inventory:", moving_item)
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
 					else:
@@ -298,9 +296,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif slot_node.slot_type == "armor":
 					var s := inv.slots[i]
 					if s == null or s.item == null:
-						player.equip_armor(null)
+						player.equip_armor("")
 
 		# --- Cleanup ---
+		dragging = false
 		if ghost_item and is_instance_valid(ghost_item):
 			ghost_item.queue_free()
 			ghost_item = null

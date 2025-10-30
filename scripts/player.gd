@@ -682,3 +682,14 @@ func swap_weapons():
 			print("[swap_weapons] ⚠ No previous main weapon stored.")
 
 	print("[swap_weapons] ✅ Weapon swap complete (visual only).")
+func equip_armor(scene_path: String = "") -> void:
+	if scene_path == "":
+		print("[Player] Unequipped armor")
+		return
+	var armor_scene = load(scene_path)
+	if armor_scene:
+		var armor_instance = armor_scene.instantiate()
+		add_child(armor_instance)
+		print("[Player] Equipped armor:", scene_path)
+	else:
+		print("[Player] ⚠ Failed to load armor from:", scene_path)
