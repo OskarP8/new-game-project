@@ -19,11 +19,16 @@ func _ready():
 	for s in slots:
 		if s is InvUISlot:
 			s.item_dropped_from_slot.connect(_on_item_dropped_from_slot)
+
+	# create a dedicated CanvasLayer for drag ghosts and ensure it is on top
 	drag_layer = CanvasLayer.new()
+	# use a high layer so it renders above everything
+	drag_layer.layer = 100
+	# add to scene root deferred (safe during _ready)
 	get_tree().root.call_deferred("add_child", drag_layer)
+
 	update_slots()
 	close()
-
 func _process(_delta):
 	if Input.is_action_just_pressed("i"):
 		if is_open:
@@ -101,66 +106,117 @@ func update_slots() -> void:
 		item_stack.update()
 
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
+	# Basic guard
 	if item_stack == null or not is_instance_valid(item_stack):
-		print("[player_inv][_on_item_clicked] ❌ invalid item_stack")
+		print("[player_inv][_on_item_clicked] ❌ item_stack invalid or null")
 		return
 
-	var clicked_item: InvItem = null
-	if item_stack.slot and item_stack.slot.item:
-		clicked_item = item_stack.slot.item
-	elif item_stack.origin_item:
-		clicked_item = item_stack.origin_item
+	# Already dragging? ignore extra clicks
+	if ghost_item:
+		print("[player_inv][_on_item_clicked] ❌ already dragging a ghost:", ghost_item)
+		return
 
-	if clicked_item:
-		print("[player_inv][_on_item_clicked] clicked valid item:", clicked_item.name)
-	else:
-		print("[player_inv][_on_item_clicked] clicked item_stack but no valid item found:", item_stack)
+	# Report click
+	print("[player_inv][_on_item_clicked] clicked ItemStackUI:", item_stack, " parent:", item_stack.get_parent())
 
+	# Resolve origin slot reference
 	picked_slot = item_stack.slot
+	print("[player_inv][_on_item_clicked] picked_slot:", picked_slot)
+
 	if picked_slot == null:
-		print("[player_inv][_on_item_clicked] ❌ picked_slot is null")
+		print("[player_inv][_on_item_clicked] ⚠ picked_slot is null — aborting")
 		return
 
-	# Store item data before clearing the slot
-	var dragged_item := picked_slot.item
-	var dragged_amount := picked_slot.amount
+	# Print slot contents before clearing
+	print("[player_inv][_on_item_clicked] origin slot BEFORE clear -> item:", picked_slot.item, " amount:", picked_slot.amount)
 
-	print("[player_inv][_on_item_clicked] origin slot BEFORE clear ->", dragged_item, dragged_amount)
-
-	# Clear the original slot visually and logically
-	picked_slot.item = null
-	picked_slot.amount = 0
-	update_slots()
-
-	print("[player_inv][_on_item_clicked] cleared slot, updating visuals...")
-
-	# ✅ Create a separate ghost (don't reuse item_stack!)
-	ghost_item = isgc.instantiate()
+	# === Create ghost ===
+	# Reuse the visual node if possible (keeps same scene)
+	ghost_item = item_stack.duplicate() if item_stack else isgc.instantiate()
+	# Ensure the ghost has no live slot reference (it's a visual only)
 	ghost_item.slot = null
-	ghost_item.origin_item = dragged_item
-	ghost_item.origin_amount = dragged_amount
-	ghost_item.update()
 
-	# Add ghost to root (deferred to avoid parent busy errors)
-	get_tree().root.call_deferred("add_child", ghost_item)
-	ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	ghost_item.z_index = 999
+	# Preserve concrete origin data on ghost so update() shows texture/amount
+	ghost_item.origin_item = picked_slot.item
+	ghost_item.origin_amount = picked_slot.amount
+	ghost_item.origin_slot = picked_slot
+
+	# Force ghost to show the correct visual immediately
+	ghost_item.call_deferred("update")
 	ghost_item.visible = true
 
-	# Place ghost under mouse
-	if ghost_item.has_method("get_rect"):
-		ghost_item.global_position = get_viewport().get_mouse_position() - ghost_item.get_rect().size * 0.5
+	# Defensive: ensure the ItemDisplay texture is set even if update delayed
+	if ghost_item.item_visual and ghost_item.origin_item:
+		ghost_item.item_visual.texture = ghost_item.origin_item.icon
+		ghost_item.item_visual.visible = true
+
+	# Make the ghost ignore mouse so it doesn't block events below
+	ghost_item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Give a reasonable size so it isn't tiny due to layout changes.
+	# Try to size to the icon texture if available, fallback to 48x48.
+	var tex_size = Vector2(48,48)
+	if ghost_item.item_visual and ghost_item.item_visual.texture:
+		tex_size = ghost_item.item_visual.texture.get_size()
+	# clamp or scale down if extremely large
+	var max_size = Vector2(96,96)
+	if tex_size.x > max_size.x or tex_size.y > max_size.y:
+		tex_size = tex_size.clamped(max_size)
+	# Apply rect_size if available (Control)
+	if "rect_size" in ghost_item:
+		ghost_item.rect_size = tex_size
+	# reset scale
+	ghost_item.scale = Vector2.ONE
+
+	# Immediately clear the origin slot so UI shows empty while dragging
+	picked_slot.item = null
+	picked_slot.amount = 0
+	print("[player_inv][_on_item_clicked] origin slot cleared -> now item:", picked_slot.item, " amount:", picked_slot.amount)
+
+	# Refresh visuals so the original slot immediately appears empty
+	update_slots()
+	print("[player_inv][_on_item_clicked] update_slots() called")
+
+	# Add ghost to our drag_layer (ensures it renders above UI/world)
+	if drag_layer and is_instance_valid(drag_layer):
+		# ensure ghost is not already parented
+		if is_instance_valid(ghost_item.get_parent()):
+			ghost_item.get_parent().remove_child(ghost_item)
+		drag_layer.add_child(ghost_item)
 	else:
-		ghost_item.global_position = get_viewport().get_mouse_position()
+		# fallback to root if something weird happens
+		if is_instance_valid(ghost_item.get_parent()):
+			ghost_item.get_parent().remove_child(ghost_item)
+		get_tree().root.call_deferred("add_child", ghost_item)
+
+	# position and z
+	if ghost_item is Control:
+		ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		ghost_item.z_index = 9999
+		_update_ghost_position()
+
+	# Force update/redraw to avoid delayed invisibility
+	ghost_item.call_deferred("update")
+	ghost_item.queue_redraw()
 
 	print("[player_inv][_on_item_clicked] ghost created:", ghost_item, "at", ghost_item.global_position)
-
-	# Start drag tracking
 	dragging = true
 
 func _update_ghost_position():
-	if ghost_item and is_instance_valid(ghost_item):
-		ghost_item.global_position = get_viewport().get_mouse_position() - ghost_item.size * 0.5
+	if not ghost_item or not is_instance_valid(ghost_item):
+		return
+	var mouse_pos = get_viewport().get_mouse_position()
+	var offset = Vector2.ZERO
+	# prefer using rect_size if available
+	if "rect_size" in ghost_item and ghost_item.rect_size != Vector2.ZERO:
+		offset = ghost_item.rect_size * 0.5
+	elif ghost_item is Control and ghost_item.size != Vector2.ZERO:
+		offset = ghost_item.size * 0.5
+	elif ghost_item.item_visual and ghost_item.item_visual.texture:
+		offset = ghost_item.item_visual.texture.get_size() * 0.5
+	else:
+		offset = Vector2(24,24)
+	ghost_item.global_position = mouse_pos - offset
 # --- Drop handling ---
 func _unhandled_input(event: InputEvent) -> void:
 	if ghost_item == null or picked_slot == null:
@@ -201,7 +257,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					target_slot.amount = moving_amount
 
 					# ✅ Equip weapon or armor when placed (safe checks)
-					var player_node: Node = get_tree().get_root().find_node("Player", true, false)
+					var player_node: Node = get_tree().get_root().find_child("Player", true, false)
 					if player_node == null:
 						print("[player_inv] ⚠ Player node not found — can't auto-equip")
 					else:
@@ -235,7 +291,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					picked_slot.amount = tmp_amt
 
 					# Re-equip the new item if appropriate
-					var player_node2: Node = get_tree().get_root().find_node("Player", true, false)
+					var player_node2: Node = get_tree().get_root().find_child("Player", true, false)
 					if player_node2:
 						# If the new target_slot has a weapon, equip it
 						if target_slot.item and target_slot.item.type == "weapon":
