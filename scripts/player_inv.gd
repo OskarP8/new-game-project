@@ -28,6 +28,9 @@ func _ready():
 	get_tree().root.call_deferred("add_child", drag_layer)
 
 	update_slots()
+	for slot in slots:
+		if slot and slot.has_method("update_visual"):
+			slot.update_visual()
 	close()
 func _process(_delta):
 	if Input.is_action_just_pressed("i"):
@@ -48,6 +51,9 @@ func open():
 	visible = true
 	is_open = true
 	update_slots()
+	for slot in slots:
+		if slot and slot.has_method("update_visual"):
+			slot.update_visual()
 
 func close():
 	visible = false
@@ -175,6 +181,9 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 
 	# Refresh visuals so the original slot immediately appears empty
 	update_slots()
+	for slot in slots:
+		if slot and slot.has_method("update_visual"):
+			slot.update_visual()
 	print("[player_inv][_on_item_clicked] update_slots() called")
 
 	# Add ghost to our drag_layer (ensures it renders above UI/world)
@@ -362,6 +371,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		picked_slot = null
 
 		update_slots()
+		for slot in slots:
+			if slot and slot.has_method("update_visual"):
+				slot.update_visual()
 		if inv_ui:
 			inv_ui.update_slots()
 

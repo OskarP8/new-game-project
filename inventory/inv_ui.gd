@@ -32,6 +32,9 @@ func _ready():
 		if not inv.is_connected("inventory_changed", Callable(self, "update_slots")):
 			inv.connect("inventory_changed", Callable(self, "update_slots"))
 	update_slots()
+	for slot in slots:
+		if slot and slot.has_method("update_visual"):
+			slot.update_visual()
 	close()
 
 func _process(_delta):
@@ -91,6 +94,9 @@ func open() -> void:
 	visible = true
 	is_open = true
 	update_slots()
+	for slot in slots:
+		if slot and slot.has_method("update_visual"):
+			slot.update_visual()
 
 
 func close() -> void:
@@ -131,6 +137,9 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 		picked_slot.amount = 0
 
 	update_slots()
+	for slot in slots:
+		if slot and slot.has_method("update_visual"):
+			slot.update_visual()
 
 	# Add ghost to drag layer
 	drag_layer.add_child(ghost_item)
@@ -243,6 +252,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		picked_slot = null
 
 		update_slots()
+		for slot in slots:
+			if slot and slot.has_method("update_visual"):
+				slot.update_visual()
 		if player_inv:
 			player_inv.update_slots()
 

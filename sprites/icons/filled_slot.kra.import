@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://0xy84lshp1mi"
-path="res://.godot/imported/player_inv.kra-4a7be0bc9a2d6ec4623cb5738e506389.ctex"
+uid="uid://cedvposg2dkof"
+path="res://.godot/imported/filled_slot.kra-d026e520d903787974445818110da717.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/player_inv.kra"
-dest_files=["res://.godot/imported/player_inv.kra-4a7be0bc9a2d6ec4623cb5738e506389.ctex"]
+source_file="res://sprites/icons/filled_slot.kra"
+dest_files=["res://.godot/imported/filled_slot.kra-d026e520d903787974445818110da717.ctex"]
 
 [params]
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://cqlnk6vf6c6i5"]
+[gd_scene load_steps=11 format=3 uid="uid://cqlnk6vf6c6i5"]
 
 [ext_resource type="PackedScene" uid="uid://dsibk3lgkgky5" path="res://inventory/inv_ui_slot.tscn" id="1_oykf1"]
 [ext_resource type="Texture2D" uid="uid://bjjnqr4jlswcq" path="res://sprites/inv.kra" id="1_vfmov"]
@@ -7,6 +7,10 @@
 [ext_resource type="Resource" uid="uid://dfdhsvuohr1yl" path="res://inventory/playerinv.tres" id="3_dao3l"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_c8rtm"]
+atlas = ExtResource("2_enmkv")
+region = Rect2(96, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_p5qjx"]
 atlas = ExtResource("2_enmkv")
 region = Rect2(96, 0, 32, 32)
 
@@ -57,6 +61,7 @@ grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_c8rtm")
 slot_type = "weapon"
 slot_icon = null
+empty_texture = SubResource("AtlasTexture_p5qjx")
 
 [node name="SecondarySlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
@@ -72,6 +77,7 @@ grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_qmly5")
 slot_type = "secondary"
 slot_icon = null
+empty_texture = SubResource("AtlasTexture_qmly5")
 
 [node name="ArmorSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
@@ -87,6 +93,7 @@ grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_dk0qi")
 slot_type = "armor"
 slot_icon = null
+empty_texture = SubResource("AtlasTexture_dk0qi")
 
 [node name="ConsumableSlot" parent="." instance=ExtResource("1_oykf1")]
 layout_mode = 0
@@ -102,3 +109,4 @@ grow_vertical = 1
 texture_normal = SubResource("AtlasTexture_peq4r")
 slot_type = "consumable"
 slot_icon = null
+empty_texture = SubResource("AtlasTexture_peq4r")

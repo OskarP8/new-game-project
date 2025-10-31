@@ -50,47 +50,59 @@ columns = 4
 [node name="inv_UI_slot" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot2" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot3" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot4" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot5" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot6" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot7" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot8" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot9" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot10" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot11" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")
 
 [node name="inv_UI_slot12" parent="NinePatchRect/GridContainer" instance=ExtResource("3_2k4l8")]
 layout_mode = 2
 texture_normal = ExtResource("5_c5iqo")
+empty_texture = ExtResource("5_c5iqo")

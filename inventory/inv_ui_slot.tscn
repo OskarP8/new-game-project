@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://dsibk3lgkgky5"]
 
 [ext_resource type="Script" path="res://inventory/inv_ui_slot.gd" id="1_854gu"]
-[ext_resource type="Texture2D" uid="uid://bx6jd7orut1yp" path="res://sprites/inv_slot.kra" id="1_q8jbp"]
+[ext_resource type="Texture2D" uid="uid://cedvposg2dkof" path="res://sprites/icons/filled_slot.kra" id="3_5xqtx"]
 
 [node name="inv_UI_slot" type="TextureButton"]
 custom_minimum_size = Vector2(32, 32)
@@ -12,7 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 stretch_mode = 3
 script = ExtResource("1_854gu")
-slot_icon = ExtResource("1_q8jbp")
+filled_texture = ExtResource("3_5xqtx")
 
 [node name="CenterContainer" type="CenterContainer" parent="."]
 custom_minimum_size = Vector2(32, 32)
