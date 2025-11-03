@@ -43,7 +43,7 @@ var weapon_grip_node: Node2D = null
 # store transforms so we can reset safely
 var weapon_holder_base_scale := Vector2.ONE
 var weapon_root_base_pos := Vector2.ZERO
-
+var nearby_item: WorldItem = null
 # ----------------------
 # NODES
 # ----------------------
@@ -103,6 +103,8 @@ func _process(delta):
 		collect(test_item2)
 	if Input.is_action_just_pressed("swap_weapon"):
 		swap_weapons()
+	if Input.is_action_just_pressed("interact") and nearby_item:
+		nearby_item.collect(self)
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
@@ -455,11 +457,17 @@ func collect(item: InvItem, quantity: int = 1) -> void:
 func get_inventory() -> Inv:
 	return inventory
 
-func add_to_inventory(item: InvItem, quantity: int) -> void:
-	var entry = InventoryEntry.new()
-	entry.item = item
-	entry.quantity = quantity
-	inventory.add_item(entry)   # emits signal → UI updates
+func add_to_inventory(item: InvItem, quantity: int = 1):
+	var inv_ui = get_tree().root.find_child("InvUI", true, false)
+	if inv_ui and inv_ui.inv:
+		for slot in inv_ui.inv.slots:
+			if slot.item == null:
+				slot.item = item
+				slot.amount = quantity
+				inv_ui.update_slots()
+				print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
+				return
+	print("[player] ⚠️ Inventory full, couldn't add", item.name)
 
 # -------------------------------------------------------------------------
 # EQUIP / UNEQUIP WEAPON
@@ -693,3 +701,4 @@ func equip_armor(scene_path: String = "") -> void:
 		print("[Player] Equipped armor:", scene_path)
 	else:
 		print("[Player] ⚠ Failed to load armor from:", scene_path)
+		

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="InvItem" load_steps=5 format=3 uid="uid://dxangxod61kb2"]
+[gd_resource type="Resource" script_class="InvItem" load_steps=5 format=3 uid="uid://baweikdbnr5n8"]
 
 [ext_resource type="Texture2D" uid="uid://8xfrhkuf5w3x" path="res://sprites/pitchfork_icon.kra" id="1_1pnkq"]
 [ext_resource type="Script" path="res://inventory/inventory_item.gd" id="2_py3xl"]
