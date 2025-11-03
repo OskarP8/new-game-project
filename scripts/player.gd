@@ -103,7 +103,6 @@ func _process(delta):
 		collect(test_item2)
 	if Input.is_action_just_pressed("swap_weapon"):
 		swap_weapons()
-
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
@@ -461,17 +460,6 @@ func add_to_inventory(item: InvItem, quantity: int) -> void:
 	entry.item = item
 	entry.quantity = quantity
 	inventory.add_item(entry)   # emits signal → UI updates
-		# Find first empty slot
-	var inv_ui = get_tree().root.find_child("InvUI", true, false)
-	if inv_ui and inv_ui.inv:
-		for slot in inv_ui.inv.slots:
-			if slot.item == null:
-				slot.item = item
-				slot.amount = quantity
-				inv_ui.update_slots()
-				print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
-				return
-	print("[player] ⚠️ Inventory full, couldn't add", item.name)
 
 # -------------------------------------------------------------------------
 # EQUIP / UNEQUIP WEAPON
@@ -705,11 +693,3 @@ func equip_armor(scene_path: String = "") -> void:
 		print("[Player] Equipped armor:", scene_path)
 	else:
 		print("[Player] ⚠ Failed to load armor from:", scene_path)
-
-func collect_world_item(world_item: WorldItem):
-	if not world_item or not world_item.item:
-		return
-
-	print("[Player] 👜 Picking up", world_item.item.name, "x", world_item.quantity)
-	collect(world_item.item, world_item.quantity)
-	world_item.queue_free()

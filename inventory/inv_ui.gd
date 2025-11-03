@@ -153,9 +153,7 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 
 	_update_item_in_hand()
 
-# ---------------------------
-# Drag & drop handling
-# ---------------------------
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not ghost_item:
 		return
@@ -242,55 +240,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					dropped = true
 					break
 
-		# 3️⃣ Drop outside → spawn world drop
-		if not dropped and moving_item:
-			var ui_under_mouse := false
-			if get_global_rect().has_point(mouse_pos):
-				ui_under_mouse = true
-			elif player_inv and player_inv.visible and player_inv.get_global_rect().has_point(mouse_pos):
-				ui_under_mouse = true
-
-			if ui_under_mouse:
-				print("[inv_ui] ⛔ Mouse over inventory background, cancelling drop")
-				if picked_slot:
-					picked_slot.item = moving_item
-					picked_slot.amount = moving_amount
-				dropped = true
-			else:
-				var world_item_scene = preload("res://scenes/world_item.tscn")
-				var world_item: WorldItem = world_item_scene.instantiate()
-				world_item.item = moving_item
-				world_item.quantity = moving_amount
-
-				# Debug info
-				print("[inv_ui][DEBUG] moving_item resource:", moving_item)
-				print("[inv_ui][DEBUG] moving_item.texture:", moving_item.texture)
-				print("[inv_ui][DEBUG] moving_item.icon:", moving_item.icon)
-
-				# Force using the 'texture' property
-				if moving_item.texture:
-					print("[inv_ui][DEBUG] Setting world sprite texture to moving_item.texture")
-					if world_item.has_node("Sprite2D"):
-						world_item.get_node("Sprite2D").texture = moving_item.texture
-					world_item.world_texture = moving_item.texture
-				else:
-					print("[inv_ui][DEBUG] ⚠️ moving_item.texture not found, fallback to icon")
-					if moving_item.icon and world_item.has_node("Sprite2D"):
-						world_item.get_node("Sprite2D").texture = moving_item.icon
-						world_item.world_texture = moving_item.icon
-
-				# Drop near player
-				var player = get_tree().root.find_child("Player", true, false)
-				if player:
-					world_item.position = player.global_position + Vector2(0, -16)
-					world_item.z_index = int(world_item.position.y)
-				else:
-					world_item.position = Vector2.ZERO
-
-				get_tree().current_scene.add_child(world_item)
-				print("[inv_ui] 🌍 Dropped item near player:", moving_item.name)
-
-				dropped = true
+		# 3️⃣ Drop outside → restore original
+		if not dropped and picked_slot:
+			picked_slot.item = moving_item
+			picked_slot.amount = moving_amount
 
 		# Cleanup
 		if ghost_item:
@@ -298,13 +251,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		ghost_item = null
 		picked_slot = null
 
-		# Refresh visuals
 		update_slots()
 		for slot in slots:
 			if slot and slot.has_method("update_visual"):
 				slot.update_visual()
 		if player_inv:
 			player_inv.update_slots()
+
 
 func _update_item_in_hand():
 	if ghost_item == null:
