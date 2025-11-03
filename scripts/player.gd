@@ -701,4 +701,47 @@ func equip_armor(scene_path: String = "") -> void:
 		print("[Player] Equipped armor:", scene_path)
 	else:
 		print("[Player] ⚠ Failed to load armor from:", scene_path)
-		
+
+func collect_world_item(world_item) -> void:
+	# Defensive checks
+	if world_item == null:
+		print("[Player] ⚠ collect_world_item called with null")
+		return
+
+	# Access exported properties directly (WorldItem exports `item` and `quantity`)
+	if not world_item.item:
+		print("[Player] ⚠ world_item.item is null or missing")
+		return
+
+	var item: InvItem = world_item.item
+	var qty: int = 1
+	if "quantity" in world_item:
+		# direct access — WorldItem should export quantity
+		qty = world_item.quantity
+
+	print("[Player] 🪄 Collecting world item:", item.name if "name" in item else item, "x", qty)
+
+	# Ensure we have an inventory resource to add to
+	if inventory == null:
+		print("[Player] ⚠ inventory resource is null — cannot add item")
+	else:
+		# Inventory.add_item expects an InventoryEntry resource
+		var entry = InventoryEntry.new()
+		entry.item = item
+		entry.quantity = qty
+		inventory.add_item(entry)
+		print("[Player] ✅ Added to inventory via resource")
+
+	# If you also want to update the UI immediately (optional)
+	var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+	if inv_ui == null:
+		inv_ui = get_tree().root.find_child("InvUI", true, false)
+	if inv_ui and inv_ui.has_method("update_slots"):
+		inv_ui.update_slots()
+		print("[Player] ✅ Inv UI update requested")
+	else:
+		print("[Player] ⚠ Inv UI not found or missing update_slots")
+
+	# Finally remove the world item from the scene
+	world_item.queue_free()
+	print("[Player] 🗑 world_item queued for free")
