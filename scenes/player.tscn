@@ -521,6 +521,7 @@ animations = [{
 y_sort_enabled = true
 position = Vector2(0, -3)
 script = ExtResource("1_gjq3l")
+inventory = null
 
 [node name="InteractionComponent" parent="." instance=ExtResource("4_u73uf")]
 position = Vector2(0, -3)
