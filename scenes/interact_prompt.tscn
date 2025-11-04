@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://cg6sr254asft1"]
+
+[ext_resource type="Script" path="res://scripts/interact_prompt.gd" id="1_p8fl5"]
+[ext_resource type="Texture2D" uid="uid://cedvposg2dkof" path="res://sprites/icons/filled_slot.kra" id="2_meavd"]
+
+[node name="InteractPrompt" type="Node2D"]
+script = ExtResource("1_p8fl5")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_meavd")

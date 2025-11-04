@@ -4,6 +4,8 @@ extends Node2D   # or StaticBody2D if you need collisions
 @onready var animations: AnimationPlayer = $AnimationPlayer
 @onready var item_start_pos: Marker2D = $ItemStartPos
 @onready var item_end_pos: Marker2D = $ItemEndPos
+@onready var prompt_scene = preload("res://scenes/interact_prompt.tscn")
+var prompt: Node2D = null
 
 var is_open: bool = false
 

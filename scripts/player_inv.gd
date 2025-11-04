@@ -239,7 +239,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
 		var player := get_tree().root.find_child("Player", true, false)
 
-		# Clear picked slot for now
+		# Clear picked slot temporarily
 		picked_slot.item = null
 		picked_slot.amount = 0
 
@@ -259,37 +259,17 @@ func _unhandled_input(event: InputEvent) -> void:
 					target_slot = InvSlot.new()
 					inv.slots[idx] = target_slot
 
-				# --- Empty slot: place item ---
 				if target_slot.item == null:
 					print("[player_inv] ✅ Placed", moving_item.name, "in", slot_type)
 					target_slot.item = moving_item
 					target_slot.amount = moving_amount
 
-					# ✅ Equip weapon or armor when placed (safe checks)
 					var player_node: Node = get_tree().get_root().find_child("Player", true, false)
-					if player_node == null:
-						print("[player_inv] ⚠ Player node not found — can't auto-equip")
-					else:
-						if moving_item.type == "weapon":
-							if moving_item.scene_path != "":
-								if player_node.has_method("equip_weapon"):
-									print("[player_inv] -> equipping weapon:", moving_item.scene_path)
-									player_node.equip_weapon(moving_item.scene_path)
-								else:
-									print("[player_inv] ⚠ Player node has no equip_weapon()")
-							else:
-								print("[player_inv] ⚠ Item has no scene_path, cannot equip:", moving_item.name)
-						elif moving_item.type == "armor":
-							if moving_item.scene_path != "":
-								if player_node.has_method("equip_armor"):
-									print("[player_inv] -> equipping armor:", moving_item.scene_path)
-									player_node.equip_armor(moving_item.scene_path)
-								else:
-									print("[player_inv] ⚠ Player node has no equip_armor()")
-							else:
-								print("[player_inv] ⚠ Item has no scene_path, cannot equip:", moving_item.name)
-
-				# --- Swapping items ---
+					if player_node:
+						if moving_item.type == "weapon" and moving_item.scene_path != "" and player_node.has_method("equip_weapon"):
+							player_node.equip_weapon(moving_item.scene_path)
+						elif moving_item.type == "armor" and moving_item.scene_path != "" and player_node.has_method("equip_armor"):
+							player_node.equip_armor(moving_item.scene_path)
 				else:
 					print("[player_inv] 🔄 Swapped", moving_item.name, "with existing item")
 					var tmp_item = target_slot.item
@@ -299,19 +279,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					picked_slot.item = tmp_item
 					picked_slot.amount = tmp_amt
 
-					# Re-equip the new item if appropriate
-					var player_node2: Node = get_tree().get_root().find_child("Player", true, false)
-					if player_node2:
-						# If the new target_slot has a weapon, equip it
-						if target_slot.item and target_slot.item.type == "weapon":
-							if target_slot.item.scene_path != "" and player_node2.has_method("equip_weapon"):
-								print("[player_inv] -> equipping swapped-in weapon:", target_slot.item.scene_path)
-								player_node2.equip_weapon(target_slot.item.scene_path)
-						elif target_slot.item and target_slot.item.type == "armor":
-							if target_slot.item.scene_path != "" and player_node2.has_method("equip_armor"):
-								print("[player_inv] -> equipping swapped-in armor:", target_slot.item.scene_path)
-								player_node2.equip_armor(target_slot.item.scene_path)
-
 				dropped = true
 				break
 
@@ -319,18 +286,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not dropped and inv_ui and inv_ui.visible:
 			for inv_slot_node in inv_ui.slots:
 				if inv_slot_node.get_global_rect().has_point(mouse_pos):
-					var target_slot: InvSlot = inv_ui.inv.slots[inv_ui.slots.find(inv_slot_node)]
+					var idx = inv_ui.slots.find(inv_slot_node)
+					if idx == -1:
+						continue
+					var target_slot: InvSlot = inv_ui.inv.slots[idx]
 					if target_slot == null:
 						target_slot = InvSlot.new()
-						inv_ui.inv.slots[inv_ui.slots.find(inv_slot_node)] = target_slot
+						inv_ui.inv.slots[idx] = target_slot
 
 					if target_slot.item == null:
-						if moving_item == null:
-							print("[player_inv] ⚠ Tried to move null item")
-						elif "name" in moving_item:
-							print("[player_inv] ✅ Moved", moving_item.name, "to inventory")
-						else:
-							print("[player_inv] ✅ Moved unnamed item to inventory:", moving_item)
+						print("[player_inv] ✅ Moved", moving_item.name, "to inventory")
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
 					else:
@@ -344,13 +309,52 @@ func _unhandled_input(event: InputEvent) -> void:
 					dropped = true
 					break
 
-		# --- 3️⃣ Dropped outside everything ---
+		# --- 3️⃣ Drop to world (outside both inventories) ---
+		if not dropped and moving_item:
+			var over_slot := false
+			for s in slots:
+				if s.get_global_rect().has_point(mouse_pos):
+					over_slot = true
+			if inv_ui:
+				for s in inv_ui.slots:
+					if s.get_global_rect().has_point(mouse_pos):
+						over_slot = true
+
+			if not over_slot:
+				print("[player_inv] 🌍 Dropping item into world:", moving_item.name)
+				var world_item_scene = preload("res://scenes/world_item.tscn")
+				var world_item: Node2D = world_item_scene.instantiate()
+
+				# Assign item + quantity
+				if "item" in world_item:
+					world_item.item = moving_item
+				if "quantity" in world_item:
+					world_item.quantity = moving_amount
+
+				# Set correct texture (prefer 'texture' over 'icon')
+				if moving_item.texture and world_item.has_node("Sprite2D"):
+					world_item.get_node("Sprite2D").texture = moving_item.texture
+				elif moving_item.icon and world_item.has_node("Sprite2D"):
+					world_item.get_node("Sprite2D").texture = moving_item.icon
+
+				# Drop near player position
+				if player:
+					world_item.global_position = player.global_position + Vector2(0, -16)
+					world_item.z_index = int(world_item.global_position.y)
+				else:
+					world_item.global_position = mouse_pos
+
+				get_tree().current_scene.add_child(world_item)
+				print("[player_inv] ✅ Spawned world item at:", world_item.global_position)
+				dropped = true
+
+		# --- 4️⃣ If not dropped anywhere, restore item back ---
 		if not dropped:
-			print("[player_inv] 🗑 Dropped outside, restoring item to original slot")
+			print("[player_inv] 🗑 Dropped outside UI, restoring item")
 			picked_slot.item = moving_item
 			picked_slot.amount = moving_amount
 
-		# --- 4️⃣ Unequip if weapon slot emptied ---
+		# --- 5️⃣ Unequip emptied slots ---
 		if player:
 			for i in range(slots.size()):
 				var slot_node = slots[i]
