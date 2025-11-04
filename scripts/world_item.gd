@@ -43,7 +43,7 @@ func _ready():
 func _on_body_entered(body: Node):
 	print("[WorldItem] body_entered:", body.name, " groups:", body.get_groups())
 
-	if body.is_in_group("player"):
+	if body.is_in_group("Player"):
 		print("[WorldItem] ✅ player entered, showing prompt")
 		if prompt == null:
 			print("[WorldItem] instantiating prompt...")
