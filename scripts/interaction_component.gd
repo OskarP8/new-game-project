@@ -15,6 +15,10 @@ func _ready():
 	monitorable = true
 	print("[InteractArea] ready - player:", player)
 
+func _process(_delta):
+	if prompt and is_instance_valid(prompt) and not can_interact.is_empty():
+		_update_prompt()
+
 func _on_body_entered(body: Node) -> void:
 	if _is_valid_interactable(body):
 		if body not in can_interact:
@@ -51,24 +55,44 @@ func _is_valid_interactable(node: Node) -> bool:
 	return false
 
 func _update_prompt():
-	if can_interact.is_empty():
-		if prompt:
-			prompt.hide_prompt()
+	if not prompt or can_interact.is_empty():
 		return
 
-	var closest := _get_closest_interactable()
-	if not closest:
-		if prompt:
-			prompt.hide_prompt()
+	var closest := can_interact[0]
+	var closest_dist := global_position.distance_to(closest.global_position)
+	for c in can_interact:
+		var d := global_position.distance_to(c.global_position)
+		if d < closest_dist:
+			closest = c
+			closest_dist = d
+
+	if not is_instance_valid(closest):
 		return
 
-	if not prompt:
-		prompt = prompt_scene.instantiate()
-		get_tree().current_scene.add_child(prompt)
+	var player_x := global_position.x
+	var item_x := closest.global_position.x
+	var offset := Vector2.ZERO
 
-	# position the prompt near the closest interactable
-	# you can offset or adjust here as needed
-	prompt.show_prompt("Press E", closest.global_position)
+	# determine which side the prompt should be on
+	if player_x < item_x:
+		offset = Vector2(1, -4)  # player is left -> prompt on right
+	else:
+		offset = Vector2(-1, -4) # player is right -> prompt on left
+
+	var target_pos := closest.global_position + offset
+
+	# 🌀 Smooth movement using tween
+	if not prompt.has_meta("move_tween") or not is_instance_valid(prompt.get_meta("move_tween")):
+		var tw := create_tween()
+		tw.tween_property(prompt, "global_position", target_pos, 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		prompt.set_meta("move_tween", tw)
+	else:
+		var tw: Tween = prompt.get_meta("move_tween")
+		if tw.is_running():
+			tw.stop()
+		tw = create_tween()
+		tw.tween_property(prompt, "global_position", target_pos, 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		prompt.set_meta("move_tween", tw)
 
 func _get_closest_interactable() -> Node2D:
 	var closest: Node2D = null
