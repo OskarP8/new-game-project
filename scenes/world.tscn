@@ -1,9 +1,8 @@
-[gd_scene load_steps=12 format=4 uid="uid://danlo4u14ys00"]
+[gd_scene load_steps=11 format=4 uid="uid://danlo4u14ys00"]
 
 [ext_resource type="PackedScene" uid="uid://dwgo1s0vppabn" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://bm4c7tmq6qur6" path="res://sprites/road_tileset1.kra" id="2_lbp6r"]
 [ext_resource type="PackedScene" uid="uid://cqlnk6vf6c6i5" path="res://scenes/player_inv.tscn" id="3_d3s2d"]
-[ext_resource type="Resource" uid="uid://b2cgrajac7cl7" path="res://inventory/inv.tres" id="3_eg0q5"]
 [ext_resource type="PackedScene" uid="uid://bbdgfmv21n0be" path="res://scenes/inv_ui.tscn" id="4_uat3m"]
 [ext_resource type="PackedScene" uid="uid://bbfq50yyk3pwu" path="res://scenes/chest.tscn" id="5_ixe8f"]
 [ext_resource type="Script" path="res://scripts/inventory_entry.gd" id="5_l7sjb"]
@@ -67,7 +66,6 @@ offset_left = -76.0
 offset_top = -183.0
 offset_right = 82.0
 offset_bottom = -61.0
-inv = ExtResource("3_eg0q5")
 
 [node name="PlayerInv" parent="Inventory" instance=ExtResource("3_d3s2d")]
 offset_left = -376.0

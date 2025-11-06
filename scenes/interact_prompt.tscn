@@ -1,11 +1,15 @@
-[gd_scene load_steps=3 format=3 uid="uid://cg6sr254asft1"]
+[gd_scene load_steps=4 format=3 uid="uid://cg6sr254asft1"]
 
 [ext_resource type="Script" path="res://scripts/interact_prompt.gd" id="1_p8fl5"]
-[ext_resource type="Texture2D" uid="uid://cedvposg2dkof" path="res://sprites/icons/filled_slot.kra" id="2_meavd"]
+[ext_resource type="Texture2D" uid="uid://dv3ath580c8f0" path="res://sprites/icons/prompt.kra" id="2_mn6b7"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_vmice"]
+atlas = ExtResource("2_mn6b7")
+region = Rect2(0, 0, 71, 32)
 
 [node name="InteractPrompt" type="Node2D"]
 script = ExtResource("1_p8fl5")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
-scale = Vector2(0.3, 0.3)
-texture = ExtResource("2_meavd")
+scale = Vector2(0.35, 0.35)
+texture = SubResource("AtlasTexture_vmice")

@@ -457,7 +457,7 @@ func collect(item: InvItem, quantity: int = 1) -> void:
 func get_inventory() -> Inv:
 	return inventory
 
-func add_to_inventory(item: InvItem, quantity: int = 1):
+func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 	var inv_ui = get_tree().root.find_child("InvUI", true, false)
 	if inv_ui and inv_ui.inv:
 		for slot in inv_ui.inv.slots:
@@ -466,8 +466,10 @@ func add_to_inventory(item: InvItem, quantity: int = 1):
 				slot.amount = quantity
 				inv_ui.update_slots()
 				print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
-				return
+				return true
+
 	print("[player] ⚠️ Inventory full, couldn't add", item.name)
+	return false
 
 # -------------------------------------------------------------------------
 # EQUIP / UNEQUIP WEAPON
