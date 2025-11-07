@@ -11,92 +11,146 @@ var prompt: Node2D = null
 var is_open: bool = false
 
 func interact(player: Node2D) -> void:
+	print("[Chest] Attempting interaction with:", player)
+	
+	# Defensive: player must exist
+	if player == null:
+		print("[Chest] ⚠ No player passed to interact().")
+		return
+
+	# Prevent double opening while animation plays
 	if is_open:
 		print("[Chest] ⚠ Already open, ignoring interact.")
 		return
 
-	# --- CHECK INVENTORY SPACE BEFORE OPENING ---
-	var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
-	var has_space := false
+	# Get inventory resource
+	var player_inv_res = null
+	if player.has_method("get_inventory"):
+		player_inv_res = player.get_inventory()
+	elif "inventory" in player:
+		player_inv_res = player.inventory
 
-	if inv_ui and inv_ui.inv:
-		print("[Chest] 🧭 Checking player inventory slots for space...")
-		for slot in inv_ui.inv.slots:
-			# Print each slot state
-			print("   → Slot:", slot, " item:", slot.item if "item" in slot else "N/A")
-
-			# Some slots may not have an item yet or explicitly have null
-			if slot.item == null:
-				has_space = true
-				print("   ✅ Found empty slot:", slot)
-				break
-	else:
-		print("[Chest] ⚠️ Could not find inventory UI or inv object")
-
-	if not has_space:
-		print("[Chest] 🚫 Inventory full — chest won't open")
-		_show_inventory_full_message()
+	if player_inv_res == null:
+		print("[Chest] ⚠ Player inventory resource not found, cannot open chest.")
 		return
 
-	# --- OPEN CHEST ---
-	is_open = true
-	print("[Chest] ✅ Opened by:", player.name)
+	# Gather required items
+	var required: Array = []
+	for entry in slots:
+		if entry and entry.item:
+			required.append({"item": entry.item, "quantity": entry.quantity})
 
-	# Hide prompt (if still visible)
+	if required.size() == 0:
+		print("[Chest] ⚠ Chest empty, skipping.")
+		return
+
+	print("[Chest] 🧭 Checking player inventory for required space...")
+
+	# Check if inventory has room
+	var has_space: bool = _player_has_space_for(player_inv_res, required)
+	if not has_space:
+		print("[Chest] 🚫 Inventory full — chest won't open")
+		var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+		if inv_ui and inv_ui.has_method("show_message"):
+			inv_ui.show_message("Inventory Full")
+		is_open = false # ✅ ensure it doesn’t mark itself open
+		return
+
+	# ✅ Passed space check
+	is_open = true
+	print("[Chest] ✅ Opened by:", player.name if "name" in player else player)
+
+	# Hide prompt
 	if prompt:
 		if prompt.has_method("hide_prompt"):
 			prompt.hide_prompt()
-			print("[Chest] 🔹 Hiding prompt via hide_prompt()")
 		else:
 			prompt.visible = false
-			print("[Chest] 🔹 Hiding prompt manually")
 
 	# Animation
 	if animations and animations.has_animation("open"):
-		print("[Chest] ▶ Playing 'open' animation")
 		animations.play("open")
 		await animations.animation_finished
-		print("[Chest] 🎬 Animation finished")
-	else:
-		print("[Chest] ⚠ No animation or AnimationPlayer missing")
 
-	# --- SPAWN ITEMS VISUALLY ---
+	# Spawn items visually
 	for entry in slots:
-		print("[Chest] Spawning item:", entry.item, "x", entry.quantity)
-		spawn_and_collect(player, entry)
+		if entry and entry.item:
+			spawn_and_collect(player, entry)
 
-	# --- GIVE ITEMS TO PLAYER ---
-	if player and player.has_method("add_to_inventory"):
+	# Give items
+	if player.has_method("add_to_inventory"):
 		for entry in slots:
 			if entry.item == null:
-				print("[Chest] ⚠ Empty slot skipped")
 				continue
 
 			if player.has_method("_is_non_stackable") and player._is_non_stackable(entry.item):
-				print("[Chest] Non-stackable:", entry.item.name, "x", entry.quantity)
 				for i in range(entry.quantity):
-					if not player.add_to_inventory(entry.item, 1):
-						_show_inventory_full_message()
-						print("[Chest] 🚫 Inventory full mid-transfer, stopping.")
-						return
-					print("[Chest] ➕ Added 1x", entry.item.name, "to player inventory")
+					player.add_to_inventory(entry.item, 1)
 			else:
-				if not player.add_to_inventory(entry.item, entry.quantity):
-					_show_inventory_full_message()
-					print("[Chest] 🚫 Inventory full mid-transfer, stopping.")
-					return
-				print("[Chest] ➕ Added", entry.quantity, "x", entry.item.name, "to player inventory")
+				player.add_to_inventory(entry.item, entry.quantity)
 	else:
-		push_warning("[Chest] ⚠ Player missing add_to_inventory() or null")
+		print("[Chest] ⚠ Player missing add_to_inventory()")
 
-	# Clear slots after giving items
+	# Clean up
 	slots.clear()
-	print("[Chest] 🧹 Slots cleared")
-
-	# Disable collision after opening (optional)
 	if has_node("CollisionShape2D"):
 		$CollisionShape2D.disabled = true
-		print("[Chest] ⛔ Collision disabled")
+	print("[Chest] 🧹 Chest cleared and disabled")
+
+
+func _player_has_space_for(player_inv_res, required: Array) -> bool:
+	if player_inv_res == null or not ("slots" in player_inv_res):
+		return false
+
+	var sim_slots: Array = []
+	for s in player_inv_res.slots:
+		var entry = {"item": null, "amount": 0, "max_stack": 1}
+		if s != null:
+			if "item" in s and s.item != null:
+				entry.item = s.item
+			if "amount" in s:
+				entry.amount = s.amount
+		sim_slots.append(entry)
+
+	for need in required:
+		var item = need["item"]
+		var qty = int(need["quantity"])
+
+		# Determine stacking rule
+		var item_max_stack := 1
+		if "max_stack" in item:
+			item_max_stack = int(item.max_stack)
+		elif "stackable" in item:
+			item_max_stack = 99 if item.stackable else 1
+
+		# ✅ If no empty slots and no stack space, fail
+		var total_free := 0
+		for s in sim_slots:
+			if s["item"] == null:
+				total_free += item_max_stack
+			elif s["item"] == item and s["amount"] < item_max_stack:
+				total_free += item_max_stack - s["amount"]
+
+		if total_free < qty:
+			print("[Chest] ✖ Not enough room for", item.name if "name" in item else "unknown", "needs:", qty, "has:", total_free)
+			return false
+
+		# ✅ Simulate filling slots (so future items also count)
+		var remaining = qty
+		for s in sim_slots:
+			if remaining <= 0:
+				break
+			if s["item"] == item and s["amount"] < item_max_stack:
+				var can_put = min(item_max_stack - s["amount"], remaining)
+				s["amount"] += can_put
+				remaining -= can_put
+			elif s["item"] == null:
+				var put = min(item_max_stack, remaining)
+				s["item"] = item
+				s["amount"] = put
+				remaining -= put
+
+	return true
 
 func spawn_and_collect(player: Node2D, entry: InventoryEntry) -> void:
 	if entry.item == null:

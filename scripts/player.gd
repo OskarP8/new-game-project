@@ -458,17 +458,41 @@ func get_inventory() -> Inv:
 	return inventory
 
 func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
-	var inv_ui = get_tree().root.find_child("InvUI", true, false)
-	if inv_ui and inv_ui.inv:
-		for slot in inv_ui.inv.slots:
-			if slot.item == null:
-				slot.item = item
-				slot.amount = quantity
-				inv_ui.update_slots()
-				print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
-				return true
+	var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+	if not inv_ui or not inv_ui.inv:
+		print("[player] ⚠️ Inventory UI or inv not found")
+		return false
 
+	# --- Dry-run: check if there's space without adding ---
+	if quantity == 0:
+		for slot in inv_ui.inv.slots:
+			if not slot or slot.item == null or (slot.item == item and item.stackable):
+				return true
+		return false
+
+	# --- Stacking existing items ---
+	for slot in inv_ui.inv.slots:
+		if slot and slot.item == item and item.stackable:
+			slot.amount += quantity
+			inv_ui.update_slots()
+			print("[player] ➕ Stacked", quantity, "x", item.name, "(now", slot.amount, ")")
+			return true
+
+	# --- Fill empty slot ---
+	for slot in inv_ui.inv.slots:
+		if not slot or slot.item == null:
+			slot.item = item
+			slot.amount = quantity
+			inv_ui.update_slots()
+			print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
+			return true
+
+	# --- Inventory full ---
 	print("[player] ⚠️ Inventory full, couldn't add", item.name)
+	if inv_ui.has_method("show_message"):
+		inv_ui.show_message("Inventory Full")
+	else:
+		print("[UI] ⚠️ Inventory Full (UI handler missing)")
 	return false
 
 # -------------------------------------------------------------------------

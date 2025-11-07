@@ -115,7 +115,7 @@ func _update_prompt() -> void:
 		get_tree().current_scene.call_deferred("add_child", prompt)
 		print("[InteractArea] prompt created:", prompt)
 
-	var offset := Vector2(10, -14)
+	var offset := Vector2(10, 6)
 	var target_pos: Vector2 = closest.global_position + offset
 
 	if prompt.has_method("show_prompt"):
