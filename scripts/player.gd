@@ -734,7 +734,6 @@ func collect_world_item(world_item) -> void:
 		print("[Player] ⚠ collect_world_item called with null")
 		return
 
-	# Access exported properties directly (WorldItem exports `item` and `quantity`)
 	if not world_item.item:
 		print("[Player] ⚠ world_item.item is null or missing")
 		return
@@ -742,32 +741,36 @@ func collect_world_item(world_item) -> void:
 	var item: InvItem = world_item.item
 	var qty: int = 1
 	if "quantity" in world_item:
-		# direct access — WorldItem should export quantity
 		qty = world_item.quantity
 
-	print("[Player] 🪄 Collecting world item:", item.name if "name" in item else item, "x", qty)
+	print("[Player] 🪄 Attempting to collect:", item.name if "name" in item else item, "x", qty)
 
-	# Ensure we have an inventory resource to add to
-	if inventory == null:
-		print("[Player] ⚠ inventory resource is null — cannot add item")
+	# Attempt to add to inventory via the player's add_to_inventory (which returns bool)
+	var added := false
+	if has_method("add_to_inventory"):
+		added = add_to_inventory(item, qty)
 	else:
-		# Inventory.add_item expects an InventoryEntry resource
-		var entry = InventoryEntry.new()
-		entry.item = item
-		entry.quantity = qty
-		inventory.add_item(entry)
-		print("[Player] ✅ Added to inventory via resource")
+		print("[Player] ⚠ add_to_inventory() missing on player")
 
-	# If you also want to update the UI immediately (optional)
-	var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
-	if inv_ui == null:
-		inv_ui = get_tree().root.find_child("InvUI", true, false)
-	if inv_ui and inv_ui.has_method("update_slots"):
-		inv_ui.update_slots()
-		print("[Player] ✅ Inv UI update requested")
+	# If added -> remove world item and update UI/resource
+	if added:
+		print("[Player] ✅ Collected", item.name, "x", qty)
+		# update UI (if inv UI exists)
+		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
+		if inv_ui == null:
+			inv_ui = get_tree().root.find_child("InvUI", true, false)
+		if inv_ui and inv_ui.has_method("update_slots"):
+			inv_ui.update_slots()
+		# remove world item
+		if is_instance_valid(world_item):
+			world_item.queue_free()
 	else:
-		print("[Player] ⚠ Inv UI not found or missing update_slots")
-
-	# Finally remove the world item from the scene
-	world_item.queue_free()
-	print("[Player] 🗑 world_item queued for free")
+		# inventory full -> show message and keep the world_item in the world
+		print("[Player] ⚠ Inventory full, cannot pick up", item.name)
+		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
+		if inv_ui == null:
+			inv_ui = get_tree().root.find_child("InvUI", true, false)
+		if inv_ui and inv_ui.has_method("show_message"):
+			inv_ui.show_message("Inventory Full")
+		else:
+			print("[UI] ⚠️ Inventory Full (UI handler missing)")

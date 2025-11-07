@@ -360,3 +360,60 @@ func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:
 		player.equip_weapon(to_slot.item_stack.item)
 	elif from_slot.slot_type == "weapon" and to_slot.item_stack == null:
 		player.has_weapon = false
+
+@onready var message_label: Label = $MessageLabel
+
+func show_message(text: String) -> void:
+	print("[Inv_UI] show_message() called with text:", text)
+
+	if message_label == null:
+		print("[Inv_UI] message_label == null -> creating Label")
+		message_label = Label.new()
+		message_label.name = "InventoryMessageLabel"
+		message_label.text = text
+
+		message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		message_label.modulate = Color(1, 0, 0, 0)  # red, transparent
+		message_label.visible = true
+
+		add_child(message_label)
+	else:
+		print("[Inv_UI] message_label exists; reusing")
+		message_label.text = text
+		message_label.visible = true
+		message_label.modulate = Color(1, 0, 0, 0)
+
+	# Center in the middle of the viewport
+	var vp_rect := get_viewport().get_visible_rect()
+	var vp_center := vp_rect.size / 2
+	message_label.global_position = vp_center + Vector2(0, -80)  # 80px above center
+
+	print("[Inv_UI][DEBUG] message_label positioned at:", message_label.global_position, "viewport center:", vp_center)
+
+	# Animate: fade-in, shake, fade-out
+	var tween = create_tween()
+	tween.tween_property(message_label, "modulate:a", 1.0, 0.2).from(0.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(message_label, "scale", Vector2(1.1, 1.1), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(message_label, "scale", Vector2(1, 1), 0.1).set_delay(0.05)
+
+	# Shake horizontally
+	var base_pos := message_label.position
+	var shake_amount := 6
+	for i in range(4):
+		var shake_offset := Vector2(-shake_amount if i % 2 == 0 else shake_amount, 0)
+		tween.tween_property(message_label, "position", base_pos + shake_offset, 0.04)
+	tween.tween_property(message_label, "position", base_pos, 0.04)
+
+	# Fade out
+	tween.tween_property(message_label, "modulate:a", 0.0, 0.5).set_delay(0.5)
+	tween.finished.connect(func():
+		if is_instance_valid(message_label):
+			message_label.visible = false
+			message_label.modulate = Color(1, 0, 0, 0)
+			print("[Inv_UI] message_label tween finished; hidden"))
+
+func _hide_message_deferred() -> void:
+	if message_label:
+		message_label.visible = false
+		# reset pivot if you changed it or leave as is

@@ -11,19 +11,19 @@ var prompt: Node2D = null
 var is_open: bool = false
 
 func interact(player: Node2D) -> void:
-	print("[Chest] Attempting interaction with:", player)
-	
-	# Defensive: player must exist
+	print("[Chest] Attempting interaction with:", player, ":", player.name if "name" in player else "")
+
+	# Prevent invalid access
 	if player == null:
 		print("[Chest] ⚠ No player passed to interact().")
 		return
 
-	# Prevent double opening while animation plays
+	# Prevent double opens only if animation or real open already happened
 	if is_open:
 		print("[Chest] ⚠ Already open, ignoring interact.")
 		return
 
-	# Get inventory resource
+	# --- Access player inventory ---
 	var player_inv_res = null
 	if player.has_method("get_inventory"):
 		player_inv_res = player.get_inventory()
@@ -34,31 +34,53 @@ func interact(player: Node2D) -> void:
 		print("[Chest] ⚠ Player inventory resource not found, cannot open chest.")
 		return
 
-	# Gather required items
+	# --- Prepare required items ---
 	var required: Array = []
 	for entry in slots:
 		if entry and entry.item:
 			required.append({"item": entry.item, "quantity": entry.quantity})
 
-	if required.size() == 0:
-		print("[Chest] ⚠ Chest empty, skipping.")
+	if required.is_empty():
+		print("[Chest] ⚠ Chest is empty, skipping.")
 		return
 
 	print("[Chest] 🧭 Checking player inventory for required space...")
-
-	# Check if inventory has room
 	var has_space: bool = _player_has_space_for(player_inv_res, required)
+
+	# --- Handle inventory full ---
 	if not has_space:
 		print("[Chest] 🚫 Inventory full — chest won't open")
+
+		# ✅ Keep chest closed
+		is_open = false
+
+		# Show message on UI if possible
 		var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
 		if inv_ui and inv_ui.has_method("show_message"):
+			print("[UI] ⚠️ Inventory Full")
 			inv_ui.show_message("Inventory Full")
-		is_open = false # ✅ ensure it doesn’t mark itself open
-		return
+		else:
+			print("[UI] ⚠️ Inventory Full (UI handler missing)")
 
-	# ✅ Passed space check
+		# ✅ Force prompt reappear through InteractionComponent
+		var interactor = player.find_child("InteractionComponent", true, false)
+		if interactor:
+			if interactor.has_method("show_prompt_for"):
+				interactor.show_prompt_for(self)
+				print("[Chest] 🔄 Prompt re-shown after failed open")
+			elif interactor.has_method("_update_prompt"):
+				interactor._update_prompt()
+				print("[Chest] 🔄 Prompt refreshed after failed open (fallback)")
+			else:
+				print("[Chest] ⚠️ InteractionComponent found but no refresh method")
+		else:
+			print("[Chest] ⚠️ No InteractionComponent found under player")
+
+		return  # stop here — no opening
+
+	# --- SUCCESSFUL OPEN ---
 	is_open = true
-	print("[Chest] ✅ Opened by:", player.name if "name" in player else player)
+	print("[Chest] ✅ Opening chest for:", player.name if "name" in player else "")
 
 	# Hide prompt
 	if prompt:
@@ -67,36 +89,35 @@ func interact(player: Node2D) -> void:
 		else:
 			prompt.visible = false
 
-	# Animation
+	# Play animation if available
 	if animations and animations.has_animation("open"):
 		animations.play("open")
 		await animations.animation_finished
+	else:
+		print("[Chest] ⚠ No animation to play")
 
-	# Spawn items visually
+	# Spawn item visuals
 	for entry in slots:
 		if entry and entry.item:
 			spawn_and_collect(player, entry)
 
-	# Give items
+	# Actually add items
 	if player.has_method("add_to_inventory"):
 		for entry in slots:
 			if entry.item == null:
 				continue
-
 			if player.has_method("_is_non_stackable") and player._is_non_stackable(entry.item):
 				for i in range(entry.quantity):
 					player.add_to_inventory(entry.item, 1)
 			else:
 				player.add_to_inventory(entry.item, entry.quantity)
-	else:
-		print("[Chest] ⚠ Player missing add_to_inventory()")
 
-	# Clean up
+	# Clear chest content and disable collision
 	slots.clear()
 	if has_node("CollisionShape2D"):
 		$CollisionShape2D.disabled = true
-	print("[Chest] 🧹 Chest cleared and disabled")
 
+	print("[Chest] 🧹 Chest cleared and disabled after successful open")
 
 func _player_has_space_for(player_inv_res, required: Array) -> bool:
 	if player_inv_res == null or not ("slots" in player_inv_res):

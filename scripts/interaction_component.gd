@@ -156,15 +156,25 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 		# ---- Chest or other interactable ----
 		if target.has_method("interact"):
+			var was_open_before = ("is_open" in target and target.is_open)
 			target.interact(player)
-			# mark as opened so prompt won’t reappear
-			if "is_open" in target:
-				target.is_open = true
-			if target in can_interact:
-				can_interact.erase(target)
-			if prompt:
-				if prompt.has_method("hide_prompt"):
-					prompt.hide_prompt()
-				else:
-					prompt.hide()
+
+			# Only mark as open if the interaction actually succeeded
+			if "is_open" in target and target.is_open and not was_open_before:
+				# Interaction succeeded — hide prompt
+				if prompt:
+					if prompt.has_method("hide_prompt"):
+						prompt.hide_prompt()
+					else:
+						prompt.hide()
+				if target in can_interact:
+					can_interact.erase(target)
+			else:
+				# Interaction failed (e.g. inventory full) — keep target interactable
+				if "is_open" in target and not target.is_open:
+					if target not in can_interact:
+						can_interact.append(target)
+					_update_prompt()
+					print("[InteractArea] 🔄 Chest reopen allowed — kept in interact list")
+
 			continue
