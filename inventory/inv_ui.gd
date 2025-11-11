@@ -366,54 +366,113 @@ func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:
 func show_message(text: String) -> void:
 	print("[Inv_UI] show_message() called with text:", text)
 
-	if message_label == null:
-		print("[Inv_UI] message_label == null -> creating Label")
-		message_label = Label.new()
-		message_label.name = "InventoryMessageLabel"
-		message_label.text = text
-
-		message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		message_label.modulate = Color(1, 0, 0, 0)  # red, transparent
-		message_label.visible = true
-
-		add_child(message_label)
-	else:
+	# --- find or create the label ---
+	var label: Label
+	if has_node("MessageLabel"):
+		label = $MessageLayer/MessageLabel
 		print("[Inv_UI] message_label exists; reusing")
-		message_label.text = text
-		message_label.visible = true
-		message_label.modulate = Color(1, 0, 0, 0)
+	else:
+		label = Label.new()
+		label.name = "MessageLabel"
+		add_child(label)
+		print("[Inv_UI] message_label created dynamically")
 
-	# Center in the middle of the viewport
+	# --- basic setup ---
+	label.text = text
+	label.visible = true
+	label.modulate = Color(1.0, 0.0, 0.0, 0.0) # red but transparent initially
+	label.z_index = 9999
+
+	# --- center text ---
+	label.horizontal_alignment = 1  # Center
+	label.vertical_alignment = 1    # Center
+
+	# --- word wrapping ---
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD
+
+	# wait a frame to get correct size
+	await get_tree().process_frame
+
+	# --- positioning ---
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var width: float = clamp(viewport_size.x * 0.6, 200.0, viewport_size.x - 40.0)
+	var height: float = 28.0
+	label.set_custom_minimum_size(Vector2(width, height))
+
+	var bottom_y: float = viewport_size.y - 80.0
+	var pos_x: float = (viewport_size.x - width) * 0.5
+	label.position = Vector2(pos_x, bottom_y)
+
+	print("[Inv_UI][DEBUG] viewport:", viewport_size, "label.pos:", label.position, "size:", Vector2(width, height))
+
+	# --- cancel any previous tween ---
+	if label.has_meta("tween"):
+		var old_tween := label.get_meta("tween") as Tween
+		if old_tween and old_tween.is_running():
+			old_tween.kill()
+			print("[Inv_UI][DEBUG] killed old tween")
+
+	# --- animations ---
+	var base_pos: Vector2 = label.position
+	var tween: Tween = create_tween()
+	label.set_meta("tween", tween)
+
+	tween.tween_property(label, "modulate:a", 1.0, 0.18)
+	for i in range(3):
+		var shake_x: float = base_pos.x + randf_range(-6.0, 6.0)
+		tween.tween_property(label, "position:x", shake_x, 0.06)
+		tween.tween_property(label, "position:x", base_pos.x, 0.06)
+
+	tween.tween_interval(0.9)
+	tween.tween_property(label, "modulate:a", 0.0, 0.35)
+	tween.finished.connect(Callable(self, "_on_message_tween_finished"))
+	print("[Inv_UI][DEBUG] message_label tween started for:", text)
+
+func _on_message_tween_finished() -> void:
+	if has_node("MessageLabel"):
+		var lbl: Label = $MessageLabel
+		if lbl and lbl.has_meta("tween"):
+			lbl.set_meta("tween", null)
+		# ensure hidden state
+		lbl.visible = false
+
+func _show_message_deferred(text: String) -> void:
+	if not is_instance_valid(message_label):
+		print("[Inv_UI][DEBUG] message_label invalid")
+		return
+
 	var vp_rect := get_viewport().get_visible_rect()
-	var vp_center := vp_rect.size / 2
-	message_label.global_position = vp_center + Vector2(0, -80)  # 80px above center
+	var vp_center := vp_rect.size * 0.5
+	var lbl_size := Vector2(150, 30)
 
-	print("[Inv_UI][DEBUG] message_label positioned at:", message_label.global_position, "viewport center:", vp_center)
+	if "rect_size" in message_label:
+		lbl_size = message_label.rect_size
+	elif message_label.size.length() > 0:
+		lbl_size = message_label.size
 
-	# Animate: fade-in, shake, fade-out
-	var tween = create_tween()
-	tween.tween_property(message_label, "modulate:a", 1.0, 0.2).from(0.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(message_label, "scale", Vector2(1.1, 1.1), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(message_label, "scale", Vector2(1, 1), 0.1).set_delay(0.05)
+	var final_pos := vp_center - lbl_size * 0.5 + Vector2(0, -100)
+	message_label.global_position = final_pos
+	print("[Inv_UI][DEBUG] viewport:", vp_rect, "label pos:", final_pos, "lbl_size:", lbl_size)
 
-	# Shake horizontally
+	# 💡 ensure label is visible and on top
+	message_label.show()
+	message_label.z_index = 9999
+	message_label.visible = true
+
+	# 🌀 Fade + shake animation
+	var tween := create_tween()
+	tween.tween_property(message_label, "modulate:a", 1.0, 0.25)
+	tween.tween_property(message_label, "scale", Vector2(1.1, 1.1), 0.1)
+	tween.tween_property(message_label, "scale", Vector2(1.0, 1.0), 0.1).set_delay(0.1)
+
 	var base_pos := message_label.position
-	var shake_amount := 6
 	for i in range(4):
-		var shake_offset := Vector2(-shake_amount if i % 2 == 0 else shake_amount, 0)
-		tween.tween_property(message_label, "position", base_pos + shake_offset, 0.04)
+		var offset := Vector2(((-1) ** i) * 6, 0)
+		tween.tween_property(message_label, "position", base_pos + offset, 0.04)
 	tween.tween_property(message_label, "position", base_pos, 0.04)
 
-	# Fade out
-	tween.tween_property(message_label, "modulate:a", 0.0, 0.5).set_delay(0.5)
-	tween.finished.connect(func():
+	tween.tween_property(message_label, "modulate:a", 0.0, 0.5).set_delay(0.7)
+	tween.finished.connect(func ():
 		if is_instance_valid(message_label):
-			message_label.visible = false
-			message_label.modulate = Color(1, 0, 0, 0)
-			print("[Inv_UI] message_label tween finished; hidden"))
-
-func _hide_message_deferred() -> void:
-	if message_label:
-		message_label.visible = false
-		# reset pivot if you changed it or leave as is
+			message_label.hide()
+			print("[Inv_UI] message_label hidden after animation"))

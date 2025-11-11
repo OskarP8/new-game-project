@@ -145,13 +145,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		# ---- WorldItem pickup ----
 		if target is WorldItem:
 			if player.has_method("collect_world_item"):
+				var before_count := can_interact.size()
 				player.collect_world_item(target)
-			can_interact.erase(target)
-			if prompt:
-				if prompt.has_method("hide_prompt"):
-					prompt.hide_prompt()
+
+				# only erase if the item was actually picked up (freed)
+				if not is_instance_valid(target):
+					can_interact.erase(target)
 				else:
-					prompt.hide()
+					print("[InteractArea] ⚠ Item still valid — inventory full, keeping in list (retry allowed)")
+			else:
+				print("[InteractArea] ⚠ Player missing collect_world_item()")
 			continue
 
 		# ---- Chest or other interactable ----
