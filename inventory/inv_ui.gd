@@ -366,41 +366,56 @@ func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:
 func show_message(text: String) -> void:
 	print("[Inv_UI] show_message() called with text:", text)
 
-	# --- find message layer + label properly ---
-	var layer: CanvasLayer = null
-	var label: Label = null
-
-	if has_node("MessageLayer"):
-		layer = $MessageLayer
-		if layer.has_node("MessageLabel"):
-			label = layer.get_node("MessageLabel")
-
+	# --- ensure MessageLayer exists under the SCENE ROOT ---
+	var layer: CanvasLayer
+	if get_tree().root.has_node("MessageLayer"):
+		layer = get_tree().root.get_node("MessageLayer") as CanvasLayer
 	else:
 		layer = CanvasLayer.new()
 		layer.name = "MessageLayer"
-		add_child(layer)
-		print("[Inv_UI] Created MessageLayer dynamically")
+		get_tree().root.add_child(layer)
+		await get_tree().process_frame # ensure registration
+		print("[Inv_UI] Created MessageLayer directly under root")
 
+	# --- ensure MessageLabel exists inside the layer ---
+	var label: Label
 	if layer.has_node("MessageLabel"):
-		label = layer.get_node("MessageLabel")
+		label = layer.get_node("MessageLabel") as Label
 		print("[Inv_UI] Found existing MessageLabel")
 	else:
 		label = Label.new()
 		label.name = "MessageLabel"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.visible = false
 		layer.add_child(label)
+		await get_tree().process_frame
 		print("[Inv_UI] Created MessageLabel dynamically")
 
-	# --- setup label ---
+	# --- setup label visuals ---
 	label.text = text
-	label.visible = true
-	label.modulate = Color(1.0, 0.0, 0.0, 0.0) # start transparent
 	label.z_index = 9999
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.custom_minimum_size = Vector2.ZERO
 
-	# wait one frame so we can measure size correctly
+	# ✅ Keep red color, add black outline
+	var settings := LabelSettings.new()
+	settings.font_color = Color(1.0, 0.0, 0.0) # red
+	settings.outline_size = 4                  # border thickness
+	settings.outline_color = Color.BLACK       # black outline
+	label.label_settings = settings
+
+	# start transparent (red)
+	label.modulate = Color(1.0, 0.0, 0.0, 0.0)
+
+	# --- debug info about hierarchy ---
+	print("[Inv_UI][DEBUG] layer parent:", layer.get_parent())
+	print("[Inv_UI][DEBUG] layer.layer (CanvasLayer index):", layer.layer)
+	print("[Inv_UI][DEBUG] label parent:", label.get_parent())
+
+	# wait one frame for layout stabilization
 	await get_tree().process_frame
 
+	# --- compute layout ---
 	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
 	var min_size: Vector2 = label.get_minimum_size()
 	var width: float = clamp(viewport_size.x * 0.6, 200.0, viewport_size.x - 40.0)
@@ -410,33 +425,34 @@ func show_message(text: String) -> void:
 
 	label.custom_minimum_size = Vector2(width, height)
 	label.position = Vector2(pos_x, bottom_y)
+	label.visible = true
 
-	print("[Inv_UI][DEBUG] viewport:", viewport_size, 
-		"min_size:", min_size, 
-		"label.position:", label.position)
+	print("[Inv_UI][DEBUG] viewport_size:", viewport_size,
+		" min_size:", min_size,
+		" label.position:", label.position)
 
-	# --- handle tween reuse ---
+	# --- handle any existing tween ---
 	if label.has_meta("tween"):
 		var old_tween: Tween = label.get_meta("tween") as Tween
 		if old_tween and old_tween.is_running():
 			old_tween.kill()
-			print("[Inv_UI][DEBUG] Killed old tween for message reset")
-			label.modulate = Color(1.0, 0.0, 0.0, 1.0)
+			print("[Inv_UI][DEBUG] Killed old tween")
+		label.set_meta("tween", null)
 
-	# --- animation ---
+	# --- create animation tween ---
 	var tween: Tween = create_tween()
 	label.set_meta("tween", tween)
 
 	# fade in
 	tween.tween_property(label, "modulate:a", 1.0, 0.18)
 
-	# shake
-	var base_pos := label.position
+	# shake effect
+	var base_pos: Vector2 = label.position
 	for i in range(3):
-		tween.tween_property(label, "position:x", base_pos.x + randf_range(-6, 6), 0.06)
+		tween.tween_property(label, "position:x", base_pos.x + randf_range(-6.0, 6.0), 0.06)
 		tween.tween_property(label, "position:x", base_pos.x, 0.06)
 
-	# hold then fade out
+	# hold, then fade out
 	tween.tween_interval(1.0)
 	tween.tween_property(label, "modulate:a", 0.0, 0.35)
 
@@ -444,8 +460,7 @@ func show_message(text: String) -> void:
 	tween.tween_callback(Callable(label, "hide"))
 	tween.finished.connect(Callable(self, "_on_message_tween_finished"))
 
-	print("[Inv_UI][DEBUG] Tween started for:", text, " at:", label.position)
-
+	print("[Inv_UI][DEBUG] Tween started for:", text, "at position:", label.position)
 
 func _on_message_tween_finished() -> void:
 	if has_node("MessageLayer/MessageLabel"):

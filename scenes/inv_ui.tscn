@@ -25,7 +25,7 @@ script = ExtResource("1_k0oip")
 inv = ExtResource("2_gialv")
 
 [node name="MessageLayer" type="CanvasLayer" parent="."]
-layer = 10
+layer = 100
 
 [node name="MessageLabel" type="Label" parent="MessageLayer"]
 visible = false
@@ -43,7 +43,6 @@ grow_vertical = 2
 theme_override_colors/font_color = Color(1, 0.231373, 0.231373, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
-text = "lalalalalalalalalalala"
 
 [node name="NinePatchRect" type="NinePatchRect" parent="."]
 layout_mode = 0
