@@ -361,80 +361,100 @@ func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:
 	elif from_slot.slot_type == "weapon" and to_slot.item_stack == null:
 		player.has_weapon = false
 
-@onready var message_label: Label = $MessageLabel
+@onready var message_label: Label = $MessageLayer/MessageLabel
 
 func show_message(text: String) -> void:
 	print("[Inv_UI] show_message() called with text:", text)
 
-	# --- find or create the label ---
-	var label: Label
-	if has_node("MessageLabel"):
-		label = $MessageLayer/MessageLabel
-		print("[Inv_UI] message_label exists; reusing")
+	# --- find message layer + label properly ---
+	var layer: CanvasLayer = null
+	var label: Label = null
+
+	if has_node("MessageLayer"):
+		layer = $MessageLayer
+		if layer.has_node("MessageLabel"):
+			label = layer.get_node("MessageLabel")
+
+	else:
+		layer = CanvasLayer.new()
+		layer.name = "MessageLayer"
+		add_child(layer)
+		print("[Inv_UI] Created MessageLayer dynamically")
+
+	if layer.has_node("MessageLabel"):
+		label = layer.get_node("MessageLabel")
+		print("[Inv_UI] Found existing MessageLabel")
 	else:
 		label = Label.new()
 		label.name = "MessageLabel"
-		add_child(label)
-		print("[Inv_UI] message_label created dynamically")
+		layer.add_child(label)
+		print("[Inv_UI] Created MessageLabel dynamically")
 
-	# --- basic setup ---
+	# --- setup label ---
 	label.text = text
 	label.visible = true
-	label.modulate = Color(1.0, 0.0, 0.0, 0.0) # red but transparent initially
+	label.modulate = Color(1.0, 0.0, 0.0, 0.0) # start transparent
 	label.z_index = 9999
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
-	# --- center text ---
-	label.horizontal_alignment = 1  # Center
-	label.vertical_alignment = 1    # Center
-
-	# --- word wrapping ---
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD
-
-	# wait a frame to get correct size
+	# wait one frame so we can measure size correctly
 	await get_tree().process_frame
 
-	# --- positioning ---
 	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var min_size: Vector2 = label.get_minimum_size()
 	var width: float = clamp(viewport_size.x * 0.6, 200.0, viewport_size.x - 40.0)
-	var height: float = 28.0
-	label.set_custom_minimum_size(Vector2(width, height))
-
-	var bottom_y: float = viewport_size.y - 80.0
+	var height: float = max(min_size.y, 22.0)
 	var pos_x: float = (viewport_size.x - width) * 0.5
+	var bottom_y: float = viewport_size.y - 80.0
+
+	label.custom_minimum_size = Vector2(width, height)
 	label.position = Vector2(pos_x, bottom_y)
 
-	print("[Inv_UI][DEBUG] viewport:", viewport_size, "label.pos:", label.position, "size:", Vector2(width, height))
+	print("[Inv_UI][DEBUG] viewport:", viewport_size, 
+		"min_size:", min_size, 
+		"label.position:", label.position)
 
-	# --- cancel any previous tween ---
+	# --- handle tween reuse ---
 	if label.has_meta("tween"):
-		var old_tween := label.get_meta("tween") as Tween
+		var old_tween: Tween = label.get_meta("tween") as Tween
 		if old_tween and old_tween.is_running():
 			old_tween.kill()
-			print("[Inv_UI][DEBUG] killed old tween")
+			print("[Inv_UI][DEBUG] Killed old tween for message reset")
+			label.modulate = Color(1.0, 0.0, 0.0, 1.0)
 
-	# --- animations ---
-	var base_pos: Vector2 = label.position
+	# --- animation ---
 	var tween: Tween = create_tween()
 	label.set_meta("tween", tween)
 
+	# fade in
 	tween.tween_property(label, "modulate:a", 1.0, 0.18)
+
+	# shake
+	var base_pos := label.position
 	for i in range(3):
-		var shake_x: float = base_pos.x + randf_range(-6.0, 6.0)
-		tween.tween_property(label, "position:x", shake_x, 0.06)
+		tween.tween_property(label, "position:x", base_pos.x + randf_range(-6, 6), 0.06)
 		tween.tween_property(label, "position:x", base_pos.x, 0.06)
 
-	tween.tween_interval(0.9)
+	# hold then fade out
+	tween.tween_interval(1.0)
 	tween.tween_property(label, "modulate:a", 0.0, 0.35)
+
+	# cleanup
+	tween.tween_callback(Callable(label, "hide"))
 	tween.finished.connect(Callable(self, "_on_message_tween_finished"))
-	print("[Inv_UI][DEBUG] message_label tween started for:", text)
+
+	print("[Inv_UI][DEBUG] Tween started for:", text, " at:", label.position)
+
 
 func _on_message_tween_finished() -> void:
-	if has_node("MessageLabel"):
-		var lbl: Label = $MessageLabel
+	if has_node("MessageLayer/MessageLabel"):
+		var lbl: Label = $MessageLayer/MessageLabel
 		if lbl and lbl.has_meta("tween"):
 			lbl.set_meta("tween", null)
-		# ensure hidden state
 		lbl.visible = false
+		lbl.modulate = Color(1.0, 0.0, 0.0, 0.0)
+		print("[Inv_UI][DEBUG] MessageLabel hidden/reset")
 
 func _show_message_deferred(text: String) -> void:
 	if not is_instance_valid(message_label):
