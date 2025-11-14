@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=4 uid="uid://danlo4u14ys00"]
+[gd_scene load_steps=12 format=4 uid="uid://danlo4u14ys00"]
 
 [ext_resource type="PackedScene" uid="uid://dwgo1s0vppabn" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://bm4c7tmq6qur6" path="res://sprites/road_tileset1.kra" id="2_lbp6r"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://bbfq50yyk3pwu" path="res://scenes/chest.tscn" id="5_ixe8f"]
 [ext_resource type="Script" path="res://scripts/inventory_entry.gd" id="5_l7sjb"]
 [ext_resource type="Resource" uid="uid://chg8qlokgknrt" path="res://resources/pitchfork_res.tres" id="6_jhs7l"]
+[ext_resource type="PackedScene" uid="uid://bqemudqhp687a" path="res://scenes/spawn_point.tscn" id="8_067sx"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_osrq6"]
 texture = ExtResource("2_lbp6r")
@@ -86,3 +87,6 @@ slots = Array[ExtResource("5_l7sjb")]([SubResource("Resource_ypyvp")])
 [node name="Resources" type="Node2D" parent="layers"]
 top_level = true
 y_sort_enabled = true
+
+[node name="SpawnPoint" parent="." instance=ExtResource("8_067sx")]
+position = Vector2(48, 0)
