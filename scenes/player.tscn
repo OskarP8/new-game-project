@@ -543,7 +543,7 @@ shape = SubResource("CapsuleShape2D_o42l5")
 z_as_relative = false
 position = Vector2(0, 3)
 sprite_frames = SubResource("SpriteFrames_7k18h")
-animation = &"attack_up_right_weapon"
+animation = &"attack_down_right_weapon"
 offset = Vector2(0, -16)
 
 [node name="Camera2D" type="Camera2D" parent="Graphics/Body"]
