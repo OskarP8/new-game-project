@@ -1,24 +1,23 @@
-# Enemy.gd
 extends CharacterBody2D
 class_name Enemy
 
 # --- Stats ---
 @export var max_hp: int = 10
 @export var speed: float = 60.0
-@export var notice_radius: float = 120.0   # short radius for first notice
-@export var chase_radius: float = 220.0    # larger radius used while chasing
+@export var notice_radius: float = 120.0
+@export var chase_radius: float = 220.0
 @export var attack_range: float = 24.0
 @export var attack_damage: int = 10
 @export var attack_cooldown: float = 1.0
 @export var knockback_strength: float = 120.0
-@export var detection_rays: int = 16       # number of rays to cast around
+@export var detection_rays: int = 16
 @export var detection_interval: float = 0.12
 
 # Scenes / resources
-@export var loot_table: Array = [] # array of PackedScene or InvItem resources for drops
+@export var loot_table: Array = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
 
-# Nodes
+# Nodes (ensure these paths exist in the enemy scene)
 @onready var agent: NavigationAgent2D = $Agent
 @onready var sprite: AnimatedSprite2D = $Sprite
 
@@ -32,29 +31,46 @@ enum {
 	FLEE,
 	DEAD
 }
-var state = IDLE
+var state: int = IDLE
 var hp: int
 var player: Node = null
 var last_seen_pos: Vector2 = Vector2.ZERO
+
+# timers / motion
 var detection_timer: float = 0.0
 var attack_timer: float = 0.0
 var search_timer: float = 0.0
 var search_duration: float = 2.0
 var velocity_vec: Vector2 = Vector2.ZERO
 
-# Signals for global effects
+# sight smoothing / memory
+var time_since_seen: float = 0.0
+var lose_sight_delay: float = 0.3
+var frames_seen: int = 0
+var frames_not_seen: int = 0
+var frames_required: int = 2
+
+# raycast eye offset
+@export var eye_offset: Vector2 = Vector2(0, -8)
+
+# Signals
 signal enemy_hit_player(damage)
 signal enemy_damaged(amount)
 signal enemy_died()
 
-# --- debugging helpers ---
+# Debug
+var _debug_enabled: bool = false
+
+# ------------------------------
+# Helpers: animation / state
+# ------------------------------
 func _set_state(new_state: int) -> void:
 	if state == new_state:
 		return
-	var old = state
+	var old_state: int = state
 	state = new_state
-	print("[Enemy] state:", old, "->", new_state, " at pos:", global_position)
-	# play animation for state if available
+	if _debug_enabled:
+		print("[Enemy] state:", old_state, "->", new_state, " pos:", global_position)
 	match state:
 		IDLE:
 			_play_anim_if_exists("idle")
@@ -76,29 +92,47 @@ func _play_anim_if_exists(name: String) -> void:
 		return
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation(name):
 		sprite.play(name)
-		print("[Enemy] playing anim:", name)
+		if _debug_enabled:
+			print("[Enemy] playing anim:", name)
 	else:
-		# fallback debug: print current sprite state
-		print("[Enemy] anim not found:", name, " available:", sprite.sprite_frames.get_animation_names() if sprite and sprite.sprite_frames else "none")
+		if _debug_enabled:
+			print("[Enemy] anim not found:", name, " available:", sprite.sprite_frames.get_animation_names() if sprite and sprite.sprite_frames else "none")
 
+# ------------------------------
+# Lifecycle
+# ------------------------------
 func _ready() -> void:
 	hp = max_hp
-	player = get_tree().get_root().find_child("Player", true, false)
+
+	# Find player by group (robust)
+	var players: Array = get_tree().get_nodes_in_group("Player")
+	if players.size() > 0:
+		player = players[0]
+	else:
+		player = null
+
+	# nav agent hookup (safe)
 	if agent:
-		agent.velocity_computed.connect(Callable(self, "_on_agent_velocity"))
+		var callable := Callable(self, "_on_agent_velocity")
+		if agent.velocity_computed.is_connected(callable):
+			agent.velocity_computed.disconnect(callable)
+		agent.velocity_computed.connect(callable)
 		agent.target_desired_distance = 4.0
-	# start in idle animation if possible
+
+	# start
 	_play_anim_if_exists("idle")
 	_set_state(IDLE)
 	set_physics_process(true)
-	print("[Enemy] ready — hp:", hp, " player found:", player != null)
+	if _debug_enabled:
+		print("[Enemy] ready — hp:", hp, "player found:", player != null)
 
+# ------------------------------
+# Physics loop
+# ------------------------------
 func _physics_process(delta: float) -> void:
-	# timers
 	detection_timer = max(0.0, detection_timer - delta)
 	attack_timer = max(0.0, attack_timer - delta)
 
-	# state machine
 	match state:
 		IDLE:
 			_process_idle(delta)
@@ -109,38 +143,32 @@ func _physics_process(delta: float) -> void:
 		SEARCH:
 			_process_search(delta)
 		ATTACK:
-			# Attack is triggered from chase; maintain cooldown
-			pass
+			_process_attack_state(delta)
 		FLEE:
 			_process_flee(delta)
 		DEAD:
 			pass
 
-	# move using velocity_vec set by agent callback
-	if velocity_vec.length_squared() > 0:
+	# apply movement
+	if velocity_vec.length_squared() > 0.0001:
 		velocity = velocity_vec
 		move_and_slide()
 	else:
 		velocity = Vector2.ZERO
 
-	# Debug each frame: print state + current animation occasionally (throttled would be better)
-	# (keep this reasonably quiet in release)
-	# print("[Enemy][DEBUG] state:", state, "vel:", velocity_vec, "anim:", sprite.animation if sprite else "none")
-
 # ------------------------------
-# State machines
+# State behaviours
 # ------------------------------
 func _process_idle(delta: float) -> void:
-	# periodically scan for player
 	if _scan_for_player(notice_radius):
 		_set_state(ALERT)
 		return
-	# idle wandering could be placed here
 
 func _process_alert(delta: float) -> void:
-	# once alerted, immediately transition to chase
 	if player:
 		last_seen_pos = player.global_position
+		if agent:
+			agent.target_position = last_seen_pos
 		_set_state(CHASE)
 
 func _process_chase(delta: float) -> void:
@@ -148,55 +176,96 @@ func _process_chase(delta: float) -> void:
 		_set_state(IDLE)
 		return
 
-	if _scan_for_player(chase_radius):
-		# update last seen and set agent to the player's position
-		last_seen_pos = player.global_position
-		agent.target_position = player.global_position
-		print("[Enemy] chase: target_position set to player:", agent.target_position)
+	var seen: bool = _scan_for_player(chase_radius)
+	if seen:
+		frames_seen += 1
+		frames_not_seen = 0
 	else:
-		# lost sight — switch to SEARCH
-		_set_state(SEARCH)
-		search_timer = search_duration
-		agent.target_position = last_seen_pos
-		print("[Enemy] lost sight → search target:", last_seen_pos)
-		return
+		frames_seen = 0
+		frames_not_seen += 1
 
-	var dist_to_player = global_position.distance_to(player.global_position)
+	if frames_seen >= frames_required:
+		last_seen_pos = player.global_position
+		if agent:
+			agent.target_position = last_seen_pos
+		time_since_seen = 0.0
+	else:
+		time_since_seen += delta
+		if frames_not_seen >= frames_required or time_since_seen >= lose_sight_delay:
+			_set_state(SEARCH)
+			search_timer = search_duration
+			if agent:
+				agent.target_position = last_seen_pos
+			if _debug_enabled:
+				print("[Enemy] lost sight → search target:", last_seen_pos)
+			return
+
+	var dist_to_player: float = global_position.distance_to(player.global_position)
 	if dist_to_player <= attack_range and attack_timer <= 0.0:
 		_set_state(ATTACK)
-		print("[Enemy] in attack range — performing attack")
-		_perform_attack()
 		return
 
+	_update_agent_movement()
+
 func _process_search(delta: float) -> void:
-	# move to last seen pos, then look around for a bit
 	search_timer -= delta
-	# if we can re-see the player while searching, resume chase
 	if _scan_for_player(chase_radius):
 		_set_state(CHASE)
 		return
+
+	_update_agent_movement()
+
 	if search_timer <= 0.0:
-		# give up and return to idle
 		_set_state(IDLE)
-		agent.target_position = global_position
+		if agent:
+			agent.target_position = global_position
+
+func _process_attack_state(delta: float) -> void:
+	if attack_timer <= 0.0:
+		_perform_attack()
+		return
+	if sprite and player:
+		sprite.flip_h = player.global_position.x < global_position.x
 
 func _process_flee(delta: float) -> void:
-	# run away from player
 	if not player:
 		_set_state(IDLE)
 		return
-	var away_dir = (global_position - player.global_position)
+	var away_dir: Vector2 = (global_position - player.global_position)
 	if away_dir.length() == 0:
 		away_dir = Vector2.RIGHT
-	var flee_target = global_position + away_dir.normalized() * 120.0
-	agent.target_position = flee_target
-	print("[Enemy] flee: target_position set to", flee_target)
+	var flee_target: Vector2 = global_position + away_dir.normalized() * 120.0
+	if agent:
+		agent.target_position = flee_target
+	_update_agent_movement()
 
 # ------------------------------
-# Detection helpers (raycasts)
+# Agent movement helper
+# ------------------------------
+func _update_agent_movement() -> void:
+	if not agent:
+		velocity_vec = Vector2.ZERO
+		return
+
+	if agent.is_navigation_finished():
+		velocity_vec = Vector2.ZERO
+		return
+
+	var next_pos: Vector2 = agent.get_next_path_position() if agent.has_method("get_next_path_position") else agent.get_next_location()
+	if next_pos == Vector2.ZERO and global_position.distance_to(agent.target_position) <= agent.target_desired_distance:
+		velocity_vec = Vector2.ZERO
+		return
+
+	var dir: Vector2 = (next_pos - global_position)
+	if dir.length() < 1.0:
+		velocity_vec = Vector2.ZERO
+		return
+	velocity_vec = dir.normalized() * speed
+
+# ------------------------------
+# Detection (multi-ray cone, offset origin)
 # ------------------------------
 func _scan_for_player(radius: float) -> bool:
-	# rate-limit
 	if detection_timer > 0.0:
 		return false
 	detection_timer = detection_interval
@@ -204,37 +273,43 @@ func _scan_for_player(radius: float) -> bool:
 	if player == null:
 		return false
 
-	var origin: Vector2 = global_position
+	var origin: Vector2 = global_position + eye_offset
 	var player_pos: Vector2 = player.global_position
-
-	# distance check first
-	if origin.distance_to(player_pos) > radius:
+	var to_player: Vector2 = player_pos - origin
+	var dist_to_player: float = to_player.length()
+	if dist_to_player > radius:
 		return false
 
-	# Typed raycast
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(origin, player_pos)
-	query.exclude = [self]
-	query.collide_with_bodies = true
-	query.collide_with_areas = true
 
-	var res: Dictionary = space.intersect_ray(query)
-	if res.is_empty():
-		return false
+	var angle_to_player: float = to_player.angle()
+	var half_spread: float = deg_to_rad(30.0)
+	var ray_count: int = max(detection_rays, 1)
 
-	# The collider may be any type, so we type it as Object
-	var collider: Object = res.get("collider", null)
-	if collider == null:
-		return false
+	for i: int in range(ray_count):
+		var t: float = float(i) / float(max(ray_count - 1, 1))
+		var angle: float = lerp(angle_to_player - half_spread, angle_to_player + half_spread, t)
+		var ray_end: Vector2 = origin + Vector2.RIGHT.rotated(angle) * radius
 
-	# Walk up to find parent in Player group
-	var node: Node = collider as Node
-	while node != null and not node.is_in_group("Player"):
-		node = node.get_parent()
+		var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(origin, ray_end)
+		var exclude_list: Array = [self]
+		for child in get_children():
+			if child is CollisionShape2D or child is CollisionObject2D:
+				exclude_list.append(child)
+		query.exclude = exclude_list
+		query.collide_with_bodies = true
+		query.collide_with_areas = true
 
-	# if we found the Player → true
-	if node != null and node.is_in_group("Player"):
-		return true
+		var res: Dictionary = space.intersect_ray(query)
+		if res.is_empty():
+			continue
+
+		var collider_obj: Object = res.get("collider", null)
+		if collider_obj == null:
+			continue
+		var collider_node: Node = collider_obj as Node
+		if collider_node and collider_node.is_in_group("Player"):
+			return true
 
 	return false
 
@@ -242,55 +317,49 @@ func _scan_for_player(radius: float) -> bool:
 # Agent velocity callback
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
-	# apply agent velocity, but clamp to speed
 	if state in [CHASE, SEARCH, FLEE]:
 		velocity_vec = safe_velocity.limit_length(speed)
 	else:
 		velocity_vec = Vector2.ZERO
-	# debug
-	# print("[Enemy] agent velocity:", velocity_vec)
 
 # ------------------------------
-# Attack (override in ranged/melee subclasses)
+# Attack
 # ------------------------------
 func _perform_attack() -> void:
-	# generic melee: apply damage if close enough, then cooldown
 	if not player:
 		_set_state(IDLE)
 		return
 
-	# Face player — flip sprite horizontally if needed
 	if sprite:
 		sprite.flip_h = player.global_position.x < global_position.x
 
-	# deal damage to player (emit a signal so camera/UI can react)
-	var dmg := attack_damage
-	print("[Enemy] dealing damage:", dmg)
+	var dmg: int = attack_damage
+	if _debug_enabled:
+		print("[Enemy] dealing damage:", dmg)
 	emit_signal("enemy_hit_player", dmg)
-	# if player has method to receive damage:
 	if player.has_method("apply_damage"):
 		player.apply_damage(dmg)
-	# knockback
+
 	_apply_knockback_to(player, knockback_strength)
+
 	attack_timer = attack_cooldown
-	# after attack, resume chase
 	_set_state(CHASE)
 
 # ------------------------------
 # Damage / death
 # ------------------------------
-func take_damage(amount: int, source_pos: Vector2=Vector2.ZERO, knockback_mult: float = 1.0) -> void:
+func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult: float = 1.0) -> void:
 	hp -= amount
-	print("[Enemy] took damage:", amount, "hp now:", hp)
+	if _debug_enabled:
+		print("[Enemy] took damage:", amount, "hp now:", hp)
 	emit_signal("enemy_damaged", amount)
 	if hp <= 0 and state != DEAD:
 		_die()
 	else:
-		# small stun/knockback
 		_apply_knockback_from(source_pos, knockback_strength * knockback_mult)
 
 func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
-	var dir = (global_position - source_pos)
+	var dir: Vector2 = (global_position - source_pos)
 	if dir.length() == 0:
 		dir = Vector2.RIGHT
 	velocity_vec = dir.normalized() * strength
@@ -305,22 +374,19 @@ func _apply_knockback_to(target: Node, strength: float) -> void:
 
 func _die() -> void:
 	_set_state(DEAD)
-	# play death animation if available
 	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("death"):
 		sprite.play("death")
+	if _debug_enabled:
 		print("[Enemy] playing death animation")
-	# spawn loot
 	_spawn_loot()
 	emit_signal("enemy_died")
 	queue_free()
 
 func _spawn_loot() -> void:
-	# pick random from loot_table
 	if loot_table.size() == 0:
 		return
-	var pick = randi() % loot_table.size()
+	var pick: int = randi() % loot_table.size()
 	var item_res = loot_table[pick]
-	# spawn world item if possible
 	if world_item_scene:
 		var world_item = world_item_scene.instantiate()
 		if "item" in world_item:
@@ -328,6 +394,8 @@ func _spawn_loot() -> void:
 			world_item.quantity = 1
 		world_item.global_position = global_position
 		get_tree().current_scene.add_child(world_item)
-		print("[Enemy] spawned loot at", global_position, "item:", item_res)
+		if _debug_enabled:
+			print("[Enemy] spawned loot at", global_position, "item:", item_res)
 	else:
-		print("[Enemy] dropped:", item_res)
+		if _debug_enabled:
+			print("[Enemy] dropped:", item_res)
