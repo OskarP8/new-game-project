@@ -44,6 +44,7 @@ var weapon_grip_node: Node2D = null
 var weapon_holder_base_scale := Vector2.ONE
 var weapon_root_base_pos := Vector2.ZERO
 var nearby_item: WorldItem = null
+var knockback_force: Vector2 = Vector2.ZERO
 # ----------------------
 # NODES
 # ----------------------
@@ -87,6 +88,13 @@ func _ready() -> void:
 func _physics_process(delta):
 	if not attacking:
 		player_movement(delta)
+
+	# --- APPLY KNOCKBACK HERE ---
+	velocity += knockback_force
+	knockback_force = lerp(knockback_force, Vector2.ZERO, 0.2)
+
+	# --- MOVE LAST ---
+	move_and_slide()
 
 	_update_last_dir()
 	update_animation()
@@ -137,21 +145,20 @@ func player_movement(delta) -> void:
 		elif input.y > 0:
 			vert_dir = "down"
 
-		# update horizontal and facing (movement sets facing)
+		# update horizontal and facing
 		if input.x < 0:
 			hor_dir = "left"
 			facing_left = true
 		elif input.x > 0:
 			hor_dir = "right"
 			facing_left = false
+
 	else:
 		# friction stop
 		if velocity.length() > (FRICTION * delta):
 			velocity -= velocity.normalized() * (FRICTION * delta)
 		else:
 			velocity = Vector2.ZERO
-
-	move_and_slide()
 
 # ----------------------
 # HELPERS
@@ -774,3 +781,5 @@ func collect_world_item(world_item) -> void:
 			inv_ui.show_message("Inventory Full")
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
+func external_knockback(force: Vector2) -> void:
+	knockback_force = force

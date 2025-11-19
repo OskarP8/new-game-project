@@ -59,7 +59,7 @@ signal enemy_damaged(amount)
 signal enemy_died()
 
 # Debug
-var _debug_enabled: bool = false
+var _debug_enabled: bool = true
 
 # ------------------------------
 # Helpers: animation / state
@@ -174,6 +174,8 @@ func _process_alert(delta: float) -> void:
 func _process_chase(delta: float) -> void:
 	if not player:
 		_set_state(IDLE)
+		if _debug_enabled:
+			print("[Enemy DEBUG] Giving up search, returning to IDLE")
 		return
 
 	var seen: bool = _scan_for_player(chase_radius)
@@ -193,11 +195,11 @@ func _process_chase(delta: float) -> void:
 		time_since_seen += delta
 		if frames_not_seen >= frames_required or time_since_seen >= lose_sight_delay:
 			_set_state(SEARCH)
+			if _debug_enabled:
+				print("[Enemy DEBUG] Lost sight of player, switching to SEARCH. Last seen:", last_seen_pos)
 			search_timer = search_duration
 			if agent:
 				agent.target_position = last_seen_pos
-			if _debug_enabled:
-				print("[Enemy] lost sight → search target:", last_seen_pos)
 			return
 
 	var dist_to_player: float = global_position.distance_to(player.global_position)
@@ -206,6 +208,9 @@ func _process_chase(delta: float) -> void:
 		return
 
 	_update_agent_movement()
+	if _debug_enabled:
+		print("[Enemy DEBUG] Following player -> target_position:", agent.target_position)
+
 
 func _process_search(delta: float) -> void:
 	search_timer -= delta
@@ -243,24 +248,61 @@ func _process_flee(delta: float) -> void:
 # Agent movement helper
 # ------------------------------
 func _update_agent_movement() -> void:
+	# no agent -> no movement
 	if not agent:
 		velocity_vec = Vector2.ZERO
+		if _debug_enabled:
+			print("[Enemy DEBUG] No agent present")
 		return
 
+	# if navigation finished -> stop
 	if agent.is_navigation_finished():
 		velocity_vec = Vector2.ZERO
+		if _debug_enabled:
+			print("[Enemy DEBUG] Agent navigation finished; at target")
 		return
 
-	var next_pos: Vector2 = agent.get_next_path_position() if agent.has_method("get_next_path_position") else agent.get_next_location()
-	if next_pos == Vector2.ZERO and global_position.distance_to(agent.target_position) <= agent.target_desired_distance:
+	# Try a couple of ways to get a sensible "next position"
+	var next_pos: Vector2 = Vector2.ZERO
+
+	# 1) preferred: get_next_path_position (if available)
+	if agent.has_method("get_next_path_position"):
+		next_pos = agent.get_next_path_position()
+
+	# 2) fallback: get_next_location (older/newer API differences)
+	if next_pos == Vector2.ZERO and agent.has_method("get_next_location"):
+		next_pos = agent.get_next_location()
+
+	# 3) fallback: if agent has a target_position, use that as last resort
+	if next_pos == Vector2.ZERO and agent.target_position != Vector2.ZERO:
+		# if we're already very close to target_position, treat as finished
+		if global_position.distance_to(agent.target_position) <= agent.target_desired_distance:
+			velocity_vec = Vector2.ZERO
+			if _debug_enabled:
+				print("[Enemy DEBUG] Next_pos fallback is target_position but we're already at target; stopping")
+			return
+		next_pos = agent.target_position
+
+	# 4) still nothing: give up
+	if next_pos == Vector2.ZERO:
 		velocity_vec = Vector2.ZERO
+		if _debug_enabled:
+			print("[Enemy DEBUG] Could not resolve next_pos from agent; next_pos==Vector2.ZERO, target_position:", agent.target_position)
 		return
 
+	# compute direction and velocity
 	var dir: Vector2 = (next_pos - global_position)
 	if dir.length() < 1.0:
 		velocity_vec = Vector2.ZERO
+		if _debug_enabled:
+			print("[Enemy DEBUG] next_pos too close to move towards (dist:", dir.length(), ")")
 		return
+
 	velocity_vec = dir.normalized() * speed
+
+	# debug info
+	if _debug_enabled:
+		print("[Enemy DEBUG] next_pos:", next_pos, " target:", agent.target_position, " nav_finished:", agent.is_navigation_finished(), " velocity_vec:", velocity_vec)
 
 # ------------------------------
 # Detection (multi-ray cone, offset origin)
@@ -309,6 +351,8 @@ func _scan_for_player(radius: float) -> bool:
 			continue
 		var collider_node: Node = collider_obj as Node
 		if collider_node and collider_node.is_in_group("Player"):
+			if _debug_enabled:
+				print("[Enemy DEBUG] Player detected at:", player.global_position, " by enemy at:", global_position)
 			return true
 
 	return false
@@ -335,7 +379,7 @@ func _perform_attack() -> void:
 
 	var dmg: int = attack_damage
 	if _debug_enabled:
-		print("[Enemy] dealing damage:", dmg)
+		print("[Enemy DEBUG] Attacking player for", dmg, "damage")
 	emit_signal("enemy_hit_player", dmg)
 	if player.has_method("apply_damage"):
 		player.apply_damage(dmg)
@@ -367,10 +411,18 @@ func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 func _apply_knockback_to(target: Node, strength: float) -> void:
 	if not target:
 		return
-	if target.has_method("apply_knockback"):
-		target.apply_knockback((target.global_position - global_position).normalized() * strength)
-	elif target is CharacterBody2D:
-		target.velocity = (target.global_position - global_position).normalized() * strength
+
+	var force: Vector2 = (target.global_position - global_position).normalized() * strength
+
+	# Preferred knockback if player implements this
+	if target.has_method("external_knockback"):
+		target.external_knockback(force)
+		return
+
+	# If target is enemy-type CharacterBody2D, not player
+	if target is CharacterBody2D:
+		# DO NOT override player's velocity – this only applies to NPC-type bodies
+		target.velocity = force
 
 func _die() -> void:
 	_set_state(DEAD)
