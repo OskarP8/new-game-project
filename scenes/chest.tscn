@@ -98,7 +98,7 @@ _data = {
 
 [node name="Chest" type="StaticBody2D"]
 y_sort_enabled = true
-collision_layer = 3
+collision_layer = 18
 collision_mask = 0
 script = ExtResource("1_lo1v6")
 slots = Array[ExtResource("2_4iuki")]([SubResource("Resource_fuo5p")])
