@@ -14,7 +14,7 @@ class_name SpawnPoint
 # -----------------------------
 # INTERNAL
 # -----------------------------
-@onready var notifier: VisibleOnScreenNotifier2D = $VisibleOnScreenNotifier2D
+@onready var notifier: VisibleOnScreenNotifier2D = $Visibility
 var active_enemies: Array[Node] = []
 var respawn_timer: float = 0.0
 

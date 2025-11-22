@@ -46,10 +46,10 @@ script = ExtResource("5_l7sjb")
 item = ExtResource("6_jhs7l")
 quantity = 1
 
-[sub_resource type="NavigationPolygon" id="NavigationPolygon_wxsbn"]
-vertices = PackedVector2Array(154.938, 71.0938, -150.781, 73.8984, -147.203, -101, 154.047, -101)
+[sub_resource type="NavigationPolygon" id="NavigationPolygon_a67v5"]
+vertices = PackedVector2Array(127, -102.063, 127, 79.1172, -163.039, 82.8594, -163.953, -103.93)
 polygons = Array[PackedInt32Array]([PackedInt32Array(0, 1, 2, 3)])
-outlines = Array[PackedVector2Array]([PackedVector2Array(-157, -111, 34.7075, -111, 164, -111, 165, 81, -161, 84)])
+outlines = Array[PackedVector2Array]([PackedVector2Array(-174, -114, 137, -112, 137, 89, -173, 93)])
 
 [node name="world" type="Node2D"]
 y_sort_enabled = true
@@ -101,4 +101,5 @@ enemy_weights = Array[int]([10])
 max_active = 1
 
 [node name="NavigationRegion2D" type="NavigationRegion2D" parent="."]
-navigation_polygon = SubResource("NavigationPolygon_wxsbn")
+scale = Vector2(0.998269, 1.01916)
+navigation_polygon = SubResource("NavigationPolygon_a67v5")

@@ -43,12 +43,9 @@ var search_timer: float = 0.0
 var search_duration: float = 2.0
 var velocity_vec: Vector2 = Vector2.ZERO
 
-# sight smoothing / memory
+# sight smoothing / memory (kept minor for losing sight)
 var time_since_seen: float = 0.0
 var lose_sight_delay: float = 0.8
-var frames_required: int = 6
-var frames_seen: int = 0
-var frames_not_seen: int = 0
 
 # raycast eye offset
 @export var eye_offset: Vector2 = Vector2(0, -8)
@@ -104,23 +101,20 @@ func _play_anim_if_exists(name: String) -> void:
 func _ready() -> void:
 	hp = max_hp
 
-	# Find player
+	# Find player by group (robust)
 	var players: Array = get_tree().get_nodes_in_group("Player")
 	if players.size() > 0:
 		player = players[0]
 	else:
 		player = null
 
-	# ---- ADD THIS BLOCK ----
+	# Agent tuning (do not assign navigation_map to the agent; engine manages that)
 	if agent:
-		# Force the agent to use the correct navigation map
-		var nav_map = get_world_2d().navigation_map
-		agent.navigation_map = nav_map
+		# reasonable tolerances so it doesn't constantly consider itself "finished"
 		agent.path_desired_distance = 2.0
 		agent.target_desired_distance = 2.0
-	# ------------------------
 
-	# nav agent hookup
+	# connect velocity callback (safe)
 	if agent:
 		var callable := Callable(self, "_on_agent_velocity")
 		if agent.velocity_computed.is_connected(callable):
@@ -130,6 +124,8 @@ func _ready() -> void:
 	_play_anim_if_exists("idle")
 	_set_state(IDLE)
 	set_physics_process(true)
+	if _debug_enabled:
+		print("[Enemy] ready — hp:", hp, "player found:", player != null)
 
 # ------------------------------
 # Physics loop
@@ -137,8 +133,11 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	detection_timer = max(0.0, detection_timer - delta)
 	attack_timer = max(0.0, attack_timer - delta)
+
+	# debug - show reachable once per frame if you want (can be noisy)
 	if agent and _debug_enabled:
-		print("agent.is_target_reachable(): ", agent.is_target_reachable())
+		# is_target_reachable() is cheap; use sparingly if you're seeing spam
+		pass
 
 	match state:
 		IDLE:
@@ -179,7 +178,7 @@ func _process_alert(delta: float) -> void:
 		_set_state(CHASE)
 
 # ------------------------------
-# Chase state (replace your existing _process_chase)
+# Chase: update the agent target every frame to player's position
 # ------------------------------
 func _process_chase(delta: float) -> void:
 	if not player:
@@ -187,34 +186,28 @@ func _process_chase(delta: float) -> void:
 		if _debug_enabled:
 			print("[Enemy DEBUG] No player found -> IDLE")
 		return
+
+	# Always update agent.target_position to the player's current global position every frame
+	# This ensures the agent path is recalculated continuously and prevents getting stuck on an old path.
+	last_seen_pos = player.global_position
 	if agent:
-		print("Reachable:", agent.is_target_reachable(), " Has Path:", agent.is_navigation_finished())
-	# scan for player and maintain smoothing
+		agent.target_position = last_seen_pos
+
+	# Try to detect player (so we can switch to SEARCH if the player is actually occluded for a while)
+	# NOTE: detection is only used to decide losing sight; movement always updates to player's position above.
 	var seen: bool = _scan_for_player(chase_radius)
 	if seen:
-		frames_seen += 1
-		frames_not_seen = 0
-	else:
-		frames_seen = 0
-		frames_not_seen += 1
-
-	# When we're confident we see the player, update last_seen and keep agent targetting the player
-	if frames_seen >= frames_required:
-		last_seen_pos = player.global_position
-		if agent:
-			# set the agent target every frame while seen (keeps chasing moving player)
-			agent.target_position = last_seen_pos
 		time_since_seen = 0.0
 	else:
-		# count up to decide we lost sight
 		time_since_seen += delta
-		if frames_not_seen >= frames_required or time_since_seen >= lose_sight_delay:
+		if time_since_seen >= lose_sight_delay:
+			# lost sight, start searching the last known position
 			_set_state(SEARCH)
 			search_timer = search_duration
 			if agent:
 				agent.target_position = last_seen_pos
 			if _debug_enabled:
-				print("[Enemy DEBUG] Lost sight → SEARCH. Last seen:", last_seen_pos)
+				print("[Enemy DEBUG] Lost sight -> SEARCH. Last seen:", last_seen_pos)
 			return
 
 	# Attack if close enough
@@ -225,8 +218,11 @@ func _process_chase(delta: float) -> void:
 
 	# Move using navigation / fallback towards agent.target_position
 	_update_agent_movement()
+
 	if _debug_enabled:
-		print("[Enemy DEBUG] Following player -> agent.target_position:", agent.target_position, " nav_finished:", agent.is_navigation_finished())
+		if agent:
+			print("[Enemy DEBUG] Following player -> agent.target_position:", agent.target_position,
+				" nav_finished:", agent.is_navigation_finished())
 
 func _process_search(delta: float) -> void:
 	search_timer -= delta
@@ -243,7 +239,7 @@ func _process_search(delta: float) -> void:
 	_update_agent_movement()
 
 	# If we reached the last known position, wait a bit then return to IDLE
-	if agent.is_navigation_finished():
+	if agent and agent.is_navigation_finished():
 		if _debug_enabled:
 			print("[Enemy DEBUG] Search reached last known pos. Timer:", search_timer)
 		if search_timer <= 0.0:
@@ -272,9 +268,6 @@ func _process_flee(delta: float) -> void:
 # ------------------------------
 # Agent movement helper
 # ------------------------------
-# ------------------------------
-# Agent movement helper (replace your existing _update_agent_movement)
-# ------------------------------
 func _update_agent_movement() -> void:
 	# no agent -> no movement
 	if not agent:
@@ -283,12 +276,11 @@ func _update_agent_movement() -> void:
 			print("[Enemy DEBUG] No agent present")
 		return
 
-	# quick guard: if nav thinks it's finished, we may still want to walk directly to target (small tolerance)
+	# If nav thinks it's finished, still check distance to true target
 	if agent.is_navigation_finished():
-		# agent thinks it's at the destination; ensure the real distance is within desired tolerance
 		var dist_to_target = global_position.distance_to(agent.target_position)
 		if dist_to_target > agent.target_desired_distance + 2.0:
-			# treat as not finished and head straight for target_position
+			# head directly to the target_position
 			if _debug_enabled:
 				print("[Enemy DEBUG] Agent said finished but distance is", dist_to_target, "-> heading straight to target_position")
 			var dir_direct = (agent.target_position - global_position)
@@ -299,24 +291,21 @@ func _update_agent_movement() -> void:
 				print("[Enemy DEBUG] Agent navigation finished; at target (dist:", dist_to_target, ")")
 		return
 
-	# Try to get a usable next path position (get_next_location preferred fallback)
+	# Try to get a usable next path position
 	var next_pos: Vector2 = Vector2.ZERO
 	if agent.has_method("get_next_path_position"):
 		next_pos = agent.get_next_path_position()
-	# prefer get_next_location if available or if above returned Vector2.ZERO
 	if (next_pos == Vector2.ZERO) and agent.has_method("get_next_location"):
 		next_pos = agent.get_next_location()
 
 	# fallback to target_position if we still didn't get a next node
 	if next_pos == Vector2.ZERO and agent.target_position != Vector2.ZERO:
-		# if we are already close to the target position then stop
 		var dist_to_target = global_position.distance_to(agent.target_position)
 		if dist_to_target <= agent.target_desired_distance:
 			velocity_vec = Vector2.ZERO
 			if _debug_enabled:
 				print("[Enemy DEBUG] Next_pos fallback is target_position but we're already within desired distance (", dist_to_target, ")")
 			return
-		# otherwise use target_position so we keep moving toward the moving player
 		next_pos = agent.target_position
 
 	# still nothing useful -> stop
@@ -388,7 +377,6 @@ func _scan_for_player(radius: float) -> bool:
 			continue
 
 		var collider = result.get("collider")
-
 		if collider and collider.is_in_group("Player"):
 			if _debug_enabled:
 				print("[Enemy DEBUG] Player detected at:", player.global_position)
@@ -400,6 +388,7 @@ func _scan_for_player(radius: float) -> bool:
 # Agent velocity callback
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
+	# safe_velocity comes from the navigation agent (collision avoidance, path following)
 	if state in [CHASE, SEARCH, FLEE]:
 		velocity_vec = safe_velocity.limit_length(speed)
 	else:
