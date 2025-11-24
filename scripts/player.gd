@@ -176,6 +176,8 @@ func handle_attack() -> void:
 
 	if Input.is_action_just_pressed("attack"):
 		attacking = true
+		input = Vector2.ZERO
+		velocity = Vector2.ZERO
 
 		var mouse_pos = get_global_mouse_position()
 		var dir = mouse_pos - weapon_pivot.global_position

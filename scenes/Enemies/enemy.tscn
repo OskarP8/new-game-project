@@ -6,6 +6,7 @@
 script = ExtResource("1_4lyn1")
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
+avoidance_enabled = true
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 

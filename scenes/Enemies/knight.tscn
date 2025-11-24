@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3 uid="uid://2yswtt62j2vw"]
+[gd_scene load_steps=25 format=3 uid="uid://2yswtt62j2vw"]
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_3hyev"]
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="3_j5nu6"]
@@ -164,21 +164,40 @@ animations = [{
 "speed": 10.0
 }]
 
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
+radius = 5.0
+height = 16.0
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_3tb0x"]
+radius = 5.0
+height = 10.0
+
 [node name="Knight" type="CharacterBody2D"]
 collision_layer = 32
 collision_mask = 17
 script = ExtResource("1_3hyev")
+speed = 30.0
 notice_radius = 1000.0
 chase_radius = 1000.0
 knockback_strength = 40.0
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+avoidance_enabled = true
+radius = 15.0
 
 [node name="Sprite" type="AnimatedSprite2D" parent="."]
 position = Vector2(0, -16)
 sprite_frames = SubResource("SpriteFrames_qpvev")
 animation = &"walk"
 
-[node name="Damage" type="CollisionShape2D" parent="."]
+[node name="StaticBody2D" type="StaticBody2D" parent="."]
+collision_layer = 0
+collision_mask = 64
+
+[node name="Damage" type="CollisionShape2D" parent="StaticBody2D"]
+position = Vector2(-1, -8)
+shape = SubResource("CapsuleShape2D_xyxyh")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(-1, -5)
+shape = SubResource("CapsuleShape2D_3tb0x")

@@ -113,6 +113,13 @@ func _ready() -> void:
 		# reasonable tolerances so it doesn't constantly consider itself "finished"
 		agent.path_desired_distance = 2.0
 		agent.target_desired_distance = 2.0
+		# enable avoidance and set simple avoidance layers (agent will avoid NavigationObstacle2D set to same layer)
+		agent.avoidance_enabled = true
+		agent.avoidance_layers = 1               # pick a layer bit you use for obstacles (keep consistent)
+		agent.avoidance_mask = 1                 # which avoidance layers this agent reacts to
+		# radius is useful for avoidance; tune per-enemy
+		if agent.radius == 0:
+			agent.radius = 8.0
 
 	# connect velocity callback (safe)
 	if agent:
@@ -180,28 +187,29 @@ func _process_alert(delta: float) -> void:
 # ------------------------------
 # Chase: update the agent target every frame to player's position
 # ------------------------------
+
 func _process_chase(delta: float) -> void:
 	if not player:
 		_set_state(IDLE)
-		if _debug_enabled:
-			print("[Enemy DEBUG] No player found -> IDLE")
 		return
 
-	# Always update agent.target_position to the player's current global position every frame
-	# This ensures the agent path is recalculated continuously and prevents getting stuck on an old path.
-	last_seen_pos = player.global_position
-	if agent:
-		agent.target_position = last_seen_pos
-
-	# Try to detect player (so we can switch to SEARCH if the player is actually occluded for a while)
-	# NOTE: detection is only used to decide losing sight; movement always updates to player's position above.
+	# First: try to see the player (line-of-sight)
 	var seen: bool = _scan_for_player(chase_radius)
+
+	# If we see the player, clamp the target to the navmesh and update the agent target.
 	if seen:
 		time_since_seen = 0.0
+		if agent:
+			# clamp to closest navmesh point so the agent target isn't inside obstacles
+			var map_rid = agent.get_navigation_map()
+			if map_rid != RID():
+				var safe_target = NavigationServer2D.map_get_closest_point(map_rid, player.global_position)
+				agent.target_position = safe_target
+				last_seen_pos = safe_target
 	else:
+		# lost sight smoothing / start SEARCH after delay
 		time_since_seen += delta
 		if time_since_seen >= lose_sight_delay:
-			# lost sight, start searching the last known position
 			_set_state(SEARCH)
 			search_timer = search_duration
 			if agent:
@@ -210,19 +218,17 @@ func _process_chase(delta: float) -> void:
 				print("[Enemy DEBUG] Lost sight -> SEARCH. Last seen:", last_seen_pos)
 			return
 
-	# Attack if close enough
-	var dist_to_player: float = global_position.distance_to(player.global_position)
-	if dist_to_player <= attack_range and attack_timer <= 0.0:
+	# Attack check uses actual player distance (so close melee can still trigger)
+	if global_position.distance_to(player.global_position) <= attack_range and attack_timer <= 0.0:
 		_set_state(ATTACK)
 		return
 
 	# Move using navigation / fallback towards agent.target_position
 	_update_agent_movement()
 
-	if _debug_enabled:
-		if agent:
-			print("[Enemy DEBUG] Following player -> agent.target_position:", agent.target_position,
-				" nav_finished:", agent.is_navigation_finished())
+	# minimal debug (no per-frame spam)
+	if _debug_enabled and agent and (Time.get_ticks_msec() % 1000) < 50:
+		print("[Enemy DEBUG] chase -> seen:", seen, "agent.target:", agent.target_position, "nav_finished:", agent.is_navigation_finished())
 
 func _process_search(delta: float) -> void:
 	search_timer -= delta
@@ -232,9 +238,32 @@ func _process_search(delta: float) -> void:
 		_set_state(CHASE)
 		return
 
-	# Move toward last known position
+	# If we have an agent, ensure it has a reasonable target to move to:
 	if agent:
-		agent.target_position = last_seen_pos
+		# If the agent is finished but we're not at last_seen_pos, try to pick a reachable nearby pivot
+		if agent.is_navigation_finished():
+			var dist_to_last = global_position.distance_to(last_seen_pos)
+			if dist_to_last > agent.target_desired_distance + 2.0:
+				# try to find a reachable nearby point around last_seen_pos
+				var fallback := _find_reachable_near(last_seen_pos, 10, 24.0)
+				if fallback != Vector2.ZERO:
+					agent.target_position = fallback
+				else:
+					# clamp to navmesh in case last_seen_pos was slightly outside
+					var map_rid = agent.get_navigation_map()
+					if map_rid != RID():
+						var clamped = NavigationServer2D.map_get_closest_point(map_rid, last_seen_pos)
+						if clamped != Vector2.ZERO:
+							agent.target_position = clamped
+						else:
+							# keep last_seen_pos (agent will report finished if unreachable)
+							agent.target_position = last_seen_pos
+			else:
+				# already close enough, just keep the last_seen_pos
+				agent.target_position = last_seen_pos
+		else:
+			# agent still has an active path; ensure it's targeting last_seen_pos
+			agent.target_position = last_seen_pos
 
 	_update_agent_movement()
 
@@ -245,7 +274,6 @@ func _process_search(delta: float) -> void:
 		if search_timer <= 0.0:
 			_set_state(IDLE)
 			return
-
 func _process_attack_state(delta: float) -> void:
 	if attack_timer <= 0.0:
 		_perform_attack()
@@ -269,66 +297,89 @@ func _process_flee(delta: float) -> void:
 # Agent movement helper
 # ------------------------------
 func _update_agent_movement() -> void:
-	# no agent -> no movement
 	if not agent:
 		velocity_vec = Vector2.ZERO
-		if _debug_enabled:
-			print("[Enemy DEBUG] No agent present")
 		return
 
-	# If nav thinks it's finished, still check distance to true target
+	# If navigation finished, check whether we're actually at the target
 	if agent.is_navigation_finished():
 		var dist_to_target = global_position.distance_to(agent.target_position)
+		# If we're still far, try to salvage movement:
 		if dist_to_target > agent.target_desired_distance + 2.0:
-			# head directly to the target_position
-			if _debug_enabled:
-				print("[Enemy DEBUG] Agent said finished but distance is", dist_to_target, "-> heading straight to target_position")
+			# Try to use next path position if available
+			var next_pos: Vector2 = Vector2.ZERO
+			if agent.has_method("get_next_path_position"):
+				next_pos = agent.get_next_path_position()
+			elif agent.has_method("get_next_location"):
+				next_pos = agent.get_next_location()
+
+			if next_pos != Vector2.ZERO:
+				# we have a next node -> head there
+				var dir_next = (next_pos - global_position)
+				velocity_vec = dir_next.normalized() * speed if dir_next.length() > 0.01 else Vector2.ZERO
+				return
+
+			# Try clamping the agent.target_position to the navmesh (closest reachable point)
+			var map_rid = agent.get_navigation_map()
+			if map_rid != RID():
+				var clamped = NavigationServer2D.map_get_closest_point(map_rid, agent.target_position)
+				if clamped != Vector2.ZERO and clamped.distance_to(global_position) < dist_to_target:
+					# Move toward clamped reachable point
+					var dir_clamped = (clamped - global_position)
+					velocity_vec = dir_clamped.normalized() * speed if dir_clamped.length() > 0.01 else Vector2.ZERO
+					return
+
+			# Last resort: try heading directly to the target_position (better than freezing)
 			var dir_direct = (agent.target_position - global_position)
 			velocity_vec = dir_direct.normalized() * speed if dir_direct.length() > 0.01 else Vector2.ZERO
+			return
 		else:
+			# close enough: stop
 			velocity_vec = Vector2.ZERO
-			if _debug_enabled:
-				print("[Enemy DEBUG] Agent navigation finished; at target (dist:", dist_to_target, ")")
-		return
+			return
 
-	# Try to get a usable next path position
-	var next_pos: Vector2 = Vector2.ZERO
+	# Otherwise, try to get a usable next path position from the agent
+	var next_pos2: Vector2 = Vector2.ZERO
 	if agent.has_method("get_next_path_position"):
-		next_pos = agent.get_next_path_position()
-	if (next_pos == Vector2.ZERO) and agent.has_method("get_next_location"):
-		next_pos = agent.get_next_location()
+		next_pos2 = agent.get_next_path_position()
+	elif agent.has_method("get_next_location"):
+		next_pos2 = agent.get_next_location()
 
 	# fallback to target_position if we still didn't get a next node
-	if next_pos == Vector2.ZERO and agent.target_position != Vector2.ZERO:
-		var dist_to_target = global_position.distance_to(agent.target_position)
-		if dist_to_target <= agent.target_desired_distance:
+	if next_pos2 == Vector2.ZERO and agent.target_position != Vector2.ZERO:
+		var dist_to_target2 = global_position.distance_to(agent.target_position)
+		if dist_to_target2 <= agent.target_desired_distance:
 			velocity_vec = Vector2.ZERO
 			if _debug_enabled:
-				print("[Enemy DEBUG] Next_pos fallback is target_position but we're already within desired distance (", dist_to_target, ")")
+				# occasional message only, avoid spam
+				if Time.get_ticks_msec() % 2000 < 50:
+					print("[Enemy DEBUG] Next_pos fallback is target_position but we're already within desired distance (", dist_to_target2, ")")
 			return
-		next_pos = agent.target_position
+		next_pos2 = agent.target_position
 
 	# still nothing useful -> stop
-	if next_pos == Vector2.ZERO:
+	if next_pos2 == Vector2.ZERO:
 		velocity_vec = Vector2.ZERO
 		if _debug_enabled:
-			print("[Enemy DEBUG] Could not resolve next_pos from agent; next_pos==Vector2.ZERO, target_position:", agent.target_position)
+			if Time.get_ticks_msec() % 2000 < 50:
+				print("[Enemy DEBUG] Could not resolve next_pos from agent; next_pos==Vector2.ZERO, target_position:", agent.target_position)
 		return
 
-	# compute direction and velocity
-	var dir: Vector2 = (next_pos - global_position)
+	# compute direction and velocity to next path point
+	var dir: Vector2 = (next_pos2 - global_position)
 	var dist = dir.length()
 	if dist < 1.0:
 		velocity_vec = Vector2.ZERO
 		if _debug_enabled:
-			print("[Enemy DEBUG] next_pos too close to move towards (dist:", dist, ")")
+			if Time.get_ticks_msec() % 2000 < 50:
+				print("[Enemy DEBUG] next_pos too close to move towards (dist:", dist, ")")
 		return
 
 	velocity_vec = dir.normalized() * speed
 
-	# debug info
-	if _debug_enabled:
-		print("[Enemy DEBUG] next_pos:", next_pos, " target:", agent.target_position, " nav_finished:", agent.is_navigation_finished(), " velocity_vec:", velocity_vec)
+	# debug info (very occasional)
+	if _debug_enabled and (Time.get_ticks_msec() % 1500) < 50:
+		print("[Enemy DEBUG] next_pos:", next_pos2, " target:", agent.target_position, " nav_finished:", agent.is_navigation_finished(), " velocity_vec:", velocity_vec)
 
 # ------------------------------
 # Detection (multi-ray cone, offset origin)
@@ -342,48 +393,54 @@ func _scan_for_player(radius: float) -> bool:
 		return false
 
 	var origin: Vector2 = global_position + eye_offset
-	var player_pos: Vector2 = player.global_position
-	var to_player: Vector2 = player_pos - origin
-	var dist_to_player: float = to_player.length()
-	if dist_to_player > radius:
+	var to_player = player.global_position - origin
+	if to_player.length() > radius:
 		return false
 
+	var angle_center = to_player.angle()
+	var half_spread := deg_to_rad(60)
+	var ray_count = max(detection_rays, 1)
+
 	var space := get_world_2d().direct_space_state
+	# NOTE: make sure your chest/walls CollisionShape2D use a layer that matches the OBSTACLE bit below.
+	# Adjust bit (1<<4) to whatever you use for walls/obstacles. Here we test Player + Obstacle layer.
+	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE
 
-	var angle_to_player: float = to_player.angle()
-	var half_spread: float = deg_to_rad(60.0)
-	var ray_count: int = max(detection_rays, 1)
-
-	# COLLISION MASK SETUP -------------------------
-	# Layer 1 = Player
-	# Layer 5 = Walls
-	var mask := (1 << 0) | (1 << 4)
-	# ----------------------------------------------
+	var saw_player := false
 
 	for i in range(ray_count):
 		var t := float(i) / float(max(ray_count - 1, 1))
-		var angle = lerp(angle_to_player - half_spread, angle_to_player + half_spread, t)
-		var ray_end := origin + Vector2.RIGHT.rotated(angle) * radius
+		var angle = lerp(angle_center - half_spread, angle_center + half_spread, t)
 
+		var ray_end := origin + Vector2.RIGHT.rotated(angle) * radius
 		var query := PhysicsRayQueryParameters2D.create(origin, ray_end)
 		query.collide_with_bodies = true
 		query.collide_with_areas = true
 		query.collision_mask = mask
-		query.exclude = [self]  # ignore own collider
+		query.exclude = [self]
 
-		var result := space.intersect_ray(query)
-
-		if result.is_empty():
+		var hit := space.intersect_ray(query)
+		if hit.is_empty():
 			continue
 
-		var collider = result.get("collider")
-		if collider and collider.is_in_group("Player"):
+		var collider = hit.get("collider")
+		if not collider:
+			continue
+
+		# If this ray hits the player first → visible
+		if collider.is_in_group("Player"):
+			saw_player = true
+			# we can return early if you prefer immediate detection:
+			# return true
+			# otherwise keep scanning other rays so a blocked ray doesn't cancel a later visible one
+		else:
+			# hit something else first (wall, chest) — this ray is blocked; keep checking other rays
 			if _debug_enabled:
-				print("[Enemy DEBUG] Player detected at:", player.global_position)
-			return true
+				# print occasionally to help debug which objects block LOS (not every frame)
+				if Time.get_ticks_msec() % 2000 < 50:
+					print("[Enemy DEBUG] LOS blocked by:", str(collider), "at", hit.get("position"))
 
-	return false
-
+	return saw_player
 # ------------------------------
 # Agent velocity callback
 # ------------------------------
@@ -479,3 +536,25 @@ func _spawn_loot() -> void:
 	else:
 		if _debug_enabled:
 			print("[Enemy] dropped:", item_res)
+
+func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0) -> Vector2:
+	# Returns a non-zero Vector2 if a reachable point on the navmesh is found near 'center'
+	if not agent:
+		return Vector2.ZERO
+	var map_rid = agent.get_navigation_map()
+	if map_rid == RID():
+		return Vector2.ZERO
+
+	var rng = RandomNumberGenerator.new()
+	rng.randomize()
+	for i in range(tries):
+		var a = rng.randf_range(0.0, TAU)
+		var r = rng.randf_range(0.0, radius)
+		var sample = center + Vector2.RIGHT.rotated(a) * r
+		var clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
+		if clamped != Vector2.ZERO:
+			# require that the clamped point is meaningfully closer than the unreachable original
+			if clamped.distance_to(global_position) < center.distance_to(global_position):
+				return clamped
+	# nothing found
+	return Vector2.ZERO
