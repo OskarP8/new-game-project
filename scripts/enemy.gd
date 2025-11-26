@@ -133,6 +133,24 @@ func _ready() -> void:
 	set_physics_process(true)
 	if _debug_enabled:
 		print("[Enemy] ready — hp:", hp, "player found:", player != null)
+	print("AGENT DEBUG:",
+		" radius=", agent.radius,
+		" avoidance_enabled=", agent.avoidance_enabled,
+		" layers=", agent.avoidance_layers,
+		" mask=", agent.avoidance_mask,
+		" map=", agent.get_navigation_map()
+	)
+	await get_tree().process_frame
+
+	agent.avoidance_enabled = true
+	agent.avoidance_layers = 1
+	agent.avoidance_mask = 1
+
+	if agent.radius < 1:
+		agent.radius = 12
+
+	print("AFTER FIX: radius=", agent.radius, "avoidance=", agent.avoidance_enabled)
+	print("[KNIGHT MAP]", $Agent.get_navigation_map())
 
 # ------------------------------
 # Physics loop
@@ -163,11 +181,8 @@ func _physics_process(delta: float) -> void:
 			pass
 
 	# apply movement
-	if velocity_vec.length_squared() > 0.0001:
-		velocity = velocity_vec
-		move_and_slide()
-	else:
-		velocity = Vector2.ZERO
+	velocity = velocity_vec
+	move_and_slide()
 
 # ------------------------------
 # State behaviours
@@ -233,47 +248,25 @@ func _process_chase(delta: float) -> void:
 func _process_search(delta: float) -> void:
 	search_timer -= delta
 
-	# Try to detect player while searching
+	# Only look for player every few frames (prevents CHASE<->SEARCH spam)
 	if _scan_for_player(chase_radius):
+		time_since_seen = 0.0
 		_set_state(CHASE)
 		return
 
-	# If we have an agent, ensure it has a reasonable target to move to:
+	# Move toward last known position ONCE
 	if agent:
-		# If the agent is finished but we're not at last_seen_pos, try to pick a reachable nearby pivot
-		if agent.is_navigation_finished():
-			var dist_to_last = global_position.distance_to(last_seen_pos)
-			if dist_to_last > agent.target_desired_distance + 2.0:
-				# try to find a reachable nearby point around last_seen_pos
-				var fallback := _find_reachable_near(last_seen_pos, 10, 24.0)
-				if fallback != Vector2.ZERO:
-					agent.target_position = fallback
-				else:
-					# clamp to navmesh in case last_seen_pos was slightly outside
-					var map_rid = agent.get_navigation_map()
-					if map_rid != RID():
-						var clamped = NavigationServer2D.map_get_closest_point(map_rid, last_seen_pos)
-						if clamped != Vector2.ZERO:
-							agent.target_position = clamped
-						else:
-							# keep last_seen_pos (agent will report finished if unreachable)
-							agent.target_position = last_seen_pos
-			else:
-				# already close enough, just keep the last_seen_pos
-				agent.target_position = last_seen_pos
-		else:
-			# agent still has an active path; ensure it's targeting last_seen_pos
-			agent.target_position = last_seen_pos
+		agent.target_position = last_seen_pos
 
 	_update_agent_movement()
 
-	# If we reached the last known position, wait a bit then return to IDLE
+	# Stop SPAM calling SEARCH if already reached position
 	if agent and agent.is_navigation_finished():
-		if _debug_enabled:
-			print("[Enemy DEBUG] Search reached last known pos. Timer:", search_timer)
 		if search_timer <= 0.0:
 			_set_state(IDLE)
-			return
+		# do NOT re-enter SEARCH again (bug!)
+		return
+
 func _process_attack_state(delta: float) -> void:
 	if attack_timer <= 0.0:
 		_perform_attack()
@@ -301,85 +294,19 @@ func _update_agent_movement() -> void:
 		velocity_vec = Vector2.ZERO
 		return
 
-	# If navigation finished, check whether we're actually at the target
-	if agent.is_navigation_finished():
-		var dist_to_target = global_position.distance_to(agent.target_position)
-		# If we're still far, try to salvage movement:
-		if dist_to_target > agent.target_desired_distance + 2.0:
-			# Try to use next path position if available
-			var next_pos: Vector2 = Vector2.ZERO
-			if agent.has_method("get_next_path_position"):
-				next_pos = agent.get_next_path_position()
-			elif agent.has_method("get_next_location"):
-				next_pos = agent.get_next_location()
-
-			if next_pos != Vector2.ZERO:
-				# we have a next node -> head there
-				var dir_next = (next_pos - global_position)
-				velocity_vec = dir_next.normalized() * speed if dir_next.length() > 0.01 else Vector2.ZERO
-				return
-
-			# Try clamping the agent.target_position to the navmesh (closest reachable point)
-			var map_rid = agent.get_navigation_map()
-			if map_rid != RID():
-				var clamped = NavigationServer2D.map_get_closest_point(map_rid, agent.target_position)
-				if clamped != Vector2.ZERO and clamped.distance_to(global_position) < dist_to_target:
-					# Move toward clamped reachable point
-					var dir_clamped = (clamped - global_position)
-					velocity_vec = dir_clamped.normalized() * speed if dir_clamped.length() > 0.01 else Vector2.ZERO
-					return
-
-			# Last resort: try heading directly to the target_position (better than freezing)
-			var dir_direct = (agent.target_position - global_position)
-			velocity_vec = dir_direct.normalized() * speed if dir_direct.length() > 0.01 else Vector2.ZERO
-			return
-		else:
-			# close enough: stop
-			velocity_vec = Vector2.ZERO
-			return
-
-	# Otherwise, try to get a usable next path position from the agent
-	var next_pos2: Vector2 = Vector2.ZERO
-	if agent.has_method("get_next_path_position"):
-		next_pos2 = agent.get_next_path_position()
-	elif agent.has_method("get_next_location"):
-		next_pos2 = agent.get_next_location()
-
-	# fallback to target_position if we still didn't get a next node
-	if next_pos2 == Vector2.ZERO and agent.target_position != Vector2.ZERO:
-		var dist_to_target2 = global_position.distance_to(agent.target_position)
-		if dist_to_target2 <= agent.target_desired_distance:
-			velocity_vec = Vector2.ZERO
-			if _debug_enabled:
-				# occasional message only, avoid spam
-				if Time.get_ticks_msec() % 2000 < 50:
-					print("[Enemy DEBUG] Next_pos fallback is target_position but we're already within desired distance (", dist_to_target2, ")")
-			return
-		next_pos2 = agent.target_position
-
-	# still nothing useful -> stop
-	if next_pos2 == Vector2.ZERO:
+	var next_pos := agent.get_next_path_position()
+	if next_pos == Vector2.ZERO:
 		velocity_vec = Vector2.ZERO
-		if _debug_enabled:
-			if Time.get_ticks_msec() % 2000 < 50:
-				print("[Enemy DEBUG] Could not resolve next_pos from agent; next_pos==Vector2.ZERO, target_position:", agent.target_position)
 		return
 
-	# compute direction and velocity to next path point
-	var dir: Vector2 = (next_pos2 - global_position)
-	var dist = dir.length()
+	var dir := next_pos - global_position
+	var dist := dir.length()
 	if dist < 1.0:
 		velocity_vec = Vector2.ZERO
-		if _debug_enabled:
-			if Time.get_ticks_msec() % 2000 < 50:
-				print("[Enemy DEBUG] next_pos too close to move towards (dist:", dist, ")")
 		return
 
-	velocity_vec = dir.normalized() * speed
-
-	# debug info (very occasional)
-	if _debug_enabled and (Time.get_ticks_msec() % 1500) < 50:
-		print("[Enemy DEBUG] next_pos:", next_pos2, " target:", agent.target_position, " nav_finished:", agent.is_navigation_finished(), " velocity_vec:", velocity_vec)
+	# THIS is the important part — agent handles avoidance
+	agent.set_velocity(dir.normalized() * speed)
 
 # ------------------------------
 # Detection (multi-ray cone, offset origin)

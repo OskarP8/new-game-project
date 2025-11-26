@@ -125,6 +125,7 @@ position = Vector2(0, -9)
 position = Vector2(0, -26)
 
 [node name="NavigationObstacle2D" type="NavigationObstacle2D" parent="."]
-position = Vector2(0, -8)
-radius = 15.0
-vertices = PackedVector2Array(-11, -12, 12, -12, 12, 10, -11, 10)
+position = Vector2(0, -6)
+radius = 8.0
+affect_navigation_mesh = true
+carve_navigation_mesh = true
