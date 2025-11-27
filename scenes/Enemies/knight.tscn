@@ -4,6 +4,14 @@
 [ext_resource type="PackedScene" uid="uid://efvcragqblr4" path="res://scenes/Weapons/sword.tscn" id="2_i5nnn"]
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="3_j5nu6"]
 
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
+radius = 5.0
+height = 16.0
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_3tb0x"]
+radius = 5.0
+height = 10.0
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_dwbrn"]
 atlas = ExtResource("3_j5nu6")
 region = Rect2(0, 480, 32, 32)
@@ -165,14 +173,6 @@ animations = [{
 "speed": 10.0
 }]
 
-[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
-radius = 5.0
-height = 16.0
-
-[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_3tb0x"]
-radius = 5.0
-height = 10.0
-
 [node name="Knight" type="CharacterBody2D"]
 collision_layer = 32
 collision_mask = 17
@@ -188,11 +188,6 @@ avoidance_enabled = true
 radius = 5.0
 debug_enabled = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="."]
-position = Vector2(0, -16)
-sprite_frames = SubResource("SpriteFrames_qpvev")
-animation = &"walk"
-
 [node name="StaticBody2D" type="StaticBody2D" parent="."]
 collision_layer = 0
 collision_mask = 64
@@ -204,3 +199,15 @@ shape = SubResource("CapsuleShape2D_xyxyh")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 position = Vector2(-1, -5)
 shape = SubResource("CapsuleShape2D_3tb0x")
+
+[node name="Graphics" type="Node2D" parent="."]
+position = Vector2(4, -5)
+
+[node name="Body" type="AnimatedSprite2D" parent="Graphics"]
+position = Vector2(-4, -11)
+sprite_frames = SubResource("SpriteFrames_qpvev")
+animation = &"walk"
+
+[node name="WeaponPivot" type="Node2D" parent="Graphics"]
+
+[node name="WeaponHolder" type="Node2D" parent="Graphics/WeaponPivot"]

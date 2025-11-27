@@ -2,13 +2,15 @@
 
 [ext_resource type="Script" path="res://scripts/weapon.gd" id="1_fmr78"]
 
-[node name="Weapon" type="Node2D"]
+[node name="WeaponScene" type="Node2D"]
 script = ExtResource("1_fmr78")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+[node name="AnimatedSprite" type="AnimatedSprite2D" parent="."]
 
-[node name="Area2D" type="Area2D" parent="."]
+[node name="Hitbox" type="Area2D" parent="."]
 
-[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Area2D"]
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
+
+[node name="Grip" type="Node2D" parent="."]

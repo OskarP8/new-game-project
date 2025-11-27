@@ -389,7 +389,7 @@ _data = {
 [node name="Sword" type="Node2D"]
 script = ExtResource("1_bv3ta")
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+[node name="AnimatedSprite" type="AnimatedSprite2D" parent="."]
 position = Vector2(6, 0)
 sprite_frames = SubResource("SpriteFrames_rvsm4")
 animation = &"walk"
@@ -403,14 +403,17 @@ sprite_frames = SubResource("SpriteFrames_mxs1u")
 flip_h = true
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-root_node = NodePath("../AnimatedSprite2D")
+root_node = NodePath("../AnimatedSprite")
 libraries = {
 "": SubResource("AnimationLibrary_nnlbn")
 }
 
-[node name="Area2D" type="Area2D" parent="."]
+[node name="Hitbox" type="Area2D" parent="."]
 collision_layer = 4
 collision_mask = 0
 
-[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Area2D"]
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
 polygon = PackedVector2Array(-4, -7, -4, -17, -1, -21, 1, -21, 1, -7, -1, -5, -2, -5)
+
+[node name="Grip" type="Node2D" parent="."]
+position = Vector2(-1, -2)
