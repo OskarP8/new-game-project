@@ -13,3 +13,5 @@ avoidance_enabled = true
 [node name="Sprite" type="AnimatedSprite2D" parent="."]
 
 [node name="Damage" type="CollisionShape2D" parent="."]
+
+[node name="WeaponHolder" type="Node2D" parent="."]

@@ -1,6 +1,7 @@
-[gd_scene load_steps=15 format=3 uid="uid://efvcragqblr4"]
+[gd_scene load_steps=16 format=3 uid="uid://efvcragqblr4"]
 
 [ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="1_4qjfi"]
+[ext_resource type="Script" path="res://scripts/sword.gd" id="1_bv3ta"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_7jxup"]
 atlas = ExtResource("1_4qjfi")
@@ -386,6 +387,7 @@ _data = {
 }
 
 [node name="Sword" type="Node2D"]
+script = ExtResource("1_bv3ta")
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 position = Vector2(6, 0)
@@ -405,3 +407,10 @@ root_node = NodePath("../AnimatedSprite2D")
 libraries = {
 "": SubResource("AnimationLibrary_nnlbn")
 }
+
+[node name="Area2D" type="Area2D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Area2D"]
+polygon = PackedVector2Array(-4, -7, -4, -17, -1, -21, 1, -21, 1, -7, -1, -5, -2, -5)

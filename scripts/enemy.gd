@@ -16,6 +16,8 @@ class_name Enemy
 # Scenes / resources
 @export var loot_table: Array = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
+@export var weapon_scene: PackedScene
+var weapon: Weapon
 
 # Nodes (ensure these paths exist in the enemy scene)
 @onready var agent: NavigationAgent2D = $Agent
@@ -145,6 +147,11 @@ func _ready() -> void:
 	agent.avoidance_enabled = true
 	agent.avoidance_layers = 1
 	agent.avoidance_mask = 1
+	# Instantiate weapon if provided
+	if weapon_scene:
+		weapon = weapon_scene.instantiate()
+		add_child(weapon)
+		weapon.weapon_owner = self
 
 	if agent.radius < 1:
 		agent.radius = 12
@@ -386,19 +393,32 @@ func _perform_attack() -> void:
 		_set_state(IDLE)
 		return
 
+	# Play weapon animation
+	if weapon:
+		weapon.start_attack()
+
+	# Enemy anim
 	if sprite:
 		sprite.flip_h = player.global_position.x < global_position.x
 
 	var dmg: int = attack_damage
-	if _debug_enabled:
-		print("[Enemy DEBUG] Attacking player for", dmg, "damage")
 	emit_signal("enemy_hit_player", dmg)
-	if player.has_method("apply_damage"):
-		player.apply_damage(dmg)
 
+	# Direct melee hit fallback (if no weapon scene)
+	if weapon == null:
+		if player.has_method("apply_damage"):
+			player.apply_damage(dmg)
+
+	# knockback
 	_apply_knockback_to(player, knockback_strength)
 
 	attack_timer = attack_cooldown
+
+	# End the attack after a short moment
+	if weapon:
+		await get_tree().create_timer(0.2).timeout
+		weapon.end_attack()
+
 	_set_state(CHASE)
 
 # ------------------------------

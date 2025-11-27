@@ -83,11 +83,10 @@ swap_weapon={
 
 2d_physics/layer_1="Player"
 2d_physics/layer_2="Interaction"
-2d_physics/layer_3="PDamage"
+2d_physics/layer_3="Weapon"
 2d_physics/layer_4="InteractionComponent"
 2d_physics/layer_5="Walls"
 2d_physics/layer_6="Enemy"
-2d_physics/layer_7="EDamage"
 
 [rendering]
 
