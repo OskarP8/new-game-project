@@ -1,7 +1,6 @@
-[gd_scene load_steps=26 format=3 uid="uid://2yswtt62j2vw"]
+[gd_scene load_steps=25 format=3 uid="uid://2yswtt62j2vw"]
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_3hyev"]
-[ext_resource type="PackedScene" uid="uid://efvcragqblr4" path="res://scenes/Weapons/sword.tscn" id="2_i5nnn"]
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="3_j5nu6"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
@@ -181,7 +180,6 @@ speed = 30.0
 notice_radius = 1000.0
 chase_radius = 1000.0
 knockback_strength = 40.0
-weapon_scene = ExtResource("2_i5nnn")
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
 avoidance_enabled = true
@@ -207,6 +205,9 @@ position = Vector2(4, -5)
 position = Vector2(-4, -11)
 sprite_frames = SubResource("SpriteFrames_qpvev")
 animation = &"walk"
+
+[node name="Head" type="AnimatedSprite2D" parent="Graphics"]
+position = Vector2(-4, 5)
 
 [node name="WeaponPivot" type="Node2D" parent="Graphics"]
 

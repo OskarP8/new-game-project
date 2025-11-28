@@ -16,14 +16,26 @@ class_name Enemy
 # Scenes / resources
 @export var loot_table: Array = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
-@export var weapon_scene: PackedScene
-var weapon: Weapon
 
-# Nodes (ensure these paths exist in the enemy scene)
-@onready var agent: NavigationAgent2D = $Agent
-@onready var sprite: AnimatedSprite2D = $Sprite
+# Nodes (ensure these exist or script will be tolerant)
+@onready var agent: NavigationAgent2D = $Agent if has_node("Agent") else null
+@onready var sprite: AnimatedSprite2D = $Sprite if has_node("Sprite") else null
 
-# State
+# Weapon nodes (may be missing in some enemy scenes)
+@onready var weapon_pivot: Node2D = get_node_or_null("Graphics/WeaponPivot")
+# WeaponHolder is created if missing (keeps flipping separate from pivot rotation)
+@onready var weapon_holder: Node2D = weapon_pivot.get_node_or_null("WeaponHolder") if weapon_pivot else null
+
+# Weapon runtime vars
+var current_weapon_scene: Node = null
+var weapon_sprite: AnimatedSprite2D = null
+var weapon_anim_player: AnimationPlayer = null
+var weapon_grip_node: Node2D = null
+var weapon_sprite_base_scale_x: float = 1.0
+var weapon_root_base_pos: Vector2 = Vector2.ZERO
+var current_weapon_root: Node = null
+
+# State (AI)
 enum {
 	IDLE,
 	ALERT,
@@ -45,12 +57,19 @@ var search_timer: float = 0.0
 var search_duration: float = 2.0
 var velocity_vec: Vector2 = Vector2.ZERO
 
-# sight smoothing / memory (kept minor for losing sight)
+# sight smoothing / memory
 var time_since_seen: float = 0.0
 var lose_sight_delay: float = 0.8
 
 # raycast eye offset
 @export var eye_offset: Vector2 = Vector2(0, -8)
+
+# weapon/attack visuals state
+var attacking: bool = false
+var has_weapon: bool = false
+var facing_left: bool = false
+var attack_angle: float = 0.0
+var post_attack_left: bool = false
 
 # Signals
 signal enemy_hit_player(damage)
@@ -110,21 +129,26 @@ func _ready() -> void:
 	else:
 		player = null
 
-	# Agent tuning (do not assign navigation_map to the agent; engine manages that)
+	# Ensure pivot/holder exist for weapon visuals
+	if weapon_pivot and not weapon_holder:
+		weapon_holder = Node2D.new()
+		weapon_holder.name = "WeaponHolder"
+		weapon_pivot.add_child(weapon_holder)
+		weapon_holder.position = Vector2.ZERO
+		weapon_holder.rotation = 0
+		weapon_holder.scale = Vector2.ONE
+
+	# Agent tuning (engine manages nav map)
 	if agent:
-		# reasonable tolerances so it doesn't constantly consider itself "finished"
 		agent.path_desired_distance = 2.0
 		agent.target_desired_distance = 2.0
-		# enable avoidance and set simple avoidance layers (agent will avoid NavigationObstacle2D set to same layer)
 		agent.avoidance_enabled = true
-		agent.avoidance_layers = 1               # pick a layer bit you use for obstacles (keep consistent)
-		agent.avoidance_mask = 1                 # which avoidance layers this agent reacts to
-		# radius is useful for avoidance; tune per-enemy
+		agent.avoidance_layers = 1
+		agent.avoidance_mask = 1
 		if agent.radius == 0:
 			agent.radius = 8.0
 
-	# connect velocity callback (safe)
-	if agent:
+		# connect velocity callback (safe)
 		var callable := Callable(self, "_on_agent_velocity")
 		if agent.velocity_computed.is_connected(callable):
 			agent.velocity_computed.disconnect(callable)
@@ -133,31 +157,31 @@ func _ready() -> void:
 	_play_anim_if_exists("idle")
 	_set_state(IDLE)
 	set_physics_process(true)
+
 	if _debug_enabled:
 		print("[Enemy] ready — hp:", hp, "player found:", player != null)
-	print("AGENT DEBUG:",
-		" radius=", agent.radius,
-		" avoidance_enabled=", agent.avoidance_enabled,
-		" layers=", agent.avoidance_layers,
-		" mask=", agent.avoidance_mask,
-		" map=", agent.get_navigation_map()
-	)
+	if agent:
+		print("AGENT DEBUG:",
+			" radius=", agent.radius,
+			" avoidance_enabled=", agent.avoidance_enabled,
+			" layers=", agent.avoidance_layers,
+			" mask=", agent.avoidance_mask,
+			" map=", agent.get_navigation_map()
+		)
+
+	# give one frame for engine to hook navigation map
 	await get_tree().process_frame
 
-	agent.avoidance_enabled = true
-	agent.avoidance_layers = 1
-	agent.avoidance_mask = 1
-	# Instantiate weapon if provided
-	if weapon_scene:
-		weapon = weapon_scene.instantiate()
-		add_child(weapon)
-		weapon.weapon_owner = self
+	if agent:
+		agent.avoidance_enabled = true
+		agent.avoidance_layers = 1
+		agent.avoidance_mask = 1
+		if agent.radius < 1:
+			agent.radius = 12
 
-	if agent.radius < 1:
-		agent.radius = 12
-
-	print("AFTER FIX: radius=", agent.radius, "avoidance=", agent.avoidance_enabled)
-	print("[KNIGHT MAP]", $Agent.get_navigation_map())
+	if _debug_enabled and agent:
+		print("AFTER FIX: radius=", agent.radius, "avoidance=", agent.avoidance_enabled)
+		print("[KNIGHT MAP]", agent.get_navigation_map())
 
 # ------------------------------
 # Physics loop
@@ -168,7 +192,6 @@ func _physics_process(delta: float) -> void:
 
 	# debug - show reachable once per frame if you want (can be noisy)
 	if agent and _debug_enabled:
-		# is_target_reachable() is cheap; use sparingly if you're seeing spam
 		pass
 
 	match state:
@@ -188,8 +211,11 @@ func _physics_process(delta: float) -> void:
 			pass
 
 	# apply movement
-	velocity = velocity_vec
-	move_and_slide()
+	if velocity_vec.length_squared() > 0.0001:
+		velocity = velocity_vec
+		move_and_slide()
+	else:
+		velocity = Vector2.ZERO
 
 # ------------------------------
 # State behaviours
@@ -206,30 +232,22 @@ func _process_alert(delta: float) -> void:
 			agent.target_position = last_seen_pos
 		_set_state(CHASE)
 
-# ------------------------------
-# Chase: update the agent target every frame to player's position
-# ------------------------------
-
 func _process_chase(delta: float) -> void:
 	if not player:
 		_set_state(IDLE)
 		return
 
-	# First: try to see the player (line-of-sight)
 	var seen: bool = _scan_for_player(chase_radius)
 
-	# If we see the player, clamp the target to the navmesh and update the agent target.
 	if seen:
 		time_since_seen = 0.0
 		if agent:
-			# clamp to closest navmesh point so the agent target isn't inside obstacles
 			var map_rid = agent.get_navigation_map()
 			if map_rid != RID():
 				var safe_target = NavigationServer2D.map_get_closest_point(map_rid, player.global_position)
 				agent.target_position = safe_target
 				last_seen_pos = safe_target
 	else:
-		# lost sight smoothing / start SEARCH after delay
 		time_since_seen += delta
 		if time_since_seen >= lose_sight_delay:
 			_set_state(SEARCH)
@@ -240,44 +258,44 @@ func _process_chase(delta: float) -> void:
 				print("[Enemy DEBUG] Lost sight -> SEARCH. Last seen:", last_seen_pos)
 			return
 
-	# Attack check uses actual player distance (so close melee can still trigger)
+	# Attack check uses actual player distance
 	if global_position.distance_to(player.global_position) <= attack_range and attack_timer <= 0.0:
 		_set_state(ATTACK)
 		return
 
-	# Move using navigation / fallback towards agent.target_position
 	_update_agent_movement()
 
-	# minimal debug (no per-frame spam)
+	# occasional debug
 	if _debug_enabled and agent and (Time.get_ticks_msec() % 1000) < 50:
 		print("[Enemy DEBUG] chase -> seen:", seen, "agent.target:", agent.target_position, "nav_finished:", agent.is_navigation_finished())
 
 func _process_search(delta: float) -> void:
 	search_timer -= delta
 
-	# Only look for player every few frames (prevents CHASE<->SEARCH spam)
 	if _scan_for_player(chase_radius):
 		time_since_seen = 0.0
 		_set_state(CHASE)
 		return
 
-	# Move toward last known position ONCE
 	if agent:
 		agent.target_position = last_seen_pos
 
 	_update_agent_movement()
 
-	# Stop SPAM calling SEARCH if already reached position
 	if agent and agent.is_navigation_finished():
 		if search_timer <= 0.0:
 			_set_state(IDLE)
-		# do NOT re-enter SEARCH again (bug!)
 		return
 
 func _process_attack_state(delta: float) -> void:
+	# This state initiates an attack animation+logic
+	# We ensure attack timing is respected here
 	if attack_timer <= 0.0:
+		# prepare attack: compute angle toward player and animate weapon (if present)
 		_perform_attack()
+		# attack flow is finished by animation callbacks (_on_weapon_animation_finished/_on_attack_finished)
 		return
+	# minor visual flip so sprite faces player
 	if sprite and player:
 		sprite.flip_h = player.global_position.x < global_position.x
 
@@ -301,22 +319,75 @@ func _update_agent_movement() -> void:
 		velocity_vec = Vector2.ZERO
 		return
 
-	var next_pos := agent.get_next_path_position()
-	if next_pos == Vector2.ZERO:
+	# If navigation finished, check whether we're actually at the target
+	if agent.is_navigation_finished():
+		var dist_to_target = global_position.distance_to(agent.target_position)
+		if dist_to_target > agent.target_desired_distance + 2.0:
+			var next_pos: Vector2 = Vector2.ZERO
+			if agent.has_method("get_next_path_position"):
+				next_pos = agent.get_next_path_position()
+			elif agent.has_method("get_next_location"):
+				next_pos = agent.get_next_location()
+
+			if next_pos != Vector2.ZERO:
+				var dir_next = (next_pos - global_position)
+				velocity_vec = dir_next.normalized() * speed if dir_next.length() > 0.01 else Vector2.ZERO
+				return
+
+			var map_rid = agent.get_navigation_map()
+			if map_rid != RID():
+				var clamped = NavigationServer2D.map_get_closest_point(map_rid, agent.target_position)
+				if clamped != Vector2.ZERO and clamped.distance_to(global_position) < dist_to_target:
+					var dir_clamped = (clamped - global_position)
+					velocity_vec = dir_clamped.normalized() * speed if dir_clamped.length() > 0.01 else Vector2.ZERO
+					return
+
+			var dir_direct = (agent.target_position - global_position)
+			velocity_vec = dir_direct.normalized() * speed if dir_direct.length() > 0.01 else Vector2.ZERO
+			return
+		else:
+			velocity_vec = Vector2.ZERO
+			return
+
+	var next_pos2: Vector2 = Vector2.ZERO
+	if agent.has_method("get_next_path_position"):
+		next_pos2 = agent.get_next_path_position()
+	elif agent.has_method("get_next_location"):
+		next_pos2 = agent.get_next_location()
+
+	if next_pos2 == Vector2.ZERO and agent.target_position != Vector2.ZERO:
+		var dist_to_target2 = global_position.distance_to(agent.target_position)
+		if dist_to_target2 <= agent.target_desired_distance:
+			velocity_vec = Vector2.ZERO
+			if _debug_enabled:
+				if Time.get_ticks_msec() % 2000 < 50:
+					print("[Enemy DEBUG] Next_pos fallback is target_position but we're already within desired distance (", dist_to_target2, ")")
+			return
+		next_pos2 = agent.target_position
+
+	if next_pos2 == Vector2.ZERO:
 		velocity_vec = Vector2.ZERO
+		if _debug_enabled:
+			if Time.get_ticks_msec() % 2000 < 50:
+				print("[Enemy DEBUG] Could not resolve next_pos from agent; next_pos==Vector2.ZERO, target_position:", agent.target_position)
 		return
 
-	var dir := next_pos - global_position
-	var dist := dir.length()
+	var dir: Vector2 = (next_pos2 - global_position)
+	var dist = dir.length()
 	if dist < 1.0:
 		velocity_vec = Vector2.ZERO
+		if _debug_enabled:
+			if Time.get_ticks_msec() % 2000 < 50:
+				print("[Enemy DEBUG] next_pos too close to move towards (dist:", dist, ")")
 		return
 
-	# THIS is the important part — agent handles avoidance
-	agent.set_velocity(dir.normalized() * speed)
+	velocity_vec = dir.normalized() * speed
+
+	if _debug_enabled and (Time.get_ticks_msec() % 1500) < 50:
+		print("[Enemy DEBUG] next_pos:", next_pos2, " target:", agent.target_position, " nav_finished:", agent.is_navigation_finished(), " velocity_vec:", velocity_vec)
 
 # ------------------------------
-# Detection (multi-ray cone, offset origin)
+# Detection (multi-ray cone)
 # ------------------------------
 func _scan_for_player(radius: float) -> bool:
 	if detection_timer > 0.0:
@@ -336,8 +407,7 @@ func _scan_for_player(radius: float) -> bool:
 	var ray_count = max(detection_rays, 1)
 
 	var space := get_world_2d().direct_space_state
-	# NOTE: make sure your chest/walls CollisionShape2D use a layer that matches the OBSTACLE bit below.
-	# Adjust bit (1<<4) to whatever you use for walls/obstacles. Here we test Player + Obstacle layer.
+	# Adjust the mask bits to match your Player + Obstacle layers
 	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE
 
 	var saw_player := false
@@ -361,64 +431,130 @@ func _scan_for_player(radius: float) -> bool:
 		if not collider:
 			continue
 
-		# If this ray hits the player first → visible
 		if collider.is_in_group("Player"):
 			saw_player = true
-			# we can return early if you prefer immediate detection:
-			# return true
-			# otherwise keep scanning other rays so a blocked ray doesn't cancel a later visible one
 		else:
-			# hit something else first (wall, chest) — this ray is blocked; keep checking other rays
 			if _debug_enabled:
-				# print occasionally to help debug which objects block LOS (not every frame)
 				if Time.get_ticks_msec() % 2000 < 50:
 					print("[Enemy DEBUG] LOS blocked by:", str(collider), "at", hit.get("position"))
 
 	return saw_player
+
 # ------------------------------
 # Agent velocity callback
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
-	# safe_velocity comes from the navigation agent (collision avoidance, path following)
+	# safe_velocity comes from navigation agent (avoidance + path)
 	if state in [CHASE, SEARCH, FLEE]:
 		velocity_vec = safe_velocity.limit_length(speed)
 	else:
 		velocity_vec = Vector2.ZERO
 
 # ------------------------------
-# Attack
+# ATTACK / WEAPON integration
 # ------------------------------
 func _perform_attack() -> void:
 	if not player:
 		_set_state(IDLE)
 		return
 
-	# Play weapon animation
-	if weapon:
-		weapon.start_attack()
+	# compute direction to player and set facing/angle
+	var dir = (player.global_position - global_position)
+	if dir.length() == 0:
+		dir = Vector2.RIGHT
+	attack_angle = dir.angle()
+	if dir.x < 0:
+		facing_left = true
+	else:
+		facing_left = false
+	post_attack_left = facing_left
 
-	# Enemy anim
-	if sprite:
-		sprite.flip_h = player.global_position.x < global_position.x
-
-	var dmg: int = attack_damage
-	emit_signal("enemy_hit_player", dmg)
-
-	# Direct melee hit fallback (if no weapon scene)
-	if weapon == null:
-		if player.has_method("apply_damage"):
-			player.apply_damage(dmg)
-
-	# knockback
-	_apply_knockback_to(player, knockback_strength)
-
+	# set attack cooldown so we don't spam
 	attack_timer = attack_cooldown
+	_set_state(ATTACK)
+	attacking = true
 
-	# End the attack after a short moment
-	if weapon:
-		await get_tree().create_timer(0.2).timeout
-		weapon.end_attack()
+	# rotate pivot: if facing_left, add PI so sprite visuals face correctly
+	if weapon_pivot:
+		weapon_pivot.rotation = attack_angle if not facing_left else attack_angle + PI
 
+	# ensure holder exists and flip it for facing
+	if weapon_holder:
+		weapon_holder.scale.x = -1 if facing_left else 1
+
+	# normalize inner visual scale & disable their own flip flags (we flip holder)
+	var vis := weapon_sprite if weapon_sprite else null
+	if vis:
+		vis.scale.x = abs(vis.scale.x)
+		vis.flip_h = false
+	elif has_node("Graphics/WeaponPivot/Weapon"):
+		# fallback to local path
+		var v = get_node_or_null("Graphics/WeaponPivot/Weapon")
+		if v and v is AnimatedSprite2D:
+			v.scale.x = abs(v.scale.x)
+			v.flip_h = false
+
+	# Play the weapon attack animation (prefers AnimationPlayer)
+	if weapon_anim_player and weapon_anim_player.has_animation("attack"):
+		if weapon_anim_player.is_connected("animation_finished", Callable(self, "_on_weapon_animation_finished")):
+			weapon_anim_player.disconnect("animation_finished", Callable(self, "_on_weapon_animation_finished"))
+		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
+		weapon_anim_player.play("attack")
+	else:
+		# fallback to AnimatedSprite2D
+		if weapon_sprite and weapon_sprite.sprite_frames:
+			if weapon_sprite.sprite_frames.has_animation("attack"):
+				if not weapon_sprite.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
+					weapon_sprite.animation_finished.connect(Callable(self, "_on_attack_finished"))
+				weapon_sprite.play("attack")
+			else:
+				# try direction variants
+				var wanim := "attack_left" if facing_left else "attack_right"
+				if weapon_sprite.sprite_frames.has_animation(wanim):
+					if not weapon_sprite.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
+						weapon_sprite.animation_finished.connect(Callable(self, "_on_attack_finished"))
+					weapon_sprite.play(wanim)
+				else:
+					# no weapon visual -> immediate finish after short delay
+					# fallback: clear attacking quickly (prevents stuck)
+					await get_tree().create_timer(0.12).timeout
+					_on_attack_finished()
+
+	# If we don't have a weapon visual, still apply damage if in range (instant)
+	if not has_weapon:
+		# melee hit check simple: apply if player still in attack_range
+		if global_position.distance_to(player.global_position) <= attack_range:
+			emit_signal("enemy_hit_player", attack_damage)
+			if player.has_method("apply_damage"):
+				player.apply_damage(attack_damage)
+			_apply_knockback_to(player, knockback_strength)
+
+# single handler for AnimatedSprite2D animation_finished
+func _on_attack_finished() -> void:
+	# cleanup after AnimatedSprite attack
+	attacking = false
+	# reset pivot
+	if weapon_pivot:
+		weapon_pivot.rotation = 0
+	# ensure holder flip matches final facing
+	if weapon_holder:
+		weapon_holder.scale.x = -1 if post_attack_left else 1
+	_set_state(CHASE)
+
+	# small delay before allowing next attack (already set attack_timer earlier)
+	# resume nothing else; AI will continue chasing
+
+# weapon AnimationPlayer finished handler (signature: anim_name)
+func _on_weapon_animation_finished(anim_name: String) -> void:
+	if not anim_name.begins_with("attack"):
+		return
+	attacking = false
+	# keep facing that the attack used
+	facing_left = post_attack_left
+	if weapon_pivot:
+		weapon_pivot.rotation = 0
+	if weapon_holder:
+		weapon_holder.scale.x = -1 if facing_left else 1
 	_set_state(CHASE)
 
 # ------------------------------
@@ -446,14 +582,11 @@ func _apply_knockback_to(target: Node, strength: float) -> void:
 
 	var force: Vector2 = (target.global_position - global_position).normalized() * strength
 
-	# Preferred knockback if player implements this
 	if target.has_method("external_knockback"):
 		target.external_knockback(force)
 		return
 
-	# If target is enemy-type CharacterBody2D, not player
 	if target is CharacterBody2D:
-		# DO NOT override player's velocity – this only applies to NPC-type bodies
 		target.velocity = force
 
 func _die() -> void:
@@ -484,24 +617,131 @@ func _spawn_loot() -> void:
 		if _debug_enabled:
 			print("[Enemy] dropped:", item_res)
 
-func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0) -> Vector2:
-	# Returns a non-zero Vector2 if a reachable point on the navmesh is found near 'center'
-	if not agent:
-		return Vector2.ZERO
-	var map_rid = agent.get_navigation_map()
-	if map_rid == RID():
-		return Vector2.ZERO
+# ------------------------------
+# Weapon equip / unequip / helpers
+# ------------------------------
+func unequip_weapon() -> void:
+	if current_weapon_scene:
+		current_weapon_scene.queue_free()
+		current_weapon_scene = null
+	weapon_sprite = null
+	weapon_anim_player = null
+	weapon_grip_node = null
+	current_weapon_root = null
+	has_weapon = false
+	# reset pivot/holder
+	if weapon_pivot:
+		weapon_pivot.rotation = 0
+	if weapon_holder:
+		weapon_holder.scale = Vector2.ONE
+	if _debug_enabled:
+		print("[Enemy] Unequipped weapon")
 
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	for i in range(tries):
-		var a = rng.randf_range(0.0, TAU)
-		var r = rng.randf_range(0.0, radius)
-		var sample = center + Vector2.RIGHT.rotated(a) * r
-		var clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
-		if clamped != Vector2.ZERO:
-			# require that the clamped point is meaningfully closer than the unreachable original
-			if clamped.distance_to(global_position) < center.distance_to(global_position):
-				return clamped
-	# nothing found
-	return Vector2.ZERO
+# Accepts PackedScene / path string / InvItem (with scene_path)
+func equip_weapon(packed_or_path) -> void:
+	unequip_weapon()
+	if packed_or_path == null or packed_or_path == "":
+		if _debug_enabled:
+			print("[Enemy] equip_weapon: unequip requested")
+		return
+
+	var packed = null
+	if typeof(packed_or_path) == TYPE_STRING:
+		packed = load(packed_or_path)
+	elif packed_or_path is PackedScene:
+		packed = packed_or_path
+	else:
+		# try InvItem style (duck-typed)
+		if typeof(packed_or_path) == TYPE_OBJECT and "scene_path" in packed_or_path and packed_or_path.scene_path != "":
+			packed = load(packed_or_path.scene_path)
+		else:
+			push_warning("equip_weapon: invalid argument type")
+			return
+
+	if not (packed is PackedScene):
+		push_warning("equip_weapon: loaded resource is not a PackedScene -> " + str(packed))
+		return
+
+	# ensure holder exists
+	if not weapon_holder and weapon_pivot:
+		weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
+		if not weapon_holder:
+			weapon_holder = Node2D.new()
+			weapon_holder.name = "WeaponHolder"
+			weapon_pivot.add_child(weapon_holder)
+
+	weapon_holder.position = Vector2.ZERO
+	weapon_holder.rotation = 0
+	weapon_holder.scale.x = -1 if facing_left else 1
+
+	# instantiate weapon under holder
+	current_weapon_scene = packed.instantiate()
+	weapon_holder.add_child(current_weapon_scene)
+	current_weapon_scene.position = Vector2.ZERO
+	current_weapon_scene.rotation = 0
+	current_weapon_root = current_weapon_scene
+
+	# try to find visuals & grip
+	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
+	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
+	weapon_grip_node = _find_child_named(current_weapon_scene, "Grip") as Node2D
+
+	# align weapon so Grip sits at holder origin (hand)
+	if weapon_grip_node != null:
+		# compute offset so grip local pos maps to (0,0) of holder
+		var grip_local = weapon_grip_node.position
+		# set weapon root offset = -grip_local (so grip becomes (0,0))
+		current_weapon_scene.position = -grip_local
+		weapon_root_base_pos = current_weapon_scene.position
+	else:
+		weapon_root_base_pos = current_weapon_scene.position
+
+	# store base scale
+	if weapon_sprite:
+		weapon_sprite_base_scale_x = abs(weapon_sprite.scale.x) if weapon_sprite.scale.x != 0 else 1.0
+	else:
+		weapon_sprite_base_scale_x = 1.0
+
+	# connect animation finished
+	if weapon_anim_player:
+		if weapon_anim_player.is_connected("animation_finished", Callable(self, "_on_weapon_animation_finished")):
+			weapon_anim_player.disconnect("animation_finished", Callable(self, "_on_weapon_animation_finished"))
+		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
+	if weapon_sprite:
+		if not weapon_sprite.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
+			weapon_sprite.animation_finished.connect(Callable(self, "_on_attack_finished"))
+
+	has_weapon = current_weapon_scene != null
+	if _debug_enabled:
+		print("[Enemy] equip_weapon -> scene:", packed, " sprite:", weapon_sprite, " anim_player:", weapon_anim_player, " grip:", weapon_grip_node)
+
+# helper: play either AnimationPlayer or AnimatedSprite2D animation
+func _play_weapon_anim(name: String) -> void:
+	if weapon_anim_player and weapon_anim_player.has_animation(name):
+		weapon_anim_player.play(name)
+		return
+	if weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation(name):
+		weapon_sprite.play(name)
+
+# utility recursion to find first child with class name
+func _find_child_of_type(node: Node, target_class_name: String) -> Node:
+	if node == null:
+		return null
+	if node.get_class() == target_class_name:
+		return node
+	for child in node.get_children():
+		var found = _find_child_of_type(child, target_class_name)
+		if found:
+			return found
+	return null
+
+func _find_child_named(node: Node, name: String) -> Node:
+	if node == null:
+		return null
+	for child in node.get_children():
+		if child.name == name:
+			return child
+		var found = _find_child_named(child, name)
+		if found:
+			return found
+	return null
