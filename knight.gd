@@ -1,5 +1,5 @@
 extends Enemy
-class_name EnemyKnight
+class_name Knight
 
 func _ready():
 	super._ready()

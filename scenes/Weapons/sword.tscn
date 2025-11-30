@@ -111,10 +111,10 @@ tracks/2/path = NodePath(".:flip_h")
 tracks/2/interp = 1
 tracks/2/loop_wrap = true
 tracks/2/keys = {
-"times": PackedFloat32Array(0),
-"transitions": PackedFloat32Array(1),
+"times": PackedFloat32Array(0, 0.001),
+"transitions": PackedFloat32Array(1, 1),
 "update": 1,
-"values": [true]
+"values": [false, false]
 }
 tracks/3/type = "value"
 tracks/3/imported = false
@@ -175,6 +175,18 @@ tracks/7/keys = {
 "transitions": PackedFloat32Array(1),
 "update": 1,
 "values": [true]
+}
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("../Hitbox/CollisionPolygon2D:rotation")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [-1.07002]
 }
 
 [sub_resource type="Animation" id="Animation_omg4d"]
@@ -289,6 +301,18 @@ tracks/8/keys = {
 "update": 1,
 "values": [false]
 }
+tracks/9/type = "value"
+tracks/9/imported = false
+tracks/9/enabled = true
+tracks/9/path = NodePath("../Hitbox/CollisionPolygon2D:rotation")
+tracks/9/interp = 1
+tracks/9/loop_wrap = true
+tracks/9/keys = {
+"times": PackedFloat32Array(0, 0.1, 0.2, 0.3, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 0,
+"values": [-1.07002, -0.51421, 2.47487, 3.5805, 0.0]
+}
 
 [sub_resource type="Animation" id="Animation_6w5j8"]
 resource_name = "attack_left"
@@ -392,9 +416,8 @@ script = ExtResource("1_bv3ta")
 [node name="AnimatedSprite" type="AnimatedSprite2D" parent="."]
 position = Vector2(6, 0)
 sprite_frames = SubResource("SpriteFrames_rvsm4")
-animation = &"walk"
+animation = &"attack"
 offset = Vector2(-5, -10)
-flip_h = true
 
 [node name="Particles" type="AnimatedSprite2D" parent="."]
 position = Vector2(7, 0)
@@ -413,7 +436,8 @@ collision_layer = 4
 collision_mask = 0
 
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
-polygon = PackedVector2Array(-4, -7, -4, -17, -1, -21, 1, -21, 1, -7, -1, -5, -2, -5)
+rotation = -1.07002
+polygon = PackedVector2Array(6, -7, 6, -17, 4, -20, 3, -21, 1, -21, 1, -7, 3, -5, 4, -5)
 
 [node name="Grip" type="Node2D" parent="."]
-position = Vector2(-1, -2)
+position = Vector2(3, -2)

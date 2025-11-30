@@ -4,13 +4,30 @@
 
 [node name="Enemy" type="CharacterBody2D"]
 script = ExtResource("1_4lyn1")
+max_hp = null
+speed = null
+notice_radius = null
+chase_radius = null
+attack_range = null
+attack_damage = null
+attack_cooldown = null
+knockback_strength = null
+detection_rays = null
+detection_interval = null
+loot_table = null
+world_item_scene = null
+eye_offset = null
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
 avoidance_enabled = true
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="StaticBody2D" type="StaticBody2D" parent="."]
+collision_layer = 32
+collision_mask = 0
 
-[node name="Damage" type="CollisionShape2D" parent="."]
+[node name="Damage" type="CollisionShape2D" parent="StaticBody2D"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 
 [node name="Graphics" type="Node2D" parent="."]
 
