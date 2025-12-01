@@ -438,6 +438,7 @@ collision_mask = 0
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
 rotation = -1.07002
 polygon = PackedVector2Array(6, -7, 6, -17, 4, -20, 3, -21, 1, -21, 1, -7, 3, -5, 4, -5)
+disabled = true
 
 [node name="Grip" type="Node2D" parent="."]
 position = Vector2(3, -2)

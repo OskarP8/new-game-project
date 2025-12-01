@@ -17,11 +17,15 @@ class_name Enemy
 @export var loot_table: Array = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
 @export var weapon_scene: PackedScene
-var weapon: Weapon
+var weapon: Node = null  # Weapon instance (type: Weapon)
 
 # Nodes (ensure these paths exist in the enemy scene)
 @onready var agent: NavigationAgent2D = $Agent
-@onready var sprite: AnimatedSprite2D = $Sprite
+@onready var body_anim: AnimatedSprite2D = $Graphics/Body
+@onready var head_anim: AnimatedSprite2D = $Graphics/Head
+@onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
+# Damage receiver (Area2D) that player weapons hit
+@onready var damage_area: Area2D = $Damage
 
 # State
 enum {
@@ -44,6 +48,9 @@ var attack_timer: float = 0.0
 var search_timer: float = 0.0
 var search_duration: float = 2.0
 var velocity_vec: Vector2 = Vector2.ZERO
+var attack_windup: float = 0.5
+var attack_recover: float = 0.5
+var attack_phase: String = ""   # "", "windup", "attack", "recover"
 
 # sight smoothing / memory (kept minor for losing sight)
 var time_since_seen: float = 0.0
@@ -88,16 +95,23 @@ func _set_state(new_state: int) -> void:
 		DEAD:
 			_play_anim_if_exists("death")
 
+# Play body & head animations if present; head uses same name as body (you said you'll add those)
 func _play_anim_if_exists(name: String) -> void:
-	if not sprite:
-		return
-	if sprite.sprite_frames and sprite.sprite_frames.has_animation(name):
-		sprite.play(name)
-		if _debug_enabled:
-			print("[Enemy] playing anim:", name)
+	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(name):
+		body_anim.play(name)
 	else:
 		if _debug_enabled:
-			print("[Enemy] anim not found:", name, " available:", sprite.sprite_frames.get_animation_names() if sprite and sprite.sprite_frames else "none")
+			print("[Enemy] body anim not found:", name)
+	# keep head synchronized to body animation if head has it
+	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(name):
+		head_anim.play(name)
+	else:
+		# fallback: stop or play idle if available
+		if name == "idle":
+			if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("idle"):
+				head_anim.play("idle")
+		if _debug_enabled:
+			print("[Enemy] head anim not found:", name)
 
 # ------------------------------
 # Lifecycle
@@ -112,54 +126,61 @@ func _ready() -> void:
 	else:
 		player = null
 
-	# Agent tuning (do not assign navigation_map to the agent; engine manages that)
+	# Agent tuning
 	if agent:
-		# reasonable tolerances so it doesn't constantly consider itself "finished"
 		agent.path_desired_distance = 2.0
 		agent.target_desired_distance = 2.0
-		# enable avoidance and set simple avoidance layers (agent will avoid NavigationObstacle2D set to same layer)
 		agent.avoidance_enabled = true
-		agent.avoidance_layers = 1               # pick a layer bit you use for obstacles (keep consistent)
-		agent.avoidance_mask = 1                 # which avoidance layers this agent reacts to
-		# radius is useful for avoidance; tune per-enemy
+		agent.avoidance_layers = 1
+		agent.avoidance_mask = 1
 		if agent.radius == 0:
 			agent.radius = 8.0
 
-	# connect velocity callback (safe)
+	# connect velocity callback
 	if agent:
 		var callable := Callable(self, "_on_agent_velocity")
 		if agent.velocity_computed.is_connected(callable):
 			agent.velocity_computed.disconnect(callable)
 		agent.velocity_computed.connect(callable)
 
+	# connect damage receiver (player weapons hit this Area2D)
+	if damage_area:
+		if not damage_area.is_connected("body_entered", Callable(self, "_on_damage_area_body_entered")):
+			damage_area.body_entered.connect(Callable(self, "_on_damage_area_body_entered"))
+
 	_play_anim_if_exists("idle")
 	_set_state(IDLE)
 	set_physics_process(true)
 	if _debug_enabled:
 		print("[Enemy] ready — hp:", hp, "player found:", player != null)
-	print("AGENT DEBUG:",
-		" radius=", agent.radius,
-		" avoidance_enabled=", agent.avoidance_enabled,
-		" layers=", agent.avoidance_layers,
-		" mask=", agent.avoidance_mask,
-		" map=", agent.get_navigation_map()
-	)
+
 	await get_tree().process_frame
 
 	agent.avoidance_enabled = true
 	agent.avoidance_layers = 1
 	agent.avoidance_mask = 1
-	# Instantiate weapon if provided
+
+	# Instantiate weapon if provided and call initialize(owner)
 	if weapon_scene:
-		weapon = weapon_scene.instantiate()
-		weapon.weapon_owner = self
-		add_child(weapon)
+		var inst = weapon_scene.instantiate()
+		if inst:
+			weapon = inst
+			weapon_pivot.add_child(weapon)
+			weapon.global_position = weapon_pivot.global_position
+			weapon.position = Vector2.ZERO
+
+			# call initialize if available, else try to set owner property as fallback
+			if weapon.has_method("initialize"):
+				weapon.initialize(self)
+			else:
+				# fallback: set weapon_owner property if exists
+				if "weapon_owner" in weapon:
+					weapon.weapon_owner = self
+			if weapon and weapon.has_method("set_flipped"):
+				weapon.set_flipped(facing_left)
 
 	if agent.radius < 1:
 		agent.radius = 12
-
-	print("AFTER FIX: radius=", agent.radius, "avoidance=", agent.avoidance_enabled)
-	print("[KNIGHT MAP]", $Agent.get_navigation_map())
 
 # ------------------------------
 # Physics loop
@@ -167,11 +188,6 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	detection_timer = max(0.0, detection_timer - delta)
 	attack_timer = max(0.0, attack_timer - delta)
-
-	# debug - show reachable once per frame if you want (can be noisy)
-	if agent and _debug_enabled:
-		# is_target_reachable() is cheap; use sparingly if you're seeing spam
-		pass
 
 	match state:
 		IDLE:
@@ -188,7 +204,8 @@ func _physics_process(delta: float) -> void:
 			_process_flee(delta)
 		DEAD:
 			pass
-	if weapon:
+
+	if weapon and weapon.has_method("update_weapon"):
 		weapon.update_weapon(delta)
 
 	# apply movement
@@ -210,30 +227,22 @@ func _process_alert(delta: float) -> void:
 			agent.target_position = last_seen_pos
 		_set_state(CHASE)
 
-# ------------------------------
-# Chase: update the agent target every frame to player's position
-# ------------------------------
-
 func _process_chase(delta: float) -> void:
 	if not player:
 		_set_state(IDLE)
 		return
 
-	# First: try to see the player (line-of-sight)
 	var seen: bool = _scan_for_player(chase_radius)
 
-	# If we see the player, clamp the target to the navmesh and update the agent target.
 	if seen:
 		time_since_seen = 0.0
 		if agent:
-			# clamp to closest navmesh point so the agent target isn't inside obstacles
 			var map_rid = agent.get_navigation_map()
 			if map_rid != RID():
 				var safe_target = NavigationServer2D.map_get_closest_point(map_rid, player.global_position)
 				agent.target_position = safe_target
 				last_seen_pos = safe_target
 	else:
-		# lost sight smoothing / start SEARCH after delay
 		time_since_seen += delta
 		if time_since_seen >= lose_sight_delay:
 			_set_state(SEARCH)
@@ -244,46 +253,68 @@ func _process_chase(delta: float) -> void:
 				print("[Enemy DEBUG] Lost sight -> SEARCH. Last seen:", last_seen_pos)
 			return
 
-	# Attack check uses actual player distance (so close melee can still trigger)
+	# Attack check (melee range)
 	if global_position.distance_to(player.global_position) <= attack_range and attack_timer <= 0.0:
 		_set_state(ATTACK)
 		return
 
-	# Move using navigation / fallback towards agent.target_position
 	_update_agent_movement()
 
-	# minimal debug (no per-frame spam)
-	if _debug_enabled and agent and (Time.get_ticks_msec() % 1000) < 50:
-		print("[Enemy DEBUG] chase -> seen:", seen, "agent.target:", agent.target_position, "nav_finished:", agent.is_navigation_finished())
+	# update facing when chasing so visuals follow
+	if player:
+		facing_left = player.global_position.x < global_position.x
+	_update_flip_and_layers()
 
 func _process_search(delta: float) -> void:
 	search_timer -= delta
-
-	# Only look for player every few frames (prevents CHASE<->SEARCH spam)
 	if _scan_for_player(chase_radius):
 		time_since_seen = 0.0
 		_set_state(CHASE)
 		return
 
-	# Move toward last known position ONCE
 	if agent:
 		agent.target_position = last_seen_pos
 
 	_update_agent_movement()
 
-	# Stop SPAM calling SEARCH if already reached position
 	if agent and agent.is_navigation_finished():
 		if search_timer <= 0.0:
 			_set_state(IDLE)
-		# do NOT re-enter SEARCH again (bug!)
 		return
 
 func _process_attack_state(delta: float) -> void:
-	if attack_timer <= 0.0:
-		_perform_attack()
+	if attack_phase == "":
+		# enter windup phase
+		attack_phase = "windup"
+		velocity_vec = Vector2.ZERO
+		attack_timer = attack_windup
+		facing_left = player.global_position.x < global_position.x
+		_update_flip_and_layers()
 		return
-	if sprite and player:
-		sprite.flip_h = player.global_position.x < global_position.x
+
+	# W I N D U P
+	if attack_phase == "windup":
+		attack_timer -= delta
+		velocity_vec = Vector2.ZERO
+		if attack_timer <= 0:
+			attack_phase = "attack"
+			_perform_attack()
+		return
+
+	# A T T A C K
+	if attack_phase == "attack":
+		attack_timer = attack_recover
+		attack_phase = "recover"
+		return
+
+	# R E C O V E R
+	if attack_phase == "recover":
+		attack_timer -= delta
+		velocity_vec = Vector2.ZERO
+		if attack_timer <= 0:
+			attack_phase = ""
+			_set_state(CHASE)
+		return
 
 func _process_flee(delta: float) -> void:
 	if not player:
@@ -298,7 +329,7 @@ func _process_flee(delta: float) -> void:
 	_update_agent_movement()
 
 # ------------------------------
-# Agent movement helper
+# Movement / agent helper
 # ------------------------------
 func _update_agent_movement() -> void:
 	if not agent:
@@ -316,11 +347,10 @@ func _update_agent_movement() -> void:
 		velocity_vec = Vector2.ZERO
 		return
 
-	# THIS is the important part — agent handles avoidance
 	agent.set_velocity(dir.normalized() * speed)
 
 # ------------------------------
-# Detection (multi-ray cone, offset origin)
+# Detection (multi-ray cone)
 # ------------------------------
 func _scan_for_player(radius: float) -> bool:
 	if detection_timer > 0.0:
@@ -340,9 +370,7 @@ func _scan_for_player(radius: float) -> bool:
 	var ray_count = max(detection_rays, 1)
 
 	var space := get_world_2d().direct_space_state
-	# NOTE: make sure your chest/walls CollisionShape2D use a layer that matches the OBSTACLE bit below.
-	# Adjust bit (1<<4) to whatever you use for walls/obstacles. Here we test Player + Obstacle layer.
-	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE
+	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE (adjust bits if needed)
 
 	var saw_player := false
 
@@ -365,25 +393,19 @@ func _scan_for_player(radius: float) -> bool:
 		if not collider:
 			continue
 
-		# If this ray hits the player first → visible
 		if collider.is_in_group("Player"):
 			saw_player = true
-			# we can return early if you prefer immediate detection:
-			# return true
-			# otherwise keep scanning other rays so a blocked ray doesn't cancel a later visible one
 		else:
-			# hit something else first (wall, chest) — this ray is blocked; keep checking other rays
 			if _debug_enabled:
-				# print occasionally to help debug which objects block LOS (not every frame)
 				if Time.get_ticks_msec() % 2000 < 50:
 					print("[Enemy DEBUG] LOS blocked by:", str(collider), "at", hit.get("position"))
 
 	return saw_player
+
 # ------------------------------
 # Agent velocity callback
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
-	# safe_velocity comes from the navigation agent (collision avoidance, path following)
 	if state in [CHASE, SEARCH, FLEE]:
 		velocity_vec = safe_velocity.limit_length(speed)
 	else:
@@ -397,38 +419,53 @@ func _perform_attack() -> void:
 		_set_state(IDLE)
 		return
 
-	# --- START WEAPON ATTACK ---
-	if weapon:
+	# start weapon attack if we have one
+	if weapon and weapon.has_method("start_attack"):
 		weapon.start_attack()
 
-	# Flip enemy toward player
-	if sprite:
-		sprite.flip_h = player.global_position.x < global_position.x
+	# flip visuals toward player
+	facing_left = player.global_position.x < global_position.x
+	_update_flip_and_layers()
 
-	# Apply damage
+	# emit signal for external listeners
 	var dmg: int = attack_damage
 	emit_signal("enemy_hit_player", dmg)
 
-	if weapon == null and player.has_method("apply_damage"):
-		player.apply_damage(dmg)
-
-	_apply_knockback_to(player, knockback_strength)
+	# don't apply damage here — weapon hitbox will call back when it hits the player
+	# apply knockback only when weapon hits via weapon_notify_hit
 
 	attack_timer = attack_cooldown
 
-	# weapon.end_attack() will be called automatically
-	# when the weapon animation finishes
+# Called by Weapon when it successfully hits a body (Weapon calls weapon_owner.weapon_notify_hit(body))
+func weapon_notify_hit(body: Node) -> void:
+	if not body:
+		return
+	# Only consider Player hits
+	if not body.is_in_group("Player"):
+		return
 
-	_set_state(CHASE)
+	# Apply damage via player's method if it exists
+	if body.has_method("apply_damage"):
+		body.apply_damage(attack_damage)
+	# Apply knockback to player if they have external_knockback
+	if body.has_method("external_knockback"):
+		var force = (body.global_position - global_position).normalized() * knockback_strength
+		body.external_knockback(force)
 
 # ------------------------------
-# Damage / death
+# Damage / death (enemy receives damage from player weapons/hits)
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult: float = 1.0) -> void:
 	hp -= amount
 	if _debug_enabled:
 		print("[Enemy] took damage:", amount, "hp now:", hp)
 	emit_signal("enemy_damaged", amount)
+	# play hit anim on head/body if present
+	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("hit"):
+		body_anim.play("hit")
+	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("hit"):
+		head_anim.play("hit")
+
 	if hp <= 0 and state != DEAD:
 		_die()
 	else:
@@ -443,23 +480,19 @@ func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 func _apply_knockback_to(target: Node, strength: float) -> void:
 	if not target:
 		return
-
 	var force: Vector2 = (target.global_position - global_position).normalized() * strength
-
-	# Preferred knockback if player implements this
 	if target.has_method("external_knockback"):
 		target.external_knockback(force)
 		return
-
-	# If target is enemy-type CharacterBody2D, not player
 	if target is CharacterBody2D:
-		# DO NOT override player's velocity – this only applies to NPC-type bodies
 		target.velocity = force
 
 func _die() -> void:
 	_set_state(DEAD)
-	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("death"):
-		sprite.play("death")
+	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("death"):
+		body_anim.play("death")
+	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("death"):
+		head_anim.play("death")
 	if _debug_enabled:
 		print("[Enemy] playing death animation")
 	_spawn_loot()
@@ -484,8 +517,48 @@ func _spawn_loot() -> void:
 		if _debug_enabled:
 			print("[Enemy] dropped:", item_res)
 
+# ------------------------------
+# Damage area callback (player weapons will collide with this area)
+# ------------------------------
+func _on_damage_area_body_entered(body: Node) -> void:
+	# This is called when a player's attack hitbox collides with the enemy's Damage Area2D.
+	# The player's weapon should call apply_damage on this node (or call enemy.take_damage)
+	# If the player's weapon system instead relies on signals, handle that in the player's weapon script.
+	# Nothing is forced here; this handler is present so you can hook/respond if needed.
+	# Example: if the hitting body has a property "damage" we can apply it:
+	if not body:
+		return
+	# optional: player weapon may be an Area2D or Node2D with 'damage' property
+	if "damage" in body:
+		var dmg = int(body.damage)
+		take_damage(dmg, body.global_position)
+	# otherwise player script should call enemy.take_damage directly.
+
+# ------------------------------
+# Util: Update flips and layer ordering (body/weapon/head)
+# ------------------------------
+func _update_flip_and_layers() -> void:
+	# Flip visuals
+	if body_anim:
+		body_anim.flip_h = facing_left
+	if head_anim:
+		head_anim.flip_h = facing_left
+
+	# Layering (relative within this enemy)
+	# Default order: body (0) -> weapon (1) -> head (2)
+	var weapon_node = null
+	if weapon_pivot:
+		weapon_node = weapon_pivot
+	if weapon_node:
+		body_anim.z_index = 0
+		weapon_node.z_index = 1
+		if head_anim:
+			head_anim.z_index = 2
+
+# ------------------------------
+# Misc helpers
+# ------------------------------
 func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0) -> Vector2:
-	# Returns a non-zero Vector2 if a reachable point on the navmesh is found near 'center'
 	if not agent:
 		return Vector2.ZERO
 	var map_rid = agent.get_navigation_map()
@@ -500,8 +573,6 @@ func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0)
 		var sample = center + Vector2.RIGHT.rotated(a) * r
 		var clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
 		if clamped != Vector2.ZERO:
-			# require that the clamped point is meaningfully closer than the unreachable original
 			if clamped.distance_to(global_position) < center.distance_to(global_position):
 				return clamped
-	# nothing found
 	return Vector2.ZERO

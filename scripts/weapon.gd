@@ -50,9 +50,9 @@ func initialize(owner) -> void:
 		weapon_holder.position = Vector2.ZERO
 
 	# Find visuals/hitbox *inside this weapon scene* (self)
-	sprite = _find_child(self, AnimatedSprite2D)
-	anim_player = _find_child(self, AnimationPlayer)
-	hitbox = _find_child(self, Area2D)
+	sprite = _find_child(self, "AnimatedSprite2D")
+	anim_player = _find_child(self, "AnimationPlayer")
+	hitbox = _find_child(self, "Area2D")
 
 	# normalize sprite visual if present
 	if sprite:
@@ -237,17 +237,21 @@ func _on_anim_finished(anim_name: String) -> void:
 # Usage: _find_child(self, AnimatedSprite2D) or _find_child(self, AnimationPlayer)
 # IMPORTANT: target_type must be a class reference, not a string or typed parameter.
 # ---------------------------
-func _find_child(node: Node, target_type) -> Node:
+func _find_child(node: Node, target_type: String) -> Node:
 	if node == null:
 		return null
 
-	# Compare the node's class name to the target's class name
-	if node.get_class() == target_type.get_class():
+	# Check using `get_class()` fallback by ClassDB
+	if node.get_class() == target_type:
+		return node
+
+	# Also check inheritance (AnimatedSprite2D inherits from Node2D, etc)
+	if ClassDB.is_parent_class(node.get_class(), target_type):
 		return node
 
 	for child in node.get_children():
-		var found := _find_child(child, target_type)
-		if found:
-			return found
+		var result = _find_child(child, target_type)
+		if result:
+			return result
 
 	return null
