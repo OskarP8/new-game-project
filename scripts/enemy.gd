@@ -25,7 +25,7 @@ var weapon: Node = null  # Weapon instance (type: Weapon)
 @onready var head_anim: AnimatedSprite2D = $Graphics/Head
 @onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
 # Damage receiver (Area2D) that player weapons hit
-@onready var damage_area: Area2D = $Damage
+@onready var damage_area: Area2D = $StaticBody2D/Damage
 
 # State
 enum {
