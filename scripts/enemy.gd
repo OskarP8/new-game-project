@@ -8,7 +8,7 @@ class_name Enemy
 @export var chase_radius: float = 220.0
 @export var attack_range: float = 24.0
 @export var attack_damage: int = 10
-@export var attack_cooldown: float = 1.0
+@export var attack_cooldown: float = 3.0   # 3 second cooldown after attack
 @export var knockback_strength: float = 120.0
 @export var detection_rays: int = 16
 @export var detection_interval: float = 0.12
@@ -17,15 +17,14 @@ class_name Enemy
 @export var loot_table: Array = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
 @export var weapon_scene: PackedScene
-var weapon: Node = null  # Weapon instance (type: Weapon)
+var weapon: Node = null  # Weapon instance
 
 # Nodes (ensure these paths exist in the enemy scene)
 @onready var agent: NavigationAgent2D = $Agent
 @onready var body_anim: AnimatedSprite2D = $Graphics/Body
 @onready var head_anim: AnimatedSprite2D = $Graphics/Head
 @onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
-# Damage receiver (Area2D) that player weapons hit
-@onready var damage_area: Area2D = $StaticBody2D/Damage
+@onready var damage_area: CollisionShape2D = $StaticBody2D/Damage if has_node("StaticBody2D/Damage") else null
 
 # State
 enum {
@@ -44,15 +43,17 @@ var last_seen_pos: Vector2 = Vector2.ZERO
 
 # timers / motion
 var detection_timer: float = 0.0
-var attack_timer: float = 0.0
+var attack_timer: float = 0.0    # cooldown timer
 var search_timer: float = 0.0
 var search_duration: float = 2.0
 var velocity_vec: Vector2 = Vector2.ZERO
-var attack_windup: float = 0.5
-var attack_recover: float = 0.5
-var attack_phase: String = ""   # "", "windup", "attack", "recover"
 
-# sight smoothing / memory (kept minor for losing sight)
+# attack timing
+var attack_windup_time: float = 0.5
+var attack_recovery_time: float = 0.5
+var attack_active: bool = false
+
+# sight smoothing / memory
 var time_since_seen: float = 0.0
 var lose_sight_delay: float = 0.8
 var facing_left: bool = false
@@ -95,23 +96,17 @@ func _set_state(new_state: int) -> void:
 		DEAD:
 			_play_anim_if_exists("death")
 
-# Play body & head animations if present; head uses same name as body (you said you'll add those)
 func _play_anim_if_exists(name: String) -> void:
 	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(name):
 		body_anim.play(name)
+		if _debug_enabled:
+			print("[Enemy] playing anim:", name)
 	else:
 		if _debug_enabled:
 			print("[Enemy] body anim not found:", name)
-	# keep head synchronized to body animation if head has it
+	# head uses same animations (you will add them)
 	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(name):
 		head_anim.play(name)
-	else:
-		# fallback: stop or play idle if available
-		if name == "idle":
-			if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("idle"):
-				head_anim.play("idle")
-		if _debug_enabled:
-			print("[Enemy] head anim not found:", name)
 
 # ------------------------------
 # Lifecycle
@@ -119,7 +114,7 @@ func _play_anim_if_exists(name: String) -> void:
 func _ready() -> void:
 	hp = max_hp
 
-	# Find player by group (robust)
+	# Find player by group
 	var players: Array = get_tree().get_nodes_in_group("Player")
 	if players.size() > 0:
 		player = players[0]
@@ -165,19 +160,12 @@ func _ready() -> void:
 		var inst = weapon_scene.instantiate()
 		if inst:
 			weapon = inst
-			weapon_pivot.add_child(weapon)
-			weapon.global_position = weapon_pivot.global_position
-			weapon.position = Vector2.ZERO
-
-			# call initialize if available, else try to set owner property as fallback
+			add_child(weapon) # optional; weapon will reparent itself
 			if weapon.has_method("initialize"):
 				weapon.initialize(self)
 			else:
-				# fallback: set weapon_owner property if exists
 				if "weapon_owner" in weapon:
 					weapon.weapon_owner = self
-			if weapon and weapon.has_method("set_flipped"):
-				weapon.set_flipped(facing_left)
 
 	if agent.radius < 1:
 		agent.radius = 12
@@ -283,50 +271,26 @@ func _process_search(delta: float) -> void:
 		return
 
 func _process_attack_state(delta: float) -> void:
-	if attack_phase == "":
-		# enter windup phase
-		attack_phase = "windup"
+	# Start windup then attack (non-blocking via await)
+	if attack_timer <= 0.0 and not attack_active:
+		attack_active = true
+		# stop moving during windup (0.5s)
 		velocity_vec = Vector2.ZERO
-		attack_timer = attack_windup
-		facing_left = player.global_position.x < global_position.x
+		if agent:
+			agent.set_velocity(Vector2.ZERO)
+		# keep visual facing
+		if player:
+			facing_left = player.global_position.x < global_position.x
 		_update_flip_and_layers()
-		return
-
-	# W I N D U P
-	if attack_phase == "windup":
-		attack_timer -= delta
-		velocity_vec = Vector2.ZERO
-		if attack_timer <= 0:
-			attack_phase = "attack"
-			_perform_attack()
-		return
-
-	# A T T A C K
-	if attack_phase == "attack":
-		attack_timer = attack_recover
-		attack_phase = "recover"
-		return
-
-	# R E C O V E R
-	if attack_phase == "recover":
-		attack_timer -= delta
-		velocity_vec = Vector2.ZERO
-		if attack_timer <= 0:
-			attack_phase = ""
-			_set_state(CHASE)
-		return
-
-func _process_flee(delta: float) -> void:
-	if not player:
-		_set_state(IDLE)
-		return
-	var away_dir: Vector2 = (global_position - player.global_position)
-	if away_dir.length() == 0:
-		away_dir = Vector2.RIGHT
-	var flee_target: Vector2 = global_position + away_dir.normalized() * 120.0
-	if agent:
-		agent.target_position = flee_target
-	_update_agent_movement()
+		# windup
+		await get_tree().create_timer(attack_windup_time).timeout
+		# perform attack
+		_perform_attack()
+		# recovery pause after attack
+		await get_tree().create_timer(attack_recovery_time).timeout
+		# resume chasing immediately (cooldown still active)
+		attack_active = false
+		_set_state(CHASE)
 
 # ------------------------------
 # Movement / agent helper
@@ -427,20 +391,18 @@ func _perform_attack() -> void:
 	facing_left = player.global_position.x < global_position.x
 	_update_flip_and_layers()
 
-	# emit signal for external listeners
+	# emit signal for external listeners (e.g. UI)
 	var dmg: int = attack_damage
 	emit_signal("enemy_hit_player", dmg)
 
-	# don't apply damage here — weapon hitbox will call back when it hits the player
-	# apply knockback only when weapon hits via weapon_notify_hit
-
+	# Do NOT apply damage here. Weapon's hitbox will call back engine via weapon_notify_hit().
+	# Set cooldown now (enemy may move during cooldown)
 	attack_timer = attack_cooldown
 
 # Called by Weapon when it successfully hits a body (Weapon calls weapon_owner.weapon_notify_hit(body))
 func weapon_notify_hit(body: Node) -> void:
 	if not body:
 		return
-	# Only consider Player hits
 	if not body.is_in_group("Player"):
 		return
 
@@ -460,7 +422,7 @@ func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult
 	if _debug_enabled:
 		print("[Enemy] took damage:", amount, "hp now:", hp)
 	emit_signal("enemy_damaged", amount)
-	# play hit anim on head/body if present
+	# play hit anim on body/head if present
 	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("hit"):
 		body_anim.play("hit")
 	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("hit"):
@@ -513,26 +475,16 @@ func _spawn_loot() -> void:
 		get_tree().current_scene.add_child(world_item)
 		if _debug_enabled:
 			print("[Enemy] spawned loot at", global_position, "item:", item_res)
-	else:
-		if _debug_enabled:
-			print("[Enemy] dropped:", item_res)
 
 # ------------------------------
 # Damage area callback (player weapons will collide with this area)
 # ------------------------------
 func _on_damage_area_body_entered(body: Node) -> void:
-	# This is called when a player's attack hitbox collides with the enemy's Damage Area2D.
-	# The player's weapon should call apply_damage on this node (or call enemy.take_damage)
-	# If the player's weapon system instead relies on signals, handle that in the player's weapon script.
-	# Nothing is forced here; this handler is present so you can hook/respond if needed.
-	# Example: if the hitting body has a property "damage" we can apply it:
 	if not body:
 		return
-	# optional: player weapon may be an Area2D or Node2D with 'damage' property
 	if "damage" in body:
 		var dmg = int(body.damage)
 		take_damage(dmg, body.global_position)
-	# otherwise player script should call enemy.take_damage directly.
 
 # ------------------------------
 # Util: Update flips and layer ordering (body/weapon/head)
@@ -546,12 +498,9 @@ func _update_flip_and_layers() -> void:
 
 	# Layering (relative within this enemy)
 	# Default order: body (0) -> weapon (1) -> head (2)
-	var weapon_node = null
 	if weapon_pivot:
-		weapon_node = weapon_pivot
-	if weapon_node:
 		body_anim.z_index = 0
-		weapon_node.z_index = 1
+		weapon_pivot.z_index = 1
 		if head_anim:
 			head_anim.z_index = 2
 
@@ -576,3 +525,5 @@ func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0)
 			if clamped.distance_to(global_position) < center.distance_to(global_position):
 				return clamped
 	return Vector2.ZERO
+func _process_flee(delta):
+	pass

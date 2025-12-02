@@ -203,13 +203,13 @@ shape = SubResource("CapsuleShape2D_3tb0x")
 [node name="Graphics" type="Node2D" parent="."]
 position = Vector2(4, -5)
 
+[node name="Head" type="AnimatedSprite2D" parent="Graphics"]
+position = Vector2(-4, 5)
+
 [node name="Body" type="AnimatedSprite2D" parent="Graphics"]
 position = Vector2(-4, -11)
 sprite_frames = SubResource("SpriteFrames_qpvev")
 animation = &"walk"
-
-[node name="Head" type="AnimatedSprite2D" parent="Graphics"]
-position = Vector2(-4, 5)
 
 [node name="WeaponPivot" type="Node2D" parent="Graphics"]
 position = Vector2(-4, 0)

@@ -8,6 +8,7 @@ var weapon_owner = null  # expected to be the Enemy instance
 var sprite: AnimatedSprite2D = null
 var anim_player: AnimationPlayer = null
 var hitbox: Area2D = null
+var grip_node: Node2D = null
 
 # Weapon transforms (we reparent into owner's pivot/holder)
 var weapon_pivot: Node2D = null
@@ -31,17 +32,16 @@ var _hit_targets: Array = []
 # ---------------------------
 func initialize(owner) -> void:
 	weapon_owner = owner
-	# Try to locate pivot & holder on owner safely
 	if not weapon_owner:
 		push_error("[Weapon] initialize: owner is null")
 		return
 
+	# find owner's pivot/holder
 	weapon_pivot = weapon_owner.get_node_or_null("Graphics/WeaponPivot")
 	if weapon_pivot == null:
-		push_error("Weapon.initialize: owner missing Graphics/WeaponPivot -> check enemy scene.")
+		push_error("[Weapon] initialize: owner missing Graphics/WeaponPivot -> check enemy scene.")
 		return
 
-	# Try to get holder, otherwise create it under pivot
 	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
 	if weapon_holder == null:
 		weapon_holder = Node2D.new()
@@ -49,10 +49,11 @@ func initialize(owner) -> void:
 		weapon_pivot.add_child(weapon_holder)
 		weapon_holder.position = Vector2.ZERO
 
-	# Find visuals/hitbox *inside this weapon scene* (self)
+	# find visuals/hitbox/grip inside this weapon scene
 	sprite = _find_child(self, "AnimatedSprite2D")
 	anim_player = _find_child(self, "AnimationPlayer")
 	hitbox = _find_child(self, "Area2D")
+	grip_node = _find_child_named(self, "Grip") as Node2D
 
 	# normalize sprite visual if present
 	if sprite:
@@ -66,38 +67,54 @@ func initialize(owner) -> void:
 
 	# connect hitbox if present
 	if hitbox:
-		# ensure monitoring is off until attack
 		hitbox.monitoring = false
 		if not hitbox.is_connected("body_entered", Callable(self, "_on_hitbox_body_entered")):
 			hitbox.body_entered.connect(Callable(self, "_on_hitbox_body_entered"))
 
-	# Reparent the weapon into the holder immediately (safe)
-	reparent_weapon()
+	# Reparent the weapon into the holder and align grip
+	reparent_and_align_to_grip()
 
-	# reset hit targets list
 	_hit_targets.clear()
+
+	# Flip holder to the correct side on spawn (based on player's position if available)
+	if weapon_owner and weapon_owner.has_node("player") or ("player" in weapon_owner and weapon_owner.player):
+		if weapon_owner.player:
+			var spawn_left: bool = weapon_owner.player.global_position.x < weapon_owner.global_position.x
+			weapon_holder.scale.x = -1 if spawn_left else 1
+	else:
+		# fallback: use owner's facing_left if present
+		if "facing_left" in weapon_owner:
+			weapon_holder.scale.x = -1 if bool(weapon_owner.facing_left) else 1
 
 	print("[Weapon] initialized for owner:", weapon_owner.name if weapon_owner else "null")
 
 # ---------------------------
-# Reparent to holder
+# Reparent to holder and align Grip -> holder origin
 # ---------------------------
-func reparent_weapon() -> void:
+func reparent_and_align_to_grip() -> void:
+	# Save grip local offset (relative to weapon root)
+	var grip_local := Vector2.ZERO
+	if grip_node:
+		# grip_node.position is local to weapon root
+		grip_local = grip_node.position
+	# Reparent
 	var current_parent := get_parent()
 	if current_parent:
 		current_parent.remove_child(self)
 	if weapon_holder:
 		weapon_holder.add_child(self)
-		self.position = Vector2.ZERO
+		# Position this weapon such that the grip_local point becomes (0,0) in holder space
+		# i.e. self.position = -grip_local
+		self.position = -grip_local
 		self.rotation = 0
 	else:
-		push_warning("[Weapon] reparent_weapon: weapon_holder missing")
+		push_warning("[Weapon] reparent_and_align_to_grip: weapon_holder missing")
 
 # ---------------------------
 # Called every physics frame from owner (owner should call weapon.update_weapon(delta))
 # ---------------------------
 func update_weapon(delta: float) -> void:
-	# If attacking, keep attack rotation/flip until animation signals end
+	# keep attack rotation until animation clears it
 	if attacking:
 		return
 
@@ -106,15 +123,13 @@ func update_weapon(delta: float) -> void:
 
 	# Determine facing from owner's player direction if available
 	var facing_left: bool = false
-	if weapon_owner.has_method("player") or ("player" in weapon_owner and weapon_owner.player):
-		# safe access
-		if weapon_owner.player:
-			facing_left = weapon_owner.player.global_position.x < weapon_owner.global_position.x
-			# keep owner facing state in sync
-			if "facing_left" in weapon_owner:
-				weapon_owner.facing_left = facing_left
-			if "post_attack_left" in weapon_owner:
-				weapon_owner.post_attack_left = facing_left
+	if ("player" in weapon_owner) and weapon_owner.player:
+		facing_left = weapon_owner.player.global_position.x < weapon_owner.global_position.x
+		# keep owner facing state in sync if properties exist
+		if "facing_left" in weapon_owner:
+			weapon_owner.facing_left = facing_left
+		if "post_attack_left" in weapon_owner:
+			weapon_owner.post_attack_left = facing_left
 
 	# Flip holder to mirror the entire weapon scene
 	weapon_holder.scale.x = -1 if facing_left else 1
@@ -135,17 +150,14 @@ func start_attack() -> void:
 	attacking = true
 	_hit_targets.clear()
 
-	# locate owner & target
 	if not weapon_owner:
 		return
-
-	# Ensure pivot/holder present
 	if not weapon_pivot or not weapon_holder:
 		push_error("[Weapon] missing pivot/holder.")
 		return
 
 	# compute angle towards player if available
-	if weapon_owner.player:
+	if ("player" in weapon_owner) and weapon_owner.player:
 		var player_pos: Vector2 = weapon_owner.player.global_position
 		var dir: Vector2 = player_pos - weapon_pivot.global_position
 		attack_angle = dir.angle()
@@ -201,9 +213,7 @@ func end_attack() -> void:
 # ---------------------------
 func _on_hitbox_body_entered(body: Node) -> void:
 	# Only valid during attack
-	if not attacking:
-		return
-	if not body:
+	if not attacking or not body:
 		return
 	# Only hit the player group
 	if not body.is_in_group("Player"):
@@ -233,25 +243,54 @@ func _on_anim_finished(anim_name: String) -> void:
 		end_attack()
 
 # ---------------------------
-# Utility: find first node of *class reference* in subtree (including node itself)
-# Usage: _find_child(self, AnimatedSprite2D) or _find_child(self, AnimationPlayer)
-# IMPORTANT: target_type must be a class reference, not a string or typed parameter.
+# Utility: find first node by class name in subtree (including node itself)
+# Usage: _find_child(self, "AnimatedSprite2D") or _find_child(self, "AnimationPlayer")
+# Accepts strings for the class name (keeps parsing simple)
 # ---------------------------
-func _find_child(node: Node, target_type: String) -> Node:
+func _find_child(node: Node, target_class_name: String) -> Node:
 	if node == null:
 		return null
-
-	# Check using `get_class()` fallback by ClassDB
-	if node.get_class() == target_type:
+	# match exact class name
+	if node.get_class() == target_class_name:
 		return node
-
-	# Also check inheritance (AnimatedSprite2D inherits from Node2D, etc)
-	if ClassDB.is_parent_class(node.get_class(), target_type):
+	# check inheritance using ClassDB
+	if ClassDB.is_parent_class(node.get_class(), target_class_name):
 		return node
-
 	for child in node.get_children():
-		var result = _find_child(child, target_type)
+		var result = _find_child(child, target_class_name)
 		if result:
 			return result
-
 	return null
+
+# ---------------------------
+# Utility: find node by name inside subtree
+# ---------------------------
+func _find_child_named(node: Node, target_name: String) -> Node:
+	if node == null:
+		return null
+	if node.name == target_name:
+		return node
+	for child in node.get_children():
+		var res = _find_child_named(child, target_name)
+		if res:
+			return res
+	return null
+
+# ---------------------------
+# Optional helper: adjust hitbox collision layer/mask when equipping for player vs enemy.
+# Edit layer/mask bit numbers to match your project.
+# ---------------------------
+func equip_for_owner(kind: String) -> void:
+	# Example bits (change to your project's mapping)
+	# player body: 1, enemy body: 2, player weapon: 4, enemy weapon: 8
+	if not hitbox:
+		return
+	if kind == "player":
+		# weapon should be in player-weapon layer and hit enemy bodies
+		hitbox.set_collision_layer_bit(2, false) # clear enemy-weapon bit
+		hitbox.set_collision_layer_bit(3, true)  # set player-weapon bit (bit index 3 is layer 4)
+		hitbox.set_collision_mask_bit(1, true)   # hit enemy body (layer 2)
+	elif kind == "enemy":
+		hitbox.set_collision_layer_bit(3, false)
+		hitbox.set_collision_layer_bit(4, true)  # enemy-weapon -> layer index 4 (example)
+		hitbox.set_collision_mask_bit(0, true)   # hit player body (layer 1)
