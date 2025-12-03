@@ -10,6 +10,8 @@ script = ExtResource("1_fmr78")
 [node name="AnimatedSprite" type="AnimatedSprite2D" parent="."]
 
 [node name="Hitbox" type="Area2D" parent="."]
+collision_layer = 4
+collision_mask = 32
 
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
 

@@ -526,7 +526,7 @@ script = ExtResource("1_gjq3l")
 [node name="InteractionComponent" parent="." instance=ExtResource("4_u73uf")]
 position = Vector2(0, -3)
 
-[node name="DamageCollision" type="StaticBody2D" parent="."]
+[node name="DamageCollision" type="Area2D" parent="."]
 collision_layer = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DamageCollision"]

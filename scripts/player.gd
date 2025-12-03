@@ -579,7 +579,7 @@ func equip_weapon(packed_or_path) -> void:
 	current_weapon_root = current_weapon_scene
 
 	# find visuals
-	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
+	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
 	# store base scale for consistent flipping (magnitude only)
