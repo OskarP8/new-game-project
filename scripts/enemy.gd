@@ -8,42 +8,34 @@ class_name Enemy
 @export var chase_radius: float = 220.0
 @export var attack_range: float = 24.0
 @export var attack_damage: int = 10
-@export var attack_cooldown: float = 3.0   # 3 second cooldown after attack
+@export var attack_cooldown: float = 3.0
 @export var knockback_strength: float = 120.0
 @export var detection_rays: int = 16
 @export var detection_interval: float = 0.12
 
-# Scenes / resources
+# Scenes/resources
 @export var loot_table: Array = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
 @export var weapon_scene: PackedScene
-var weapon: Node = null  # Weapon instance
+var weapon: Node = null
 
-# Nodes (ensure these paths exist in the enemy scene)
+# Nodes (ensure paths exist)
 @onready var agent: NavigationAgent2D = $Agent
 @onready var body_anim: AnimatedSprite2D = $Graphics/Body
 @onready var head_anim: AnimatedSprite2D = $Graphics/Head
 @onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
 @onready var damage_area: Area2D = $Damage if has_node("Damage") else null
 
-# State
-enum {
-	IDLE,
-	ALERT,
-	CHASE,
-	SEARCH,
-	ATTACK,
-	FLEE,
-	DEAD
-}
+# State enum
+enum { IDLE, ALERT, CHASE, SEARCH, ATTACK, FLEE, DEAD }
 var state: int = IDLE
 var hp: int
 var player: Node = null
 var last_seen_pos: Vector2 = Vector2.ZERO
 
-# timers / motion
+# timers/motion
 var detection_timer: float = 0.0
-var attack_timer: float = 0.0    # cooldown timer
+var attack_timer: float = 0.0
 var search_timer: float = 0.0
 var search_duration: float = 2.0
 var velocity_vec: Vector2 = Vector2.ZERO
@@ -53,25 +45,27 @@ var attack_windup_time: float = 0.5
 var attack_recovery_time: float = 0.5
 var attack_active: bool = false
 
+# circling
+var _circle_dir: int = 1
+var _circle_radius_mult: float = 1.3
+var _circle_cache: Vector2 = Vector2.ZERO
+var _circle_cache_ttl: float = 0.0
+var _circle_cache_refresh: float = 0.25  # seconds between recalcs
+
 # sight smoothing / memory
 var time_since_seen: float = 0.0
 var lose_sight_delay: float = 0.8
 var facing_left: bool = false
 var post_attack_left: bool = false
 
-# raycast eye offset
 @export var eye_offset: Vector2 = Vector2(0, -8)
 
-# Signals
 signal enemy_hit_player(damage)
 signal enemy_damaged(amount)
 signal enemy_died()
 
-# Debug
 var _debug_enabled: bool = true
 
-# ------------------------------
-# Helpers: animation / state
 # ------------------------------
 func _set_state(new_state: int) -> void:
 	if state == new_state:
@@ -80,6 +74,8 @@ func _set_state(new_state: int) -> void:
 	state = new_state
 	if _debug_enabled:
 		print("[Enemy] state:", old_state, "->", new_state, " pos:", global_position)
+
+	# play normal animations for transitions, but DO NOT auto-play "attack" here
 	match state:
 		IDLE:
 			_play_anim_if_exists("idle")
@@ -90,7 +86,9 @@ func _set_state(new_state: int) -> void:
 		SEARCH:
 			_play_anim_if_exists("search")
 		ATTACK:
-			_play_anim_if_exists("attack")
+			# intentionally do NOT auto-play "attack" here — the actual attack anim must start
+			# when the windup completes and _perform_attack() runs (so windup delay is respected).
+			pass
 		FLEE:
 			_play_anim_if_exists("flee")
 		DEAD:
@@ -104,22 +102,14 @@ func _play_anim_if_exists(name: String) -> void:
 	else:
 		if _debug_enabled:
 			print("[Enemy] body anim not found:", name)
-	# head uses same animations (you will add them)
 	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(name):
 		head_anim.play(name)
 
 # ------------------------------
-# Lifecycle
-# ------------------------------
 func _ready() -> void:
 	hp = max_hp
-
-	# Find player by group
 	var players: Array = get_tree().get_nodes_in_group("Player")
-	if players.size() > 0:
-		player = players[0]
-	else:
-		player = null
+	player = players[0] if players.size() > 0 else null
 
 	# Agent tuning
 	if agent:
@@ -138,7 +128,7 @@ func _ready() -> void:
 			agent.velocity_computed.disconnect(callable)
 		agent.velocity_computed.connect(callable)
 
-	# connect damage receiver (player weapons hit this Area2D)
+	# connect damage area
 	if damage_area:
 		if not damage_area.is_connected("body_entered", Callable(self, "_on_damage_area_body_entered")):
 			damage_area.body_entered.connect(Callable(self, "_on_damage_area_body_entered"))
@@ -151,27 +141,27 @@ func _ready() -> void:
 
 	await get_tree().process_frame
 
-	agent.avoidance_enabled = true
-	agent.avoidance_layers = 1
-	agent.avoidance_mask = 1
-
-	# Instantiate weapon if provided and call initialize(owner)
+	# instantiate weapon and initialize
 	if weapon_scene:
 		var inst = weapon_scene.instantiate()
 		if inst:
 			weapon = inst
-			add_child(weapon) # optional; weapon will reparent itself
+			add_child(weapon) # will reparent itself
 			if weapon.has_method("initialize"):
 				weapon.initialize(self)
-			else:
-				if "weapon_owner" in weapon:
-					weapon.weapon_owner = self
+				if weapon.has_method("equip_for_owner"):
+					weapon.equip_for_owner("enemy")
+				if weapon.has_method("update_weapon"):
+					weapon.update_weapon(0.0)
+
+	# initial facing
+	if player:
+		facing_left = player.global_position.x < global_position.x
+	_update_flip_and_layers()
 
 	if agent.radius < 1:
 		agent.radius = 12
 
-# ------------------------------
-# Physics loop
 # ------------------------------
 func _physics_process(delta: float) -> void:
 	detection_timer = max(0.0, detection_timer - delta)
@@ -200,8 +190,6 @@ func _physics_process(delta: float) -> void:
 	velocity = velocity_vec
 	move_and_slide()
 
-# ------------------------------
-# State behaviours
 # ------------------------------
 func _process_idle(delta: float) -> void:
 	if _scan_for_player(notice_radius):
@@ -241,14 +229,28 @@ func _process_chase(delta: float) -> void:
 				print("[Enemy DEBUG] Lost sight -> SEARCH. Last seen:", last_seen_pos)
 			return
 
-	# Attack check (melee range)
+	# Attack check
 	if global_position.distance_to(player.global_position) <= attack_range and attack_timer <= 0.0:
 		_set_state(ATTACK)
 		return
 
-	_update_agent_movement()
+	# Circling behavior while on cooldown
+	if attack_timer > 0.0:
+		var dist_to_player = global_position.distance_to(player.global_position)
+		if dist_to_player <= attack_range * 1.5:
+			var circle_target = _get_circling_target()
+			if circle_target != Vector2.ZERO and agent:
+				agent.target_position = circle_target
+				if _debug_enabled:
+					print("[Enemy DEBUG] Circling -> target:", circle_target)
+			# update facing
+			if player:
+				facing_left = player.global_position.x < global_position.x
+			_update_flip_and_layers()
+			return
 
-	# update facing when chasing so visuals follow
+	# Normal chase
+	_update_agent_movement()
 	if player:
 		facing_left = player.global_position.x < global_position.x
 	_update_flip_and_layers()
@@ -259,115 +261,119 @@ func _process_search(delta: float) -> void:
 		time_since_seen = 0.0
 		_set_state(CHASE)
 		return
-
 	if agent:
 		agent.target_position = last_seen_pos
-
 	_update_agent_movement()
-
 	if agent and agent.is_navigation_finished():
 		if search_timer <= 0.0:
 			_set_state(IDLE)
 		return
 
 func _process_attack_state(delta: float) -> void:
-	# Start windup then attack (non-blocking via await)
+	# Start windup then attack
 	if attack_timer <= 0.0 and not attack_active:
 		attack_active = true
-		# stop moving during windup (0.5s)
 		velocity_vec = Vector2.ZERO
 		if agent:
 			agent.set_velocity(Vector2.ZERO)
-		# keep visual facing
 		if player:
 			facing_left = player.global_position.x < global_position.x
 		_update_flip_and_layers()
-		# windup
+		# perform windup wait — only after this will we actually play attack animations
 		await get_tree().create_timer(attack_windup_time).timeout
-		# perform attack
+		# perform attack: play attack anim then weapon start
 		_perform_attack()
-		# recovery pause after attack
+		# recovery
 		await get_tree().create_timer(attack_recovery_time).timeout
-		# resume chasing immediately (cooldown still active)
 		attack_active = false
 		_set_state(CHASE)
 
-# ------------------------------
-# Movement / agent helper
 # ------------------------------
 func _update_agent_movement() -> void:
 	if not agent:
 		velocity_vec = Vector2.ZERO
 		return
-
 	var next_pos := agent.get_next_path_position()
 	if next_pos == Vector2.ZERO:
 		velocity_vec = Vector2.ZERO
 		return
-
 	var dir := next_pos - global_position
 	var dist := dir.length()
 	if dist < 1.0:
 		velocity_vec = Vector2.ZERO
 		return
-
 	agent.set_velocity(dir.normalized() * speed)
 
 # ------------------------------
-# Detection (multi-ray cone)
+func _get_circling_target() -> Vector2:
+	# cached refresh to avoid jitter
+	if _circle_cache_ttl <= 0.0:
+		_circle_cache_ttl = _circle_cache_refresh
+		_circle_cache = _compute_circling_point()
+	else:
+		_circle_cache_ttl -= get_physics_process_delta_time()
+	return _circle_cache
+
+func _compute_circling_point() -> Vector2:
+	if not player or not agent:
+		return Vector2.ZERO
+	var map_rid = agent.get_navigation_map()
+	if map_rid == RID():
+		return Vector2.ZERO
+	var r = max(attack_range * _circle_radius_mult, attack_range + 8.0)
+	var to_player = player.global_position - global_position
+	if to_player.length() == 0:
+		to_player = Vector2.RIGHT
+	var base_angle = to_player.angle()
+	_circle_dir = -_circle_dir if randi() % 3 == 0 else _circle_dir
+	var target_angle = base_angle + (PI / 2.0) * float(_circle_dir)
+	var sample = player.global_position + Vector2.RIGHT.rotated(target_angle) * r
+	var clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
+	if clamped == Vector2.ZERO:
+		sample = player.global_position + Vector2.RIGHT.rotated(base_angle - (PI / 2.0) * float(_circle_dir)) * r
+		clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
+	return clamped
+
 # ------------------------------
 func _scan_for_player(radius: float) -> bool:
 	if detection_timer > 0.0:
 		return false
 	detection_timer = detection_interval
-
 	if player == null:
 		return false
-
 	var origin: Vector2 = global_position + eye_offset
 	var to_player = player.global_position - origin
 	if to_player.length() > radius:
 		return false
-
 	var angle_center = to_player.angle()
 	var half_spread := deg_to_rad(60)
 	var ray_count = max(detection_rays, 1)
-
 	var space := get_world_2d().direct_space_state
-	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE (adjust bits if needed)
-
+	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE (adjust if your bits differ)
 	var saw_player := false
-
 	for i in range(ray_count):
 		var t := float(i) / float(max(ray_count - 1, 1))
 		var angle = lerp(angle_center - half_spread, angle_center + half_spread, t)
-
 		var ray_end := origin + Vector2.RIGHT.rotated(angle) * radius
 		var query := PhysicsRayQueryParameters2D.create(origin, ray_end)
 		query.collide_with_bodies = true
 		query.collide_with_areas = true
 		query.collision_mask = mask
 		query.exclude = [self]
-
 		var hit := space.intersect_ray(query)
 		if hit.is_empty():
 			continue
-
 		var collider = hit.get("collider")
 		if not collider:
 			continue
-
 		if collider.is_in_group("Player"):
 			saw_player = true
 		else:
 			if _debug_enabled:
 				if Time.get_ticks_msec() % 2000 < 50:
 					print("[Enemy DEBUG] LOS blocked by:", str(collider), "at", hit.get("position"))
-
 	return saw_player
 
-# ------------------------------
-# Agent velocity callback
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
 	if state in [CHASE, SEARCH, FLEE]:
@@ -376,14 +382,15 @@ func _on_agent_velocity(safe_velocity: Vector2) -> void:
 		velocity_vec = Vector2.ZERO
 
 # ------------------------------
-# Attack
-# ------------------------------
 func _perform_attack() -> void:
 	if not player:
 		_set_state(IDLE)
 		return
 
-	# start weapon attack if we have one
+	# play enemy body/head attack animation (we only start it here so windup actually delays it)
+	_play_anim_if_exists("attack")
+
+	# start weapon attack if present
 	if weapon and weapon.has_method("start_attack"):
 		weapon.start_attack()
 
@@ -391,43 +398,37 @@ func _perform_attack() -> void:
 	facing_left = player.global_position.x < global_position.x
 	_update_flip_and_layers()
 
-	# emit signal for external listeners (e.g. UI)
+	# debug / external signal
 	var dmg: int = attack_damage
 	emit_signal("enemy_hit_player", dmg)
 
-	# Do NOT apply damage here. Weapon's hitbox will call back engine via weapon_notify_hit().
-	# Set cooldown now (enemy may move during cooldown)
+	# set cooldown
 	attack_timer = attack_cooldown
 
-# Called by Weapon when it successfully hits a body (Weapon calls weapon_owner.weapon_notify_hit(body))
+# Called by weapon when it hits a body (weapon calls weapon_owner.weapon_notify_hit(body))
 func weapon_notify_hit(body: Node) -> void:
 	if not body:
 		return
 	if not body.is_in_group("Player"):
 		return
-
-	# Apply damage via player's method if it exists
 	if body.has_method("apply_damage"):
 		body.apply_damage(attack_damage)
-	# Apply knockback to player if they have external_knockback
 	if body.has_method("external_knockback"):
 		var force = (body.global_position - global_position).normalized() * knockback_strength
 		body.external_knockback(force)
+	if _debug_enabled:
+		print("[Enemy] weapon_notify_hit -> applied", attack_damage, "to", body)
 
-# ------------------------------
-# Damage / death (enemy receives damage from player weapons/hits)
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult: float = 1.0) -> void:
 	hp -= amount
 	if _debug_enabled:
 		print("[Enemy] took damage:", amount, "hp now:", hp)
 	emit_signal("enemy_damaged", amount)
-	# play hit anim on body/head if present
 	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("hit"):
 		body_anim.play("hit")
 	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("hit"):
 		head_anim.play("hit")
-
 	if hp <= 0 and state != DEAD:
 		_die()
 	else:
@@ -438,16 +439,6 @@ func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 	if dir.length() == 0:
 		dir = Vector2.RIGHT
 	velocity_vec = dir.normalized() * strength
-
-func _apply_knockback_to(target: Node, strength: float) -> void:
-	if not target:
-		return
-	var force: Vector2 = (target.global_position - global_position).normalized() * strength
-	if target.has_method("external_knockback"):
-		target.external_knockback(force)
-		return
-	if target is CharacterBody2D:
-		target.velocity = force
 
 func _die() -> void:
 	_set_state(DEAD)
@@ -476,9 +467,6 @@ func _spawn_loot() -> void:
 		if _debug_enabled:
 			print("[Enemy] spawned loot at", global_position, "item:", item_res)
 
-# ------------------------------
-# Damage area callback (player weapons will collide with this area)
-# ------------------------------
 func _on_damage_area_body_entered(body: Node) -> void:
 	if not body:
 		return
@@ -486,34 +474,23 @@ func _on_damage_area_body_entered(body: Node) -> void:
 		var dmg = int(body.damage)
 		take_damage(dmg, body.global_position)
 
-# ------------------------------
-# Util: Update flips and layer ordering (body/weapon/head)
-# ------------------------------
 func _update_flip_and_layers() -> void:
-	# Flip visuals
 	if body_anim:
 		body_anim.flip_h = facing_left
 	if head_anim:
 		head_anim.flip_h = facing_left
-
-	# Layering (relative within this enemy)
-	# Default order: body (0) -> weapon (1) -> head (2)
 	if weapon_pivot:
 		body_anim.z_index = 0
 		weapon_pivot.z_index = 1
 		if head_anim:
 			head_anim.z_index = 2
 
-# ------------------------------
-# Misc helpers
-# ------------------------------
 func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0) -> Vector2:
 	if not agent:
 		return Vector2.ZERO
 	var map_rid = agent.get_navigation_map()
 	if map_rid == RID():
 		return Vector2.ZERO
-
 	var rng = RandomNumberGenerator.new()
 	rng.randomize()
 	for i in range(tries):
@@ -525,5 +502,6 @@ func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0)
 			if clamped.distance_to(global_position) < center.distance_to(global_position):
 				return clamped
 	return Vector2.ZERO
+
 func _process_flee(delta):
 	pass
