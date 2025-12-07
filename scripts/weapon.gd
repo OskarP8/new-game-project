@@ -54,6 +54,23 @@ func initialize(owner) -> void:
 	anim_player = _find_child(self, "AnimationPlayer")
 	hitbox = _find_child(self, "Area2D")
 	grip_node = _find_child_named(self, "Grip") as Node2D
+	# --- DEBUG: Grip + node discovery ---
+	if _debug_enabled:
+		if grip_node:
+			print("[Weapon DEBUG] Grip found:", grip_node, " pos:", grip_node.position)
+		else:
+			print("[Weapon DEBUG] Grip NOT found in weapon:", self.name, "children:", get_child_count())
+			# list child names to help diagnose
+			for i in range(get_child_count()):
+				var c = get_child(i)
+				print("  child[", i, "]:", c.name, " class:", c.get_class())
+	# also dump animations available on the AnimatedSprite2D (if any)
+	if sprite and sprite.sprite_frames and _debug_enabled:
+		var anims = sprite.sprite_frames.get_animation_names()
+		print("[Weapon DEBUG] sprite animations:", anims)
+	# anim_player presence
+	if anim_player and _debug_enabled:
+		print("[Weapon DEBUG] anim_player exists on:", self.name)
 
 	# normalize sprite visual if present
 	if sprite:
@@ -73,6 +90,19 @@ func initialize(owner) -> void:
 
 	# Reparent to holder and align grip
 	reparent_and_align_to_grip()
+	# Force initial visual state after reparent so weapon isn't stuck visually
+	if sprite and sprite.sprite_frames:
+		if sprite.sprite_frames.has_animation("idle"):
+			sprite.play("idle")
+			if _debug_enabled:
+				print("[Weapon DEBUG] forced sprite.play('idle') after reparent")
+	if anim_player:
+		# only try to play idle if animation exists
+		if anim_player.has_animation("idle"):
+			anim_player.play("idle")
+			if _debug_enabled:
+				print("[Weapon DEBUG] anim_player.play('idle') after reparent")
+
 	_hit_targets.clear()
 
 	# Flip holder initial side depending on owner's player presence or facing flag
@@ -131,6 +161,9 @@ func update_weapon(delta: float) -> void:
 		sprite.flip_h = false
 
 # ---------------------------
+# ---------------------------
+# Start attack (called by owner)
+# ---------------------------
 func start_attack() -> void:
 	if attacking:
 		return
@@ -143,7 +176,7 @@ func start_attack() -> void:
 		push_error("[Weapon] missing pivot/holder.")
 		return
 
-	# compute angle toward target (player if available)
+	# compute angle towards player if available
 	if ("player" in weapon_owner) and weapon_owner.player:
 		var player_pos: Vector2 = weapon_owner.player.global_position
 		var dir: Vector2 = player_pos - weapon_pivot.global_position
@@ -155,43 +188,55 @@ func start_attack() -> void:
 		attack_facing_left = false
 		post_attack_left = false
 
-	# apply pivot rotation for visual aim
+	# Apply rotation like player does
 	weapon_pivot.rotation = attack_angle + PI if attack_facing_left else attack_angle
+
+	# Flip holder
 	weapon_holder.scale.x = -1 if attack_facing_left else 1
 
-	# Prefer AnimationPlayer (recommended for pitchfork)
+	# Play visuals: prefer AnimationPlayer but also start sprite frames if present.
 	if anim_player and anim_player.has_animation("attack"):
 		anim_player.play("attack")
-	elif sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("attack"):
-		sprite.play("attack")
-	else:
-		# fallback: still enable hitbox for a short moment in case animation moves collision directly
 		if _debug_enabled:
-			print("[Weapon] Warning: no attack animation found on weapon.")
-
+			print("[Weapon DEBUG] anim_player.play('attack') for", self.name)
+	# Always try to play AnimatedSprite2D "attack" if present — many weapon scenes use sprite frames
+	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("attack"):
+		sprite.play("attack")
+		if _debug_enabled:
+			print("[Weapon DEBUG] sprite.play('attack') for", self.name)
 	# enable hitbox
 	if hitbox:
 		hitbox.monitoring = true
+		if _debug_enabled:
+			print("[Weapon DEBUG] hitbox.monitoring = true for", self.name)
 
 # ---------------------------
 func end_attack() -> void:
 	attacking = false
 
-	# reset transforms
+	# reset transforms similar to player behaviour
 	if weapon_pivot:
 		weapon_pivot.rotation = 0
 	if weapon_holder:
 		weapon_holder.scale.x = -1 if post_attack_left else 1
 
-	# resume idle anim (prefer AnimationPlayer)
+	# stop / resume idle anim: try AnimationPlayer first, otherwise fallback to sprite
+	var did_idle = false
 	if anim_player and anim_player.has_animation("idle"):
 		anim_player.play("idle")
-	elif sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("idle"):
+		did_idle = true
+		if _debug_enabled:
+			print("[Weapon] anim_player.play(idle)")
+	if not did_idle and sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("idle"):
 		sprite.play("idle")
+		if _debug_enabled:
+			print("[Weapon] sprite.play(idle)")
 
 	# disable hitbox
 	if hitbox:
 		hitbox.monitoring = false
+		if _debug_enabled:
+			print("[Weapon] hitbox disabled after attack")
 
 	_hit_targets.clear()
 

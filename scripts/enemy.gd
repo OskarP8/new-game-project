@@ -33,6 +33,8 @@ var hp: int
 var player: Node = null
 var last_seen_pos: Vector2 = Vector2.ZERO
 
+var _circling_active: bool = false  # NEW: true while we are circling during a cooldown
+
 # timers/motion
 var detection_timer: float = 0.0
 var attack_timer: float = 0.0
@@ -237,17 +239,40 @@ func _process_chase(delta: float) -> void:
 	# Circling behavior while on cooldown
 	if attack_timer > 0.0:
 		var dist_to_player = global_position.distance_to(player.global_position)
+
+		# Circle only when close enough to the player
 		if dist_to_player <= attack_range * 1.5:
+			# start circling (choose direction once per circling episode)
+			if not _circling_active:
+				_circling_active = true
+				# pick a random direction and stick with it for this episode
+				_circle_dir = 1 if randi() % 2 == 0 else -1
+				if _debug_enabled:
+					print("[Enemy DEBUG] start circling, dir:", _circle_dir)
+
 			var circle_target = _get_circling_target()
+
 			if circle_target != Vector2.ZERO and agent:
 				agent.target_position = circle_target
+				# force a movement update so agent computes velocity this frame
+				_update_agent_movement()
+
 				if _debug_enabled:
-					print("[Enemy DEBUG] Circling -> target:", circle_target)
-			# update facing
+					print("[Enemy DEBUG] Circling -> target:", circle_target, " next:", agent.get_next_path_position())
+
+			# Update facing while circling
 			if player:
 				facing_left = player.global_position.x < global_position.x
 			_update_flip_and_layers()
+
+			# don't fall back to normal chase
 			return
+	else:
+		# cooldown finished — stop circling
+		if _circling_active:
+			_circling_active = false
+			if _debug_enabled:
+				print("[Enemy DEBUG] stop circling (cooldown ended)")
 
 	# Normal chase
 	_update_agent_movement()
@@ -306,13 +331,31 @@ func _update_agent_movement() -> void:
 
 # ------------------------------
 func _get_circling_target() -> Vector2:
-	# cached refresh to avoid jitter
-	if _circle_cache_ttl <= 0.0:
-		_circle_cache_ttl = _circle_cache_refresh
-		_circle_cache = _compute_circling_point()
-	else:
-		_circle_cache_ttl -= get_physics_process_delta_time()
-	return _circle_cache
+	if not player or not agent:
+		return Vector2.ZERO
+	var map_rid = agent.get_navigation_map()
+	if map_rid == RID():
+		return Vector2.ZERO
+
+	# radius: slightly outside attack range so enemy doesn't bump into player
+	var r = max(attack_range * _circle_radius_mult, attack_range + 12.0)
+	# compute angle from enemy to player and offset by 90 degrees (circle)
+	var to_player = player.global_position - global_position
+	if to_player.length() == 0:
+		to_player = Vector2.RIGHT
+	var base_angle = to_player.angle()
+	# occasionally reverse circling direction (less frequently)
+	if randi() % 6 == 0:
+		_circle_dir = -_circle_dir
+	var target_angle = base_angle + (PI / 2.0) * float(_circle_dir)
+	var sample = player.global_position + Vector2.RIGHT.rotated(target_angle) * r
+	# clamp to navmesh
+	var clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
+	if clamped == Vector2.ZERO:
+		# fallback try the opposite side
+		sample = player.global_position + Vector2.RIGHT.rotated(base_angle - (PI / 2.0) * float(_circle_dir)) * r
+		clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
+	return clamped
 
 func _compute_circling_point() -> Vector2:
 	if not player or not agent:

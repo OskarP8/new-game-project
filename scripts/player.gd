@@ -164,8 +164,20 @@ func player_movement(delta) -> void:
 # HELPERS
 # ----------------------
 func _update_last_dir() -> void:
-	# keep last_dir consistent for animation lookup
-	last_dir = vert_dir + "_" + hor_dir
+	# This keeps animations based on movement, not facing
+	var anim_hor = hor_dir
+
+	# If weapon changes facing_left, DON'T change direction unless player moves horizontally
+	if input.x == 0:
+		# keep previous left/right
+		anim_hor = last_dir.split("_")[1]
+	else:
+		anim_hor = "left" if input.x < 0 else "right"
+
+	# Vertical direction is still based on movement
+	var anim_vert = vert_dir
+
+	last_dir = anim_vert + "_" + anim_hor
 
 # ----------------------
 # ATTACK
@@ -276,62 +288,87 @@ func _on_body_animation_finished() -> void:
 # ANIMATION (body & head & weapon idle/walk)
 # ----------------------
 func update_animation() -> void:
-	# don't override while performing an attack
+	# don't override during attack
 	if attacking or not body_anim:
 		return
 
-	# --- Setup ---
 	var suffix = ""
 	if has_weapon and current_weapon_scene:
 		suffix = "_weapon"
 
-	# show_head only when weapon equipped and look is 'down'
+	# head visible only for down directions when weapon equipped
 	var show_head = has_weapon and ("down_left" in last_dir or "down_right" in last_dir)
 	if head_anim:
 		head_anim.visible = show_head
 
-	# --- Determine movement state ---
 	var is_idle = input == Vector2.ZERO
-	var base_dir = last_dir.replace("_left", "_right")
-
-	# --- Choose animation prefix ---
 	var prefix = "idle_" if is_idle else "walk_"
-	var anim_name = prefix + base_dir + suffix
+	var base_dir = last_dir
 
-	# --- BODY ANIMATION ---
-	if body_anim and body_anim.sprite_frames:
-		if not _play_with_optional_flip(body_anim, anim_name):
-			# Try right version + flip if left version missing
-			var alt = base_dir.replace("_left", "_right")
-			_play_with_optional_flip(body_anim, prefix + alt + suffix, true)
+	var full_anim = prefix + last_dir + suffix
+	var frames = body_anim.sprite_frames
 
-	# --- HEAD ANIMATION ---
+	# ---------------------
+	# 1. PERFECT MATCH EXISTS?
+	# ---------------------
+	if frames.has_animation(full_anim):
+		base_dir = last_dir
+
+	else:
+		# ---------------------
+		# 2. LEFT VERSION MISSING → try right version + flip
+		# ---------------------
+		if "_left" in last_dir:
+			var right_dir = last_dir.replace("_left", "_right")
+			var right_anim = prefix + right_dir + suffix
+
+			if frames.has_animation(right_anim):
+				base_dir = right_dir
+				body_anim.flip_h = true
+			else:
+				# neither left nor right weapon version exists → fallback to non-weapon animations
+				base_dir = last_dir.replace("_left", "_right")
+		else:
+			# direction was already right
+			base_dir = last_dir
+
+	# ---------------------
+	# PLAY BODY ANIMATION
+	# ---------------------
+	var final_anim = prefix + base_dir + suffix
+	if frames.has_animation(final_anim):
+		body_anim.play(final_anim)
+		body_anim.flip_h = ("_left" in last_dir)  # ensure correct flip
+
+	# ---------------------
+	# HEAD ANIMATIONS
+	# ---------------------
 	if head_anim and head_anim.sprite_frames:
 		if show_head:
-			_play_with_optional_flip(head_anim, anim_name)
+			var head_anim_name = prefix + base_dir + suffix
+			if head_anim.sprite_frames.has_animation(head_anim_name):
+				head_anim.play(head_anim_name)
+				head_anim.flip_h = ("_left" in last_dir)
 		else:
-			# head should return to non-weapon idle or stop
 			var idle_head = "idle_" + base_dir
 			if head_anim.sprite_frames.has_animation(idle_head):
-				# prefer non-weapon idle version (no suffix)
 				head_anim.play(idle_head)
-				head_anim.flip_h = idle_head.find("_left") != -1
+				head_anim.flip_h = ("_left" in idle_head)
 			else:
-				# no suitable idle -> stop playback to avoid leftover attack loop
 				head_anim.stop()
 
-	# --- WEAPON ANIMATION ---
-	if has_weapon and (weapon_anim or weapon_sprite):
+	# ---------------------
+	# WEAPON IDLE / WALK
+	# ---------------------
+	if has_weapon:
 		var vis := weapon_sprite if weapon_sprite else weapon_anim
-		var weapon_anim_name = "idle" if is_idle else "walk"
-		if vis and vis.sprite_frames and vis.sprite_frames.has_animation(weapon_anim_name):
-			vis.play(weapon_anim_name)
+		if vis and vis.sprite_frames:
+			var w_anim = "idle" if is_idle else "walk"
+			if vis.sprite_frames.has_animation(w_anim):
+				vis.play(w_anim)
 	else:
-		# ensure any leftover weapon visuals stop when unequipped
-		if weapon_anim:
-			weapon_anim.stop()
-		if weapon_sprite:
-			weapon_sprite.stop()
+		if weapon_sprite: weapon_sprite.stop()
+		if weapon_anim: weapon_anim.stop()
 
 # helper: try to play anim, if it's a 'left' variant not present try to play the right variant & flip
 func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, force_flip_if_left: bool=false) -> bool:
@@ -579,7 +616,7 @@ func equip_weapon(packed_or_path) -> void:
 	current_weapon_root = current_weapon_scene
 
 	# find visuals
-	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite")
+	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
 	# store base scale for consistent flipping (magnitude only)
@@ -595,7 +632,7 @@ func equip_weapon(packed_or_path) -> void:
 		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
 
 	# when using AnimatedSprite2D we may need its animation_finished too (connect on demand)
-	if weapon_sprite:
+	if weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation("attack"):
 		if not weapon_sprite.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
 			weapon_sprite.animation_finished.connect(Callable(self, "_on_attack_finished"))
 
@@ -644,7 +681,8 @@ func _on_weapon_animation_finished(anim_name: String) -> void:
 
 	# Reset pivot rotation
 	if weapon_pivot:
-		weapon_pivot.rotation = 0
+		if not attacking:
+			weapon_pivot.rotation = 0
 
 	# Ensure holder flip matches final facing
 	if weapon_holder:

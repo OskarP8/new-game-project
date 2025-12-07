@@ -1,5 +1,6 @@
-[gd_scene load_steps=18 format=3 uid="uid://btxgim7wt5iyk"]
+[gd_scene load_steps=19 format=3 uid="uid://btxgim7wt5iyk"]
 
+[ext_resource type="Script" path="res://scripts/weapon.gd" id="1_3wihp"]
 [ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="1_56t5t"]
 
 [sub_resource type="Animation" id="Animation_6jun5"]
@@ -239,6 +240,7 @@ animations = [{
 }]
 
 [node name="Pitchfork" type="Node2D"]
+script = ExtResource("1_3wihp")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
