@@ -16,6 +16,7 @@ var anim_player: AnimationPlayer = null
 var hitbox: Area2D = null
 var grip_node: Node2D = null
 var _debug_enabled: bool = true
+var uses_animplayer_attack: bool = false
 
 # Weapon transforms (reparented into owner's pivot/holder)
 var weapon_pivot: Node2D = null
@@ -77,10 +78,11 @@ func initialize(owner) -> void:
 		sprite.flip_h = false
 		sprite.scale.x = abs(sprite.scale.x)
 
-	# connect animation_finished signals (safe)
-	if anim_player:
-		if not anim_player.is_connected("animation_finished", Callable(self, "_on_anim_finished")):
-			anim_player.animation_finished.connect(Callable(self, "_on_anim_finished"))
+	# Detect whether this weapon should use AnimationPlayer for attack
+	if anim_player and anim_player.has_animation("attack"):
+		uses_animplayer_attack = true
+	else:
+		uses_animplayer_attack = false
 
 	# connect hitbox callback
 	if hitbox:
