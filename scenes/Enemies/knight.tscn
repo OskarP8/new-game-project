@@ -1,7 +1,7 @@
 [gd_scene load_steps=26 format=3 uid="uid://dhp5srs4m8eeq"]
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_3hyev"]
-[ext_resource type="PackedScene" uid="uid://efvcragqblr4" path="res://scenes/Weapons/sword.tscn" id="2_kepdu"]
+[ext_resource type="PackedScene" uid="uid://btxgim7wt5iyk" path="res://scenes/Weapons/pitchfork.tscn" id="2_gxmvm"]
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="3_j5nu6"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
@@ -181,7 +181,7 @@ speed = 30.0
 notice_radius = 1000.0
 chase_radius = 1000.0
 knockback_strength = 40.0
-weapon_scene = ExtResource("2_kepdu")
+weapon_scene = ExtResource("2_gxmvm")
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
 avoidance_enabled = true

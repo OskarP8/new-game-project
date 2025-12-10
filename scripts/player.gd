@@ -52,6 +52,8 @@ var knockback_force: Vector2 = Vector2.ZERO
 @onready var head_anim := $Graphics/Head as AnimatedSprite2D
 @onready var weapon_pivot := $Graphics/WeaponPivot as Node2D
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
+# sword_anim_player node reference kept in case it exists in tree
+@onready var sword_anim_player := $Graphics/WeaponPivot/Sword/AnimationPlayer
 
 func _dummy_set(v): pass
 
@@ -188,8 +190,6 @@ func handle_attack() -> void:
 		attacking = true
 		input = Vector2.ZERO
 		velocity = Vector2.ZERO
-		if current_weapon_scene and current_weapon_scene.has_method("start_attack"):
-			current_weapon_scene.start_attack()
 
 		var mouse_pos = get_global_mouse_position()
 		var dir = mouse_pos - weapon_pivot.global_position
@@ -616,8 +616,8 @@ func equip_weapon(packed_or_path) -> void:
 	current_weapon_root = current_weapon_scene
 
 	# find visuals
-	weapon_sprite = _find_child_of_type(current_weapon_scene)
-	weapon_anim_player = _find_animation_player(current_weapon_scene)
+	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
+	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
 	# store base scale for consistent flipping (magnitude only)
 	if weapon_sprite:
@@ -654,22 +654,15 @@ func _play_weapon_anim(name: String) -> void:
 		vis.play(name)
 
 # Recursive search for the first child of a specific class name
-func _find_child_of_type(node: Node) -> AnimatedSprite2D:
+func _find_child_of_type(node: Node, target_class_name: String) -> Node:
+	if node == null:
+		return null
+	if node.get_class() == target_class_name:
+		return node
 	for child in node.get_children():
-		if child is AnimatedSprite2D:
-			return child
-		var deep = _find_child_of_type(child)
-		if deep:
-			return deep
-	return null
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	for child in node.get_children():
-		if child is AnimationPlayer:
-			return child
-		var deep = _find_animation_player(child)
-		if deep:
-			return deep
+		var found = _find_child_of_type(child, target_class_name)
+		if found:
+			return found
 	return null
 
 # -------------------------------------------------------------------------
