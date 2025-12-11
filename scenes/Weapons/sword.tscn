@@ -3,45 +3,6 @@
 [ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="1_4qjfi"]
 [ext_resource type="Script" path="res://scripts/weapon.gd" id="1_naxxk"]
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_7jxup"]
-atlas = ExtResource("1_4qjfi")
-region = Rect2(0, 64, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_8krx6"]
-atlas = ExtResource("1_4qjfi")
-region = Rect2(0, 64, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_6uxpq"]
-atlas = ExtResource("1_4qjfi")
-region = Rect2(0, 64, 32, 32)
-
-[sub_resource type="SpriteFrames" id="SpriteFrames_rvsm4"]
-animations = [{
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_7jxup")
-}],
-"loop": false,
-"name": &"attack",
-"speed": 10.0
-}, {
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_8krx6")
-}],
-"loop": true,
-"name": &"idle",
-"speed": 10.0
-}, {
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_6uxpq")
-}],
-"loop": true,
-"name": &"walk",
-"speed": 10.0
-}]
-
 [sub_resource type="AtlasTexture" id="AtlasTexture_1jc37"]
 atlas = ExtResource("1_4qjfi")
 region = Rect2(512, 224, 32, 32)
@@ -410,14 +371,47 @@ _data = {
 "attack_left": SubResource("Animation_6w5j8")
 }
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_7jxup"]
+atlas = ExtResource("1_4qjfi")
+region = Rect2(0, 64, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_8krx6"]
+atlas = ExtResource("1_4qjfi")
+region = Rect2(0, 64, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_6uxpq"]
+atlas = ExtResource("1_4qjfi")
+region = Rect2(0, 64, 32, 32)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_rvsm4"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_7jxup")
+}],
+"loop": false,
+"name": &"attack",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_8krx6")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_6uxpq")
+}],
+"loop": true,
+"name": &"walk",
+"speed": 10.0
+}]
+
 [node name="Sword" type="Node2D"]
 script = ExtResource("1_naxxk")
-
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
-position = Vector2(6, 0)
-sprite_frames = SubResource("SpriteFrames_rvsm4")
-animation = &"attack"
-offset = Vector2(-5, -10)
 
 [node name="Particles" type="AnimatedSprite2D" parent="."]
 position = Vector2(7, 0)
@@ -431,6 +425,8 @@ libraries = {
 "": SubResource("AnimationLibrary_nnlbn")
 }
 
+[node name="Node2D" type="Node2D" parent="AnimationPlayer"]
+
 [node name="Hitbox" type="Area2D" parent="."]
 collision_layer = 4
 collision_mask = 32
@@ -442,3 +438,10 @@ disabled = true
 
 [node name="Grip" type="Node2D" parent="."]
 position = Vector2(0, -2)
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+position = Vector2(6, 0)
+scale = Vector2(1, 1)
+sprite_frames = SubResource("SpriteFrames_rvsm4")
+animation = &"attack"
+offset = Vector2(-5, -10)
