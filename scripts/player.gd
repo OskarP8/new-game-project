@@ -155,6 +155,7 @@ func player_movement(delta) -> void:
 			velocity -= velocity.normalized() * (FRICTION * delta)
 		else:
 			velocity = Vector2.ZERO
+	_update_last_dir()
 
 # ----------------------
 # HELPERS
