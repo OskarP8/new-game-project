@@ -34,6 +34,8 @@ var player: Node = null
 var last_seen_pos: Vector2 = Vector2.ZERO
 
 var _circling_active: bool = false  # NEW: true while we are circling during a cooldown
+var knockback_velocity: Vector2 = Vector2.ZERO
+var knockback_time: float = 0.0
 
 # timers/motion
 var detection_timer: float = 0.0
@@ -188,8 +190,13 @@ func _physics_process(delta: float) -> void:
 	if weapon and weapon.has_method("update_weapon"):
 		weapon.update_weapon(delta)
 
-	# apply movement
-	velocity = velocity_vec
+	if knockback_time > 0.0:
+		knockback_time -= delta
+		velocity = knockback_velocity
+		knockback_velocity = knockback_velocity.lerp(Vector2.ZERO, 0.25)
+	else:
+		velocity = velocity_vec
+
 	move_and_slide()
 
 # ------------------------------
@@ -333,29 +340,29 @@ func _update_agent_movement() -> void:
 func _get_circling_target() -> Vector2:
 	if not player or not agent:
 		return Vector2.ZERO
+
+	_circle_cache_ttl -= get_physics_process_delta_time()
+	if _circle_cache_ttl > 0.0:
+		return _circle_cache
+
+	_circle_cache_ttl = _circle_cache_refresh
+
 	var map_rid = agent.get_navigation_map()
 	if map_rid == RID():
 		return Vector2.ZERO
 
-	# radius: slightly outside attack range so enemy doesn't bump into player
 	var r = max(attack_range * _circle_radius_mult, attack_range + 12.0)
-	# compute angle from enemy to player and offset by 90 degrees (circle)
 	var to_player = player.global_position - global_position
 	if to_player.length() == 0:
 		to_player = Vector2.RIGHT
+
 	var base_angle = to_player.angle()
-	# occasionally reverse circling direction (less frequently)
-	if randi() % 6 == 0:
-		_circle_dir = -_circle_dir
 	var target_angle = base_angle + (PI / 2.0) * float(_circle_dir)
+
 	var sample = player.global_position + Vector2.RIGHT.rotated(target_angle) * r
-	# clamp to navmesh
-	var clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
-	if clamped == Vector2.ZERO:
-		# fallback try the opposite side
-		sample = player.global_position + Vector2.RIGHT.rotated(base_angle - (PI / 2.0) * float(_circle_dir)) * r
-		clamped = NavigationServer2D.map_get_closest_point(map_rid, sample)
-	return clamped
+	_circle_cache = NavigationServer2D.map_get_closest_point(map_rid, sample)
+
+	return _circle_cache
 
 func _compute_circling_point() -> Vector2:
 	if not player or not agent:
@@ -419,6 +426,9 @@ func _scan_for_player(radius: float) -> bool:
 
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
+	if knockback_time > 0.0:
+		return  # 🔒 do NOT override knockback
+
 	if state in [CHASE, SEARCH, FLEE]:
 		velocity_vec = safe_velocity.limit_length(speed)
 	else:
@@ -478,10 +488,12 @@ func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult
 		_apply_knockback_from(source_pos, knockback_strength * knockback_mult)
 
 func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
-	var dir: Vector2 = (global_position - source_pos)
+	var dir = global_position - source_pos
 	if dir.length() == 0:
 		dir = Vector2.RIGHT
-	velocity_vec = dir.normalized() * strength
+
+	knockback_velocity = dir.normalized() * strength
+	knockback_time = 0.18  # tweak feel (0.12–0.25 usually good)
 
 func _die() -> void:
 	_set_state(DEAD)
