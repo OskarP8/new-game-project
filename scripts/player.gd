@@ -88,16 +88,12 @@ func _ready() -> void:
 func _physics_process(delta):
 	if not attacking:
 		player_movement(delta)
+		update_animation()   # ✅ ONLY when not attacking
 
-	# --- APPLY KNOCKBACK HERE ---
 	velocity += knockback_force
 	knockback_force = lerp(knockback_force, Vector2.ZERO, 0.2)
-
-	# --- MOVE LAST ---
 	move_and_slide()
 
-	_update_last_dir()
-	update_animation()
 	handle_attack()
 	update_layers()
 
@@ -223,25 +219,25 @@ func handle_attack() -> void:
 			vis.flip_h = false
 
 		# --- Play attack animation ---
-		if weapon_anim_player:
-			# prefer AnimationPlayer if present
-			if weapon_anim_player.has_animation("attack"):
-				weapon_anim_player.play("attack")
-		else:
-			# fallback to AnimatedSprite2D animations
-			var vis_weapon := weapon_sprite if weapon_sprite else weapon_anim
-			if vis_weapon and vis_weapon.sprite_frames:
-				# prefer unified "attack" frame animation, else directional ones
-				if vis_weapon.sprite_frames.has_animation("attack"):
-					vis_weapon.play("attack")
-					if not vis_weapon.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
-						vis_weapon.animation_finished.connect(Callable(self, "_on_attack_finished"))
-				else:
-					var wanim := "attack_left" if facing_left else "attack_right"
-					if vis_weapon.sprite_frames.has_animation(wanim):
-						vis_weapon.play(wanim)
-						if not vis_weapon.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
-							vis_weapon.animation_finished.connect(Callable(self, "_on_attack_finished"))
+		var played := false
+
+		# Sword
+		if sword_anim_player and sword_anim_player.has_animation("attack"):
+			sword_anim_player.play("attack")
+			played = true
+
+		# Weapon scene AnimationPlayer
+		elif weapon_anim_player and weapon_anim_player.has_animation("attack"):
+			weapon_anim_player.play("attack")
+			played = true
+
+		# AnimatedSprite2D fallback
+		if weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation("attack"):
+			weapon_sprite.play("attack")
+			played = true
+
+		if DEBUG:
+			print("[ATTACK] Played attack:", played)
 
 		# --- Body/head attack animations (auto-choose/flip) ---
 		var suffix = "_weapon"
@@ -357,18 +353,6 @@ func update_animation() -> void:
 			else:
 				head_anim.stop()
 
-	# ---------------------
-	# WEAPON IDLE / WALK
-	# ---------------------
-	if has_weapon:
-		var vis := weapon_sprite if weapon_sprite else weapon_anim
-		if vis and vis.sprite_frames:
-			var w_anim = "idle" if is_idle else "walk"
-			if vis.sprite_frames.has_animation(w_anim):
-				vis.play(w_anim)
-	else:
-		if weapon_sprite: weapon_sprite.stop()
-		if weapon_anim: weapon_anim.stop()
 
 # helper: try to play anim, if it's a 'left' variant not present try to play the right variant & flip
 func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, force_flip_if_left: bool=false) -> bool:
@@ -643,15 +627,21 @@ func equip_weapon(packed_or_path) -> void:
 	update_animation()
 	sync_head_to_body()
 
-# helper to play either AnimationPlayer or AnimatedSprite2D animation
 func _play_weapon_anim(name: String) -> void:
+	# Sword AnimationPlayer
+	if sword_anim_player and sword_anim_player.has_animation(name):
+		sword_anim_player.play(name)
+		return
+
+	# Weapon scene AnimationPlayer
 	if weapon_anim_player and weapon_anim_player.has_animation(name):
 		weapon_anim_player.play(name)
 		return
 
-	var vis := weapon_sprite if weapon_sprite else weapon_anim
-	if vis and vis.sprite_frames and vis.sprite_frames.has_animation(name):
-		vis.play(name)
+	# AnimatedSprite2D (pitchfork)
+	if weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation(name):
+		weapon_sprite.play(name)
+		return
 
 # Recursive search for the first child of a specific class name
 func _find_child_of_type(node: Node, target_class_name: String) -> Node:
