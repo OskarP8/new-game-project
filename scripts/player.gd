@@ -353,6 +353,13 @@ func update_animation() -> void:
 			else:
 				head_anim.stop()
 
+	# ----------------------
+	# WEAPON IDLE / WALK
+	# ----------------------
+	if has_weapon and not attacking:
+		var weapon_anim := "idle" if input == Vector2.ZERO else "walk"
+		_play_weapon_anim(weapon_anim)
+
 
 # helper: try to play anim, if it's a 'left' variant not present try to play the right variant & flip
 func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, force_flip_if_left: bool=false) -> bool:
@@ -622,6 +629,14 @@ func equip_weapon(packed_or_path) -> void:
 
 	has_weapon = current_weapon_scene != null
 	print("[player] equip_weapon -> scene:", packed, " sprite:", weapon_sprite, " anim_player:", weapon_anim_player, " holder.scale.x:", weapon_holder.scale.x)
+	# 🔥 FORCE weapon idle on equip (VERY IMPORTANT)
+	if weapon_sprite and weapon_sprite.sprite_frames:
+		if weapon_sprite.sprite_frames.has_animation("idle"):
+			weapon_sprite.play("idle")
+			weapon_sprite.frame = 0
+
+	if weapon_anim_player and weapon_anim_player.has_animation("idle"):
+		weapon_anim_player.play("idle")
 
 	# Force animation update so head/body switch to weapon variants
 	update_animation()
