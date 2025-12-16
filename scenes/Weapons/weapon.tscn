@@ -1,6 +1,30 @@
-[gd_scene load_steps=2 format=3 uid="uid://tki6vyidhlnq"]
+[gd_scene load_steps=3 format=3 uid="uid://tki6vyidhlnq"]
 
 [ext_resource type="Script" path="res://scripts/weapon.gd" id="1_fmr78"]
+
+[sub_resource type="GDScript" id="GDScript_bvxne"]
+script/source = "extends Area2D
+
+@export var damage: int = 5
+@export var knockback_mult: float = 1.0
+
+func _ready():
+	# Make sure signal is connected
+	if not body_entered.is_connected(_on_body_entered):
+		body_entered.connect(_on_body_entered)
+
+func _on_body_entered(body: Node) -> void:
+	if not body:
+		return
+
+	if body.is_in_group(\"Enemy\"):
+		if body.has_method(\"take_damage\"):
+			body.take_damage(
+				damage,
+				get_parent().global_position,
+				knockback_mult
+			)
+"
 
 [node name="Weapon" type="Node2D"]
 script = ExtResource("1_fmr78")
@@ -12,6 +36,7 @@ script = ExtResource("1_fmr78")
 [node name="Hitbox" type="Area2D" parent="."]
 collision_layer = 4
 collision_mask = 32
+script = SubResource("GDScript_bvxne")
 
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
 

@@ -18,6 +18,7 @@ var input = Vector2.ZERO
 var vert_dir := "down"        # "up" or "down"
 var hor_dir := "right"        # "left" or "right"
 var last_dir := "down_right"  # combined for animation
+var weapon_logic: Node = null
 
 var attacking = false
 var has_weapon = false
@@ -185,6 +186,9 @@ func handle_attack() -> void:
 
 	if Input.is_action_just_pressed("attack"):
 		attacking = true
+		if current_weapon_scene and current_weapon_scene.has_method("start_attack"):
+			current_weapon_scene.start_attack()
+
 		input = Vector2.ZERO
 		velocity = Vector2.ZERO
 
@@ -261,6 +265,9 @@ func _on_attack_finished() -> void:
 	# ensure the same cleanup as the AnimationPlayer path
 	attacking = false
 	# force reset of pivot and holder as used by attack
+	if current_weapon_scene and current_weapon_scene.has_method("end_attack"):
+		current_weapon_scene.end_attack()
+
 	if weapon_pivot:
 		weapon_pivot.rotation = 0
 	if weapon_holder:
@@ -681,6 +688,8 @@ func _on_weapon_animation_finished(anim_name: String) -> void:
 
 	# clear attacking state
 	attacking = false
+	if current_weapon_scene and current_weapon_scene.has_method("end_attack"):
+		current_weapon_scene.end_attack()
 
 	# keep facing that the attack used
 	facing_left = post_attack_left

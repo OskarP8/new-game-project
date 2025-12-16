@@ -83,10 +83,21 @@ func initialize(owner) -> void:
 			anim_player.animation_finished.connect(Callable(self, "_on_anim_finished"))
 
 	# connect hitbox callback
+	# connect hitbox callback (FORCED, SAFE)
 	if hitbox:
 		hitbox.monitoring = false
-		if not hitbox.is_connected("body_entered", Callable(self, "_on_hitbox_body_entered")):
-			hitbox.body_entered.connect(Callable(self, "_on_hitbox_body_entered"))
+		hitbox.monitorable = true
+
+		# disconnect any stale connections (important after reparent)
+		if hitbox.body_entered.is_connected(_on_hitbox_body_entered):
+			hitbox.body_entered.disconnect(_on_hitbox_body_entered)
+
+		hitbox.body_entered.connect(_on_hitbox_body_entered)
+
+		print("[Weapon DEBUG] hitbox ready:",
+			"layer =", hitbox.collision_layer,
+			"mask =", hitbox.collision_mask
+		)
 
 	# Reparent to holder and align grip
 	reparent_and_align_to_grip()
@@ -165,6 +176,7 @@ func update_weapon(delta: float) -> void:
 # Start attack (called by owner)
 # ---------------------------
 func start_attack() -> void:
+	print("🗡 WEAPON START ATTACK")
 	if attacking:
 		return
 	attacking = true
@@ -212,6 +224,7 @@ func start_attack() -> void:
 
 # ---------------------------
 func end_attack() -> void:
+	print("🛑 WEAPON END ATTACK")
 	attacking = false
 
 	# reset transforms similar to player behaviour
@@ -242,29 +255,31 @@ func end_attack() -> void:
 
 # ---------------------------
 func _on_hitbox_body_entered(body: Node) -> void:
-	if not attacking or not body:
-		return
-	if not body.is_in_group("Player"):
+	print("🔥 HITBOX ENTERED 🔥", body.name, "groups:", body.get_groups())
+	if not attacking or body == null:
 		return
 
-	# de-dup
-	for existing in _hit_targets:
-		if existing == body:
-			return
+	# prevent double hits
+	if body in _hit_targets:
+		return
 	_hit_targets.append(body)
 
-	# debug
-	print("[Weapon] hitbox -> collided with:", body, "owner:", weapon_owner)
+	print("[Weapon HIT]", weapon_owner.name, "hit", body.name, "groups:", body.get_groups())
 
-	# notify owner (owner does the actual damage & knockback)
-	if weapon_owner and weapon_owner.has_method("weapon_notify_hit"):
-		weapon_owner.weapon_notify_hit(body)
-	else:
-		# fallback apply
-		if body.has_method("apply_damage") and weapon_owner and "attack_damage" in weapon_owner:
-			body.apply_damage(weapon_owner.attack_damage)
-		if body.has_method("external_knockback") and weapon_owner and "knockback_strength" in weapon_owner:
-			body.external_knockback((body.global_position - weapon_owner.global_position).normalized() * weapon_owner.knockback_strength)
+	# PLAYER weapon → ENEMY
+	if weapon_owner.is_in_group("Player") and body.is_in_group("Enemy"):
+		if body.has_method("take_damage"):
+			body.take_damage(
+				weapon_owner.attack_damage,
+				weapon_owner.global_position,
+				1.0
+			)
+		return
+
+	# ENEMY weapon → PLAYER
+	if weapon_owner.is_in_group("Enemy") and body.is_in_group("Player"):
+		if weapon_owner.has_method("weapon_notify_hit"):
+			weapon_owner.weapon_notify_hit(body)
 
 # ---------------------------
 func _on_anim_finished(anim_name: String) -> void:

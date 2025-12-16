@@ -2,9 +2,9 @@
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_4lyn1"]
 
-[node name="Enemy" type="CharacterBody2D"]
+[node name="Enemy" type="CharacterBody2D" groups=["Enemy"]]
 collision_layer = 32
-collision_mask = 17
+collision_mask = 16
 script = ExtResource("1_4lyn1")
 
 [node name="Agent" type="NavigationAgent2D" parent="."]

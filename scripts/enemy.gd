@@ -386,43 +386,30 @@ func _compute_circling_point() -> Vector2:
 
 # ------------------------------
 func _scan_for_player(radius: float) -> bool:
-	if detection_timer > 0.0:
-		return false
-	detection_timer = detection_interval
 	if player == null:
 		return false
-	var origin: Vector2 = global_position + eye_offset
+
+	var origin := global_position
 	var to_player = player.global_position - origin
+
 	if to_player.length() > radius:
 		return false
-	var angle_center = to_player.angle()
-	var half_spread := deg_to_rad(60)
-	var ray_count = max(detection_rays, 1)
+
 	var space := get_world_2d().direct_space_state
-	var mask := (1 << 0) | (1 << 4)  # PLAYER + OBSTACLE (adjust if your bits differ)
-	var saw_player := false
-	for i in range(ray_count):
-		var t := float(i) / float(max(ray_count - 1, 1))
-		var angle = lerp(angle_center - half_spread, angle_center + half_spread, t)
-		var ray_end := origin + Vector2.RIGHT.rotated(angle) * radius
-		var query := PhysicsRayQueryParameters2D.create(origin, ray_end)
-		query.collide_with_bodies = true
-		query.collide_with_areas = true
-		query.collision_mask = mask
-		query.exclude = [self]
-		var hit := space.intersect_ray(query)
-		if hit.is_empty():
-			continue
-		var collider = hit.get("collider")
-		if not collider:
-			continue
-		if collider.is_in_group("Player"):
-			saw_player = true
-		else:
-			if _debug_enabled:
-				if Time.get_ticks_msec() % 2000 < 50:
-					print("[Enemy DEBUG] LOS blocked by:", str(collider), "at", hit.get("position"))
-	return saw_player
+	var query := PhysicsRayQueryParameters2D.create(
+		origin,
+		player.global_position
+	)
+
+	query.collision_mask = (1 << 0) | (1 << 4) # player + walls
+	query.exclude = [self.get_rid()]
+
+	var hit := space.intersect_ray(query)
+
+	if hit.is_empty():
+		return false
+
+	return hit.collider.is_in_group("Player")
 
 # ------------------------------
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
