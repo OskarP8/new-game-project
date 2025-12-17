@@ -7,6 +7,9 @@ const LAYER_PLAYER_WEAPON = 1 << 2 # layer 3
 const LAYER_ENEMY_BODY = 1 << 5    # layer 6
 const LAYER_ENEMY_WEAPON = 1 << 3  # layer 4 (example)
 
+@export var attack_damage: int = 10
+@export var knockback_strength: float = 300.0
+
 # Assigned by owner via initialize(owner)
 var weapon_owner = null
 
@@ -270,7 +273,7 @@ func _on_hitbox_body_entered(body: Node) -> void:
 	if weapon_owner.is_in_group("Player") and body.is_in_group("Enemy"):
 		if body.has_method("take_damage"):
 			body.take_damage(
-				weapon_owner.attack_damage,
+				attack_damage,
 				weapon_owner.global_position,
 				1.0
 			)

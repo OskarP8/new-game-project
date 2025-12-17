@@ -566,89 +566,66 @@ func unequip_weapon() -> void:
 	print("[player] Unequipped weapon")
 
 func equip_weapon(packed_or_path) -> void:
-	# Remove old weapon first (use unequip to keep behavior consistent)
-	unequip_weapon()
-	if packed_or_path == null or packed_or_path == "":
-		# Unequip
-		if current_weapon_scene:
-			current_weapon_scene.queue_free()
+	# ---- REMOVE OLD WEAPON ----
+	if current_weapon_scene:
+		current_weapon_scene.queue_free()
 		current_weapon_scene = null
-		has_weapon = false
-		print("[player] Weapon unequipped")
-		return
-	# Load: accept string path, PackedScene, or InvItem with scene_path
-	var packed = null
-	if typeof(packed_or_path) == TYPE_STRING:
-		packed = load(packed_or_path)
-	elif packed_or_path is PackedScene:
+
+	has_weapon = false
+
+	# ---- LOAD PACKED SCENE ----
+	var packed: PackedScene = null
+
+	if packed_or_path is PackedScene:
 		packed = packed_or_path
-	elif packed_or_path is InvItem:
-		if "scene_path" in packed_or_path and packed_or_path.scene_path != "":
-			packed = load(packed_or_path.scene_path)
-		else:
-			push_warning("equip_weapon: InvItem has no valid scene_path")
-			return
-	else:
-		push_warning("equip_weapon: invalid argument type")
+	elif packed_or_path is String:
+		packed = load(packed_or_path)
+	elif packed_or_path is InvItem and packed_or_path.scene_path != "":
+		packed = load(packed_or_path.scene_path)
+
+	if packed == null:
+		print("[player] equip_weapon: nothing equipped")
 		return
 
-	if not (packed is PackedScene):
-		push_warning("equip_weapon: loaded resource is not a PackedScene -> " + str(packed))
-		return
+	# ---- ENSURE HOLDER ----
+	if not weapon_holder:
+		weapon_holder = Node2D.new()
+		weapon_holder.name = "WeaponHolder"
+		weapon_pivot.add_child(weapon_holder)
 
-	# Ensure holder exists and assign to weapon_holder
-	if not weapon_holder and weapon_pivot:
-		weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
-		if not weapon_holder:
-			weapon_holder = Node2D.new()
-			weapon_holder.name = "WeaponHolder"
-			weapon_pivot.add_child(weapon_holder)
 	weapon_holder.position = Vector2.ZERO
 	weapon_holder.rotation = 0
-	weapon_holder.scale.x = -1 if facing_left else 1
+	weapon_holder.scale = Vector2.ONE
 
-	# Instantiate scene under holder
+	# ---- INSTANCE WEAPON ----
 	current_weapon_scene = packed.instantiate()
 	weapon_holder.add_child(current_weapon_scene)
+
 	current_weapon_scene.position = Vector2.ZERO
 	current_weapon_scene.rotation = 0
-	current_weapon_root = current_weapon_scene
 
-	# find visuals
+	has_weapon = true
+
+	# ---- INITIALIZE WEAPON LOGIC ----
+	if current_weapon_scene.has_method("initialize"):
+		current_weapon_scene.initialize(self)
+
+	if current_weapon_scene.has_method("equip_for_owner"):
+		current_weapon_scene.equip_for_owner("player")
+
+	# ---- CACHE VISUALS ----
 	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
-	# store base scale for consistent flipping (magnitude only)
-	if weapon_sprite:
-		weapon_sprite_base_scale_x = abs(weapon_sprite.scale.x) if weapon_sprite.scale.x != 0 else 1.0
-	else:
-		weapon_sprite_base_scale_x = 1.0
-
-	# connect animation finished if AnimationPlayer used
-	if weapon_anim_player:
-		if weapon_anim_player.is_connected("animation_finished", Callable(self, "_on_weapon_animation_finished")):
-			weapon_anim_player.disconnect("animation_finished", Callable(self, "_on_weapon_animation_finished"))
-		weapon_anim_player.animation_finished.connect(Callable(self, "_on_weapon_animation_finished"))
-
-	# when using AnimatedSprite2D we may need its animation_finished too (connect on demand)
-	if weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation("attack"):
-		if not weapon_sprite.is_connected("animation_finished", Callable(self, "_on_attack_finished")):
-			weapon_sprite.animation_finished.connect(Callable(self, "_on_attack_finished"))
-
-	has_weapon = current_weapon_scene != null
-	print("[player] equip_weapon -> scene:", packed, " sprite:", weapon_sprite, " anim_player:", weapon_anim_player, " holder.scale.x:", weapon_holder.scale.x)
-	# 🔥 FORCE weapon idle on equip (VERY IMPORTANT)
-	if weapon_sprite and weapon_sprite.sprite_frames:
-		if weapon_sprite.sprite_frames.has_animation("idle"):
-			weapon_sprite.play("idle")
-			weapon_sprite.frame = 0
+	# ---- FORCE IDLE ----
+	if weapon_sprite and weapon_sprite.sprite_frames.has_animation("idle"):
+		weapon_sprite.play("idle")
+		weapon_sprite.frame = 0
 
 	if weapon_anim_player and weapon_anim_player.has_animation("idle"):
 		weapon_anim_player.play("idle")
 
-	# Force animation update so head/body switch to weapon variants
-	update_animation()
-	sync_head_to_body()
+	print("[player] ✅ Equipped weapon:", current_weapon_scene.name)
 
 func _play_weapon_anim(name: String) -> void:
 	# Sword AnimationPlayer
