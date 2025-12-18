@@ -193,7 +193,12 @@ func _physics_process(delta: float) -> void:
 	if knockback_time > 0.0:
 		knockback_time -= delta
 		velocity = knockback_velocity
-		knockback_velocity = knockback_velocity.lerp(Vector2.ZERO, 0.25)
+		if agent:
+			agent.set_velocity(Vector2.ZERO)
+
+		move_and_slide()
+		return  # ⛔ ABSOLUTELY NOTHING ELSE THIS FRAME
+
 	else:
 		velocity = velocity_vec
 
@@ -472,6 +477,13 @@ func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult
 	if hp <= 0 and state != DEAD:
 		_die()
 	else:
+		if _debug_enabled:
+			print(
+				"[Enemy KB DEBUG]",
+				"exported knockback_strength =", knockback_strength,
+				"mult =", knockback_mult,
+				"final strength =", knockback_strength * knockback_mult
+			)
 		_apply_knockback_from(source_pos, knockback_strength * knockback_mult)
 
 func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
@@ -479,8 +491,19 @@ func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 	if dir.length() == 0:
 		dir = Vector2.RIGHT
 
-	knockback_velocity = dir.normalized() * strength
-	knockback_time = 0.18  # tweak feel (0.12–0.25 usually good)
+	var knockback_duration := 0.25
+	var velocity_mag := strength / knockback_duration
+
+	if _debug_enabled:
+		print(
+			"[Enemy KB APPLY]",
+			"strength =", strength,
+			"duration =", knockback_duration,
+			"velocity magnitude =", velocity_mag
+		)
+
+	knockback_velocity = dir.normalized() * velocity_mag
+	knockback_time = knockback_duration
 
 func _die() -> void:
 	_set_state(DEAD)

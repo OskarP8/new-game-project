@@ -265,6 +265,8 @@ animations = [{
 
 [node name="Pitchfork" type="Node2D"]
 script = ExtResource("1_3wihp")
+attack_damage = 4
+knockback_strength = 50.0
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
