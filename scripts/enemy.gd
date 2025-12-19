@@ -9,7 +9,6 @@ class_name Enemy
 @export var attack_range: float = 24.0
 @export var attack_damage: int = 10
 @export var attack_cooldown: float = 3.0
-@export var knockback_strength: float = 120.0
 @export var detection_rays: int = 16
 @export var detection_interval: float = 0.12
 
@@ -459,13 +458,14 @@ func weapon_notify_hit(body: Node) -> void:
 	if body.has_method("apply_damage"):
 		body.apply_damage(attack_damage)
 	if body.has_method("external_knockback"):
-		var force = (body.global_position - global_position).normalized() * knockback_strength
+		var force = (body.global_position - global_position).normalized() * weapon.knockback_strength
 		body.external_knockback(force)
+
 	if _debug_enabled:
 		print("[Enemy] weapon_notify_hit -> applied", attack_damage, "to", body)
 
 # ------------------------------
-func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult: float = 1.0) -> void:
+func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
 	hp -= amount
 	if _debug_enabled:
 		print("[Enemy] took damage:", amount, "hp now:", hp)
@@ -477,14 +477,8 @@ func take_damage(amount: int, source_pos: Vector2 = Vector2.ZERO, knockback_mult
 	if hp <= 0 and state != DEAD:
 		_die()
 	else:
-		if _debug_enabled:
-			print(
-				"[Enemy KB DEBUG]",
-				"exported knockback_strength =", knockback_strength,
-				"mult =", knockback_mult,
-				"final strength =", knockback_strength * knockback_mult
-			)
-		_apply_knockback_from(source_pos, knockback_strength * knockback_mult)
+		_apply_knockback_velocity(source_pos, knockback_velocity_strength)
+
 
 func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 	var dir = global_position - source_pos
@@ -537,7 +531,8 @@ func _on_damage_area_body_entered(body: Node) -> void:
 		return
 	if "damage" in body:
 		var dmg = int(body.damage)
-		take_damage(dmg, body.global_position)
+		# environmental / generic damage → very small knockback
+		take_damage(dmg, body.global_position, 40.0)
 
 func _update_flip_and_layers() -> void:
 	if body_anim:
@@ -570,3 +565,19 @@ func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0)
 
 func _process_flee(delta):
 	pass
+func _apply_knockback_velocity(source_pos: Vector2, strength: float) -> void:
+	var dir := global_position - source_pos
+	if dir.length() == 0:
+		dir = Vector2.RIGHT
+
+	knockback_velocity = dir.normalized() * strength
+	knockback_time = 0.18  # short, punchy
+
+	if _debug_enabled:
+		print(
+			"[Enemy KB VELOCITY]",
+			"strength =", strength,
+			"velocity =", knockback_velocity
+		)
+func get_attack_damage() -> int:
+	return attack_damage

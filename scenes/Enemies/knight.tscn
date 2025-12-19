@@ -180,7 +180,6 @@ script = ExtResource("1_3hyev")
 speed = 30.0
 notice_radius = 1000.0
 chase_radius = 1000.0
-knockback_strength = 40.0
 weapon_scene = ExtResource("2_kepdu")
 
 [node name="Agent" type="NavigationAgent2D" parent="."]

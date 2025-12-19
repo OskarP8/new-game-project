@@ -430,7 +430,6 @@ position = Vector2(0, -2)
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="Node2D"]
 position = Vector2(6, 0)
-scale = Vector2(1, 1)
 sprite_frames = SubResource("SpriteFrames_rvsm4")
 animation = &"attack"
 offset = Vector2(-5, -10)

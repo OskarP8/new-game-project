@@ -272,12 +272,16 @@ func _on_hitbox_body_entered(body: Node) -> void:
 	# PLAYER weapon → ENEMY
 	if weapon_owner.is_in_group("Player") and body.is_in_group("Enemy"):
 		if body.has_method("take_damage"):
+			var dmg := get_damage()
+			var kb := get_knockback()
+
 			body.take_damage(
-				attack_damage,
+				dmg,
 				weapon_owner.global_position,
-				1.0
+				kb
 			)
-		return
+
+
 
 	# ENEMY weapon → PLAYER
 	if weapon_owner.is_in_group("Enemy") and body.is_in_group("Player"):
@@ -326,3 +330,9 @@ func equip_for_owner(kind: String) -> void:
 	elif kind == "enemy":
 		hitbox.collision_layer = LAYER_ENEMY_WEAPON
 		hitbox.collision_mask = LAYER_PLAYER_BODY
+
+func get_damage() -> int:
+	return attack_damage
+
+func get_knockback() -> float:
+	return knockback_strength
