@@ -1,8 +1,25 @@
-[gd_scene load_steps=28 format=3 uid="uid://dhp5srs4m8eeq"]
+[gd_scene load_steps=33 format=3 uid="uid://dhp5srs4m8eeq"]
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_3hyev"]
+[ext_resource type="Script" path="res://LootDrop.gd" id="2_1bo31"]
 [ext_resource type="PackedScene" uid="uid://efvcragqblr4" path="res://scenes/Weapons/sword.tscn" id="2_kepdu"]
+[ext_resource type="Resource" uid="uid://cgekbi4xs6d27" path="res://resources/sword.tres" id="3_3c4kd"]
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="3_j5nu6"]
+
+[sub_resource type="Resource" id="Resource_pmakn"]
+script = ExtResource("2_1bo31")
+item = ExtResource("3_3c4kd")
+chance = 1.0
+
+[sub_resource type="Resource" id="Resource_dken7"]
+script = ExtResource("2_1bo31")
+item = ExtResource("3_3c4kd")
+chance = 1.0
+
+[sub_resource type="Resource" id="Resource_pl86g"]
+script = ExtResource("2_1bo31")
+item = ExtResource("3_3c4kd")
+chance = 1.0
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
 radius = 5.0
@@ -185,19 +202,11 @@ animations = [{
 collision_layer = 32
 collision_mask = 16
 script = ExtResource("1_3hyev")
-max_hp = null
 speed = 30.0
 notice_radius = 1000.0
 chase_radius = 1000.0
-attack_range = null
-attack_damage = null
-attack_cooldown = null
-detection_rays = null
-detection_interval = null
-corpse_lifetime = null
-fade_duration = null
+loot_table = Array[ExtResource("2_1bo31")]([SubResource("Resource_pmakn"), SubResource("Resource_dken7"), SubResource("Resource_pl86g")])
 weapon_scene = ExtResource("2_kepdu")
-eye_offset = null
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
 avoidance_enabled = true

@@ -13,6 +13,7 @@ class_name Enemy
 @export var detection_interval: float = 0.12
 @export var corpse_lifetime: float = 20.0
 @export var fade_duration: float = 2.0
+var _loot_dropped: bool = false
 
 var is_dead: bool = false
 
@@ -76,6 +77,8 @@ var _debug_enabled: bool = true
 
 # ------------------------------
 func _set_state(new_state: int) -> void:
+	if is_dead and new_state != DEAD:
+		return
 	if state == new_state:
 		return
 	var old_state: int = state
@@ -179,12 +182,12 @@ func _physics_process(delta: float) -> void:
 			if agent:
 				agent.set_velocity(Vector2.ZERO)
 			move_and_slide()
-			return
 		else:
-			# knockback JUST ended
-			if state == CHASE:
-				_play_anim_if_exists("walk")
-		return
+			# knockback finished → drop loot once
+			if not _loot_dropped:
+				_loot_dropped = true
+				_spawn_loot_with_arc()
+		return  # ⛔ stop ALL other logic
 
 	detection_timer = max(0.0, detection_timer - delta)
 	attack_timer = max(0.0, attack_timer - delta)
@@ -557,32 +560,62 @@ func _die() -> void:
 		print("[Enemy] died — entering corpse state")
 
 	emit_signal("enemy_died", self)
-	_spawn_loot()
 	_handle_corpse_lifecycle()
 
-func _spawn_loot() -> void:
+func _spawn_loot_with_arc() -> void:
 	if loot_table.is_empty():
 		return
 
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 
-	for drop in loot_table:
-		if not drop.has("item") or not drop.has("chance"):
+	for drop: LootDrop in loot_table:
+		if drop == null or drop.item == null:
+			continue
+		if rng.randf() > drop.chance:
 			continue
 
-		if rng.randf() <= float(drop.chance):
-			var world_item := world_item_scene.instantiate()
-			world_item.item = drop.item
-			world_item.quantity = 1
-			world_item.global_position = global_position + Vector2(
-				rng.randf_range(-6, 6),
-				rng.randf_range(-4, 4)
-			)
-			get_tree().current_scene.add_child(world_item)
+		var world_item: WorldItem = world_item_scene.instantiate()
+		world_item.item = drop.item
+		world_item.quantity = 1
+		get_tree().current_scene.add_child(world_item)
 
-			if _debug_enabled:
-				print("[Loot] Dropped:", drop.item)
+		# start at enemy position
+		world_item.global_position = global_position
+
+		# random throw direction
+		var dir := Vector2(
+			rng.randf_range(-1.0, 1.0),
+			rng.randf_range(-1.2, -0.4)
+		).normalized()
+
+		var distance := rng.randf_range(24.0, 48.0)
+		var target_pos := global_position + dir * distance
+
+		# ARC animation using tween
+		var tween := world_item.create_tween()
+		tween.set_trans(Tween.TRANS_QUAD)
+		tween.set_ease(Tween.EASE_OUT)
+
+		# vertical arc (up then down)
+		tween.tween_property(
+			world_item,
+			"global_position",
+			target_pos,
+			0.45
+		)
+
+		# optional spin for juice
+		if world_item.has_node("Sprite2D"):
+			tween.parallel().tween_property(
+				world_item.get_node("Sprite2D"),
+				"rotation",
+				rng.randf_range(-PI, PI),
+				0.45
+			)
+
+		if _debug_enabled:
+			print("[Loot] Thrown:", drop.item.name)
 
 func _on_damage_area_body_entered(body: Node) -> void:
 	if not body:
