@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3 uid="uid://dhp5srs4m8eeq"]
+[gd_scene load_steps=28 format=3 uid="uid://dhp5srs4m8eeq"]
 
 [ext_resource type="Script" path="res://scripts/enemy.gd" id="1_3hyev"]
 [ext_resource type="PackedScene" uid="uid://efvcragqblr4" path="res://scenes/Weapons/sword.tscn" id="2_kepdu"]
@@ -11,6 +11,14 @@ height = 16.0
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_3tb0x"]
 radius = 5.0
 height = 10.0
+
+[sub_resource type="Animation" id="Animation_a2grx"]
+resource_name = "death"
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_g2hrw"]
+_data = {
+"death": SubResource("Animation_a2grx")
+}
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_dwbrn"]
 atlas = ExtResource("3_j5nu6")
@@ -177,10 +185,19 @@ animations = [{
 collision_layer = 32
 collision_mask = 16
 script = ExtResource("1_3hyev")
+max_hp = null
 speed = 30.0
 notice_radius = 1000.0
 chase_radius = 1000.0
+attack_range = null
+attack_damage = null
+attack_cooldown = null
+detection_rays = null
+detection_interval = null
+corpse_lifetime = null
+fade_duration = null
 weapon_scene = ExtResource("2_kepdu")
+eye_offset = null
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
 avoidance_enabled = true
@@ -201,6 +218,11 @@ shape = SubResource("CapsuleShape2D_3tb0x")
 
 [node name="Graphics" type="Node2D" parent="."]
 position = Vector2(4, -5)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Graphics"]
+libraries = {
+"": SubResource("AnimationLibrary_g2hrw")
+}
 
 [node name="Head" type="AnimatedSprite2D" parent="Graphics"]
 position = Vector2(-4, 5)

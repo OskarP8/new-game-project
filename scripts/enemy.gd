@@ -11,9 +11,13 @@ class_name Enemy
 @export var attack_cooldown: float = 3.0
 @export var detection_rays: int = 16
 @export var detection_interval: float = 0.12
+@export var corpse_lifetime: float = 20.0
+@export var fade_duration: float = 2.0
+
+var is_dead: bool = false
 
 # Scenes/resources
-@export var loot_table: Array = []
+@export var loot_table: Array[LootDrop] = []
 @export var world_item_scene: PackedScene = preload("res://scenes/world_item.tscn")
 @export var weapon_scene: PackedScene
 var weapon: Node = null
@@ -24,6 +28,7 @@ var weapon: Node = null
 @onready var head_anim: AnimatedSprite2D = $Graphics/Head
 @onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
 @onready var damage_area: Area2D = $Damage if has_node("Damage") else null
+@onready var anim_player: AnimationPlayer = $Graphics/AnimationPlayer
 
 # State enum
 enum { IDLE, ALERT, CHASE, SEARCH, ATTACK, FLEE, DEAD }
@@ -65,7 +70,7 @@ var post_attack_left: bool = false
 
 signal enemy_hit_player(damage)
 signal enemy_damaged(amount)
-signal enemy_died()
+signal enemy_died(enemy)
 
 var _debug_enabled: bool = true
 
@@ -167,6 +172,20 @@ func _ready() -> void:
 
 # ------------------------------
 func _physics_process(delta: float) -> void:
+	if is_dead:
+		if knockback_time > 0.0:
+			knockback_time -= delta
+			velocity = knockback_velocity
+			if agent:
+				agent.set_velocity(Vector2.ZERO)
+			move_and_slide()
+			return
+		else:
+			# knockback JUST ended
+			if state == CHASE:
+				_play_anim_if_exists("walk")
+		return
+
 	detection_timer = max(0.0, detection_timer - delta)
 	attack_timer = max(0.0, attack_timer - delta)
 
@@ -427,6 +446,9 @@ func _on_agent_velocity(safe_velocity: Vector2) -> void:
 
 # ------------------------------
 func _perform_attack() -> void:
+	if is_dead:
+		return
+
 	if not player:
 		_set_state(IDLE)
 		return
@@ -435,7 +457,7 @@ func _perform_attack() -> void:
 	_play_anim_if_exists("attack")
 
 	# start weapon attack if present
-	if weapon and weapon.has_method("start_attack"):
+	if is_instance_valid(weapon) and weapon.has_method("start_attack"):
 		weapon.start_attack()
 
 	# flip visuals toward player
@@ -466,18 +488,22 @@ func weapon_notify_hit(body: Node) -> void:
 
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
+	if is_dead:
+		return  # cannot hit dead enemies
 	hp -= amount
 	if _debug_enabled:
 		print("[Enemy] took damage:", amount, "hp now:", hp)
 	emit_signal("enemy_damaged", amount)
+
 	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("hit"):
 		body_anim.play("hit")
 	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("hit"):
 		head_anim.play("hit")
-	if hp <= 0 and state != DEAD:
+	if hp <= 0 and not is_dead:
+		_apply_knockback_from(source_pos, knockback_velocity_strength)
 		_die()
 	else:
-		_apply_knockback_velocity(source_pos, knockback_velocity_strength)
+		_apply_knockback_from(source_pos, knockback_velocity_strength)
 
 
 func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
@@ -500,31 +526,63 @@ func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 	knockback_time = knockback_duration
 
 func _die() -> void:
+	if is_dead:
+		return
+
+	is_dead = true
 	_set_state(DEAD)
-	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("death"):
-		body_anim.play("death")
-	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("death"):
-		head_anim.play("death")
+
+	# stop AI / navigation
+	if agent:
+		agent.set_velocity(Vector2.ZERO)
+		agent.avoidance_enabled = false
+
+	# disable weapon + damage
+	if weapon:
+		weapon.queue_free()
+		weapon = null
+	if damage_area:
+		damage_area.monitoring = false
+		damage_area.set_deferred("collision_layer", 0)
+		damage_area.set_deferred("collision_mask", 0)
+	# hard stop all normal movement
+	velocity_vec = Vector2.ZERO
+	velocity = Vector2.ZERO
+
+	# play death animation (AnimationPlayer)
+	if anim_player and anim_player.has_animation("death"):
+		anim_player.play("death")
+
 	if _debug_enabled:
-		print("[Enemy] playing death animation")
+		print("[Enemy] died — entering corpse state")
+
+	emit_signal("enemy_died", self)
 	_spawn_loot()
-	emit_signal("enemy_died")
-	queue_free()
+	_handle_corpse_lifecycle()
 
 func _spawn_loot() -> void:
-	if loot_table.size() == 0:
+	if loot_table.is_empty():
 		return
-	var pick: int = randi() % loot_table.size()
-	var item_res = loot_table[pick]
-	if world_item_scene:
-		var world_item = world_item_scene.instantiate()
-		if "item" in world_item:
-			world_item.item = item_res
+
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+
+	for drop in loot_table:
+		if not drop.has("item") or not drop.has("chance"):
+			continue
+
+		if rng.randf() <= float(drop.chance):
+			var world_item := world_item_scene.instantiate()
+			world_item.item = drop.item
 			world_item.quantity = 1
-		world_item.global_position = global_position
-		get_tree().current_scene.add_child(world_item)
-		if _debug_enabled:
-			print("[Enemy] spawned loot at", global_position, "item:", item_res)
+			world_item.global_position = global_position + Vector2(
+				rng.randf_range(-6, 6),
+				rng.randf_range(-4, 4)
+			)
+			get_tree().current_scene.add_child(world_item)
+
+			if _debug_enabled:
+				print("[Loot] Dropped:", drop.item)
 
 func _on_damage_area_body_entered(body: Node) -> void:
 	if not body:
@@ -581,3 +639,25 @@ func _apply_knockback_velocity(source_pos: Vector2, strength: float) -> void:
 		)
 func get_attack_damage() -> int:
 	return attack_damage
+
+func _handle_corpse_lifecycle() -> void:
+	# wait for death animation to finish
+	if anim_player:
+		await anim_player.animation_finished
+
+	# freeze on last frame
+	if anim_player:
+		anim_player.stop()
+
+	# wait before fade
+	await get_tree().create_timer(corpse_lifetime).timeout
+
+	# fade out
+	await _fade_out()
+
+	queue_free()
+
+func _fade_out() -> void:
+	var tween := create_tween()
+	tween.tween_property(self, "modulate:a", 0.0, fade_duration)
+	await tween.finished

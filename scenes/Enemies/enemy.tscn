@@ -6,6 +6,20 @@
 collision_layer = 32
 collision_mask = 16
 script = ExtResource("1_4lyn1")
+max_hp = null
+speed = null
+notice_radius = null
+chase_radius = null
+attack_range = null
+attack_damage = null
+attack_cooldown = null
+detection_rays = null
+detection_interval = null
+corpse_lifetime = null
+fade_duration = null
+loot_table = null
+world_item_scene = null
+eye_offset = null
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
 avoidance_enabled = true
