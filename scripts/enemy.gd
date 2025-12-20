@@ -216,11 +216,13 @@ func _physics_process(delta: float) -> void:
 		velocity = knockback_velocity
 		if agent:
 			agent.set_velocity(Vector2.ZERO)
-
 		move_and_slide()
-		return  # ⛔ ABSOLUTELY NOTHING ELSE THIS FRAME
-
+		return
 	else:
+		# 🔁 knockback just ended → reassert movement anim
+		if state == CHASE:
+			_play_anim_if_exists("walk")
+
 		velocity = velocity_vec
 
 	move_and_slide()
@@ -492,22 +494,37 @@ func weapon_notify_hit(body: Node) -> void:
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
 	if is_dead:
-		return  # cannot hit dead enemies
+		return
+	# light screen shake on enemy hit
+	var cam := get_viewport().get_camera_2d()
+	if cam and cam.has_method("add_trauma"):
+		cam.add_trauma(0.08)
+		print("[Camera] camera shake")
+
 	hp -= amount
-	if _debug_enabled:
-		print("[Enemy] took damage:", amount, "hp now:", hp)
 	emit_signal("enemy_damaged", amount)
 
-	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation("hit"):
+	# hit reaction visuals are still allowed
+	# hit reaction visuals (SAFE)
+	if body_anim != null \
+	and body_anim.sprite_frames != null \
+	and body_anim.sprite_frames.has_animation("hit"):
 		body_anim.play("hit")
-	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation("hit"):
+
+	if head_anim != null \
+	and head_anim.sprite_frames != null \
+	and head_anim.sprite_frames.has_animation("hit"):
 		head_anim.play("hit")
-	if hp <= 0 and not is_dead:
-		_apply_knockback_from(source_pos, knockback_velocity_strength)
-		_die()
+
+	# ❌ suppress knockback during attack (windup + recovery)
+	if state == ATTACK or attack_active:
+		if _debug_enabled:
+			print("[Enemy] Damage during attack — knockback ignored")
 	else:
 		_apply_knockback_from(source_pos, knockback_velocity_strength)
 
+	if hp <= 0:
+		_die()
 
 func _apply_knockback_from(source_pos: Vector2, strength: float) -> void:
 	var dir = global_position - source_pos
@@ -604,15 +621,6 @@ func _spawn_loot_with_arc() -> void:
 			target_pos,
 			0.45
 		)
-
-		# optional spin for juice
-		if world_item.has_node("Sprite2D"):
-			tween.parallel().tween_property(
-				world_item.get_node("Sprite2D"),
-				"rotation",
-				rng.randf_range(-PI, PI),
-				0.45
-			)
 
 		if _debug_enabled:
 			print("[Loot] Thrown:", drop.item.name)
