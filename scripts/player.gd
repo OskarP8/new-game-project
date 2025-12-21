@@ -815,3 +815,25 @@ func collect_world_item(world_item) -> void:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
 func external_knockback(force: Vector2) -> void:
 	knockback_force = force
+	_debug_camera_lookup("Player took hit")
+
+	# 🔥 STRONGER shake when player gets hit
+	var cam := get_tree().get_first_node_in_group("Camera")
+	if cam and cam.has_method("add_trauma"):
+		cam.add_trauma(0.18)
+
+func _debug_camera_lookup(context: String) -> void:
+	var cams = get_tree().get_nodes_in_group("Camera")
+	print("\n[CAM DEBUG]", context)
+	print(" Cameras in group:", cams.size())
+
+	for c in cams:
+		print(
+			" -", c.name,
+			"| class:", c.get_class(),
+			"| current:", c.current if "current" in c else "N/A",
+			"| global_pos:", c.global_position
+		)
+
+	var viewport_cam = get_viewport().get_camera_2d()
+	print(" Viewport camera:", viewport_cam)

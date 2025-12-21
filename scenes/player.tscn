@@ -543,7 +543,7 @@ sprite_frames = SubResource("SpriteFrames_7k18h")
 animation = &"attack_down_right_weapon"
 offset = Vector2(0, -16)
 
-[node name="Camera2D" type="Camera2D" parent="Graphics/Body"]
+[node name="Camera2D" type="Camera2D" parent="Graphics/Body" groups=["Camera"]]
 position = Vector2(0, -3)
 zoom = Vector2(7, 7)
 position_smoothing_enabled = true

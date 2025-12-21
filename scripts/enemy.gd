@@ -496,7 +496,8 @@ func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: 
 	if is_dead:
 		return
 	# light screen shake on enemy hit
-	var cam := get_viewport().get_camera_2d()
+	_debug_camera_lookup("Enemy took damage")
+	var cam := get_tree().get_first_node_in_group("Camera")
 	if cam and cam.has_method("add_trauma"):
 		cam.add_trauma(0.08)
 		print("[Camera] camera shake")
@@ -702,3 +703,19 @@ func _fade_out() -> void:
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, fade_duration)
 	await tween.finished
+
+func _debug_camera_lookup(context: String) -> void:
+	var cams = get_tree().get_nodes_in_group("Camera")
+	print("\n[CAM DEBUG]", context)
+	print(" Cameras in group:", cams.size())
+
+	for c in cams:
+		print(
+			" -", c.name,
+			"| class:", c.get_class(),
+			"| current:", c.current if "current" in c else "N/A",
+			"| global_pos:", c.global_position
+		)
+
+	var viewport_cam = get_viewport().get_camera_2d()
+	print(" Viewport camera:", viewport_cam)
