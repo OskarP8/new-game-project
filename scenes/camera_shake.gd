@@ -1,10 +1,20 @@
 extends Camera2D
 
-func _ready():
-	enabled = true
-	add_to_group("Camera")
-	print("[CAM TEST] Camera ready")
+var shake_time := 0.0
+var shake_strength := 0.0
+
+func shake(strength: float, time: float):
+	shake_strength = strength
+	shake_time = time
+	print("[CAMERA] shake start", strength, time)
 
 func _process(delta):
-	# FORCE visible movement every frame
-	offset = Vector2(30, 0)
+	if shake_time > 0.0:
+		shake_time -= delta
+
+		offset = Vector2(
+			randf_range(-shake_strength, shake_strength),
+			randf_range(-shake_strength, shake_strength)
+		)
+	else:
+		offset = Vector2.ZERO

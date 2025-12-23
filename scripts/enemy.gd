@@ -16,6 +16,7 @@ class_name Enemy
 var _loot_dropped: bool = false
 
 var is_dead: bool = false
+var attack_can_hit := false
 
 # Scenes/resources
 @export var loot_table: Array[LootDrop] = []
@@ -30,6 +31,7 @@ var weapon: Node = null
 @onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
 @onready var damage_area: Area2D = $Damage if has_node("Damage") else null
 @onready var anim_player: AnimationPlayer = $Graphics/AnimationPlayer
+@export var attack_step_in_distance := 8.0
 
 # State enum
 enum { IDLE, ALERT, CHASE, SEARCH, ATTACK, FLEE, DEAD }
@@ -106,6 +108,9 @@ func _set_state(new_state: int) -> void:
 			_play_anim_if_exists("death")
 
 func _play_anim_if_exists(name: String) -> void:
+	if is_dead and name != "death":
+		return
+
 	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(name):
 		body_anim.play(name)
 		if _debug_enabled:
@@ -220,7 +225,7 @@ func _physics_process(delta: float) -> void:
 		return
 	else:
 		# 🔁 knockback just ended → reassert movement anim
-		if state == CHASE:
+		if not is_dead and state == CHASE:
 			_play_anim_if_exists("walk")
 
 		velocity = velocity_vec
@@ -266,8 +271,14 @@ func _process_chase(delta: float) -> void:
 				print("[Enemy DEBUG] Lost sight -> SEARCH. Last seen:", last_seen_pos)
 			return
 
-	# Attack check
-	if global_position.distance_to(player.global_position) <= attack_range and attack_timer <= 0.0:
+	var dist := global_position.distance_to(player.global_position)
+
+	if dist <= attack_range and attack_timer <= 0.0:
+		# step in slightly to avoid whiffing
+		var dir = (player.global_position - global_position).normalized()
+		velocity_vec = dir * speed
+		move_and_slide()
+
 		_set_state(ATTACK)
 		return
 
@@ -451,45 +462,54 @@ func _on_agent_velocity(safe_velocity: Vector2) -> void:
 
 # ------------------------------
 func _perform_attack() -> void:
-	if is_dead:
+	if is_dead or not player:
 		return
 
-	if not player:
-		_set_state(IDLE)
-		return
+	print("[Enemy ATTACK] perform_attack START")
 
-	# play enemy body/head attack animation (we only start it here so windup actually delays it)
+	attack_can_hit = true
+
 	_play_anim_if_exists("attack")
 
-	# start weapon attack if present
 	if is_instance_valid(weapon) and weapon.has_method("start_attack"):
 		weapon.start_attack()
 
-	# flip visuals toward player
-	facing_left = player.global_position.x < global_position.x
-	_update_flip_and_layers()
+	# ⏱ keep hit window open briefly
+	await get_tree().create_timer(0.2).timeout
 
-	# debug / external signal
-	var dmg: int = attack_damage
-	emit_signal("enemy_hit_player", dmg)
+	attack_can_hit = false
+	print("[Enemy ATTACK] hit window CLOSED")
 
-	# set cooldown
 	attack_timer = attack_cooldown
 
 # Called by weapon when it hits a body (weapon calls weapon_owner.weapon_notify_hit(body))
 func weapon_notify_hit(body: Node) -> void:
-	if not body:
-		return
-	if not body.is_in_group("Player"):
-		return
-	if body.has_method("apply_damage"):
-		body.apply_damage(attack_damage)
-	if body.has_method("external_knockback"):
-		var force = (body.global_position - global_position).normalized() * weapon.knockback_strength
-		body.external_knockback(force)
+	print("[Enemy DEBUG] weapon_notify_hit called | can_hit =", attack_can_hit, "| body =", body.name)
 
-	if _debug_enabled:
-		print("[Enemy] weapon_notify_hit -> applied", attack_damage, "to", body)
+	if is_dead or not attack_can_hit:
+		print("[Enemy DEBUG] hit rejected")
+		return
+
+	print("[Enemy DEBUG] HIT ACCEPTED")
+	var player_node: Node = null
+
+	# Weapon hit the player's DamageCollision area
+	if body is Area2D and body.name == "DamageCollision":
+		player_node = body.get_parent()
+
+	# Fallback: weapon hit player body directly
+	elif body.is_in_group("Player"):
+		player_node = body
+
+	if player_node == null:
+		return
+
+	if player_node.has_method("apply_damage"):
+		player_node.apply_damage(attack_damage)
+
+	if player_node.has_method("external_knockback"):
+		var force = (player_node.global_position - global_position).normalized() * weapon.knockback_strength
+		player_node.external_knockback(force)
 
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
@@ -497,9 +517,9 @@ func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: 
 		return
 	# light screen shake on enemy hit
 	_debug_camera_lookup("Enemy took damage")
-	var cam := get_tree().get_first_node_in_group("Camera")
-	if cam and cam.has_method("add_trauma"):
-		cam.add_trauma(0.08)
+	var cam := get_viewport().get_camera_2d()
+	if cam:
+		cam.shake(2.0, 0.08)
 		print("[Camera] camera shake")
 
 	hp -= amount
@@ -550,35 +570,39 @@ func _die() -> void:
 	if is_dead:
 		return
 
-	is_dead = true
-	_set_state(DEAD)
+	print("[Enemy DIE] called")
 
-	# stop AI / navigation
+	is_dead = true
+	state = DEAD
+
+	# stop AI
 	if agent:
 		agent.set_velocity(Vector2.ZERO)
 		agent.avoidance_enabled = false
 
-	# disable weapon + damage
+	velocity = Vector2.ZERO
+	velocity_vec = Vector2.ZERO
+
+	# disable combat
 	if weapon:
 		weapon.queue_free()
 		weapon = null
+
 	if damage_area:
 		damage_area.monitoring = false
 		damage_area.set_deferred("collision_layer", 0)
 		damage_area.set_deferred("collision_mask", 0)
-	# hard stop all normal movement
-	velocity_vec = Vector2.ZERO
-	velocity = Vector2.ZERO
 
-	# play death animation (AnimationPlayer)
-	if anim_player and anim_player.has_animation("death"):
+	# 🔥 DO NOT stop AnimatedSprite2D
+	# Let AnimationPlayer drive them
+
+	if anim_player:
+		print("[Enemy DIE] AnimationPlayer found:", anim_player.has_animation("death"))
+		anim_player.stop()
 		anim_player.play("death")
 
-	if _debug_enabled:
-		print("[Enemy] died — entering corpse state")
-
 	emit_signal("enemy_died", self)
-	_handle_corpse_lifecycle()
+	call_deferred("_handle_corpse_lifecycle")
 
 func _spawn_loot_with_arc() -> void:
 	if loot_table.is_empty():
@@ -683,20 +707,14 @@ func get_attack_damage() -> int:
 	return attack_damage
 
 func _handle_corpse_lifecycle() -> void:
-	# wait for death animation to finish
+	print("[Enemy CORPSE] waiting for death animation")
+
 	if anim_player:
 		await anim_player.animation_finished
+		print("[Enemy CORPSE] death animation finished")
 
-	# freeze on last frame
-	if anim_player:
-		anim_player.stop()
-
-	# wait before fade
 	await get_tree().create_timer(corpse_lifetime).timeout
-
-	# fade out
 	await _fade_out()
-
 	queue_free()
 
 func _fade_out() -> void:

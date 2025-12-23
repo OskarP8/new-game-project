@@ -817,10 +817,10 @@ func external_knockback(force: Vector2) -> void:
 	knockback_force = force
 	_debug_camera_lookup("Player took hit")
 
-	# 🔥 STRONGER shake when player gets hit
-	var cam := get_tree().get_first_node_in_group("Camera")
-	if cam and cam.has_method("add_trauma"):
-		cam.add_trauma(0.18)
+	var cam := get_viewport().get_camera_2d()
+	if cam:
+		cam.shake(6.0, 0.15)
+
 
 func _debug_camera_lookup(context: String) -> void:
 	var cams = get_tree().get_nodes_in_group("Camera")
