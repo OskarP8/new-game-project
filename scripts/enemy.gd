@@ -17,6 +17,7 @@ var _loot_dropped: bool = false
 
 var is_dead: bool = false
 var attack_can_hit := false
+var death_anim_locked := false
 
 # Scenes/resources
 @export var loot_table: Array[LootDrop] = []
@@ -108,16 +109,12 @@ func _set_state(new_state: int) -> void:
 			_play_anim_if_exists("death")
 
 func _play_anim_if_exists(name: String) -> void:
-	if is_dead and name != "death":
+	if death_anim_locked:
 		return
 
 	if body_anim and body_anim.sprite_frames and body_anim.sprite_frames.has_animation(name):
 		body_anim.play(name)
-		if _debug_enabled:
-			print("[Enemy] playing anim:", name)
-	else:
-		if _debug_enabled:
-			print("[Enemy] body anim not found:", name)
+
 	if head_anim and head_anim.sprite_frames and head_anim.sprite_frames.has_animation(name):
 		head_anim.play(name)
 
@@ -484,32 +481,43 @@ func _perform_attack() -> void:
 
 # Called by weapon when it hits a body (weapon calls weapon_owner.weapon_notify_hit(body))
 func weapon_notify_hit(body: Node) -> void:
-	print("[Enemy DEBUG] weapon_notify_hit called | can_hit =", attack_can_hit, "| body =", body.name)
-
 	if is_dead or not attack_can_hit:
-		print("[Enemy DEBUG] hit rejected")
 		return
 
-	print("[Enemy DEBUG] HIT ACCEPTED")
-	var player_node: Node = null
+	print("\n[ENEMY HIT DEBUG]")
+	print(" Hit node:", body.name)
+	print(" Class:", body.get_class())
+	print(" Groups:", body.get_groups())
 
-	# Weapon hit the player's DamageCollision area
-	if body is Area2D and body.name == "DamageCollision":
-		player_node = body.get_parent()
+	if body is CollisionObject2D:
+		print(" Collision layer:", body.collision_layer)
+		print(" Collision mask:", body.collision_mask)
 
-	# Fallback: weapon hit player body directly
-	elif body.is_in_group("Player"):
-		player_node = body
+	var parent := body.get_parent()
+	if parent:
+		print(" Parent:", parent.name, "(", parent.get_class(), ")")
 
-	if player_node == null:
-		return
+	# APPLY DAMAGE
+	if body.has_method("apply_damage"):
+		print(" ✅ apply_damage on body")
+		body.apply_damage(attack_damage)
+	elif parent and parent.has_method("apply_damage"):
+		print(" ✅ apply_damage on parent")
+		parent.apply_damage(attack_damage)
+	else:
+		print(" ❌ NO apply_damage method found")
 
-	if player_node.has_method("apply_damage"):
-		player_node.apply_damage(attack_damage)
+	# APPLY KNOCKBACK
+	var target := body
+	if not body.has_method("external_knockback") and parent:
+		target = parent
 
-	if player_node.has_method("external_knockback"):
-		var force = (player_node.global_position - global_position).normalized() * weapon.knockback_strength
-		player_node.external_knockback(force)
+	if target.has_method("external_knockback"):
+		var force = (target.global_position - global_position).normalized() * weapon.knockback_strength
+		target.external_knockback(force)
+		print(" ✅ knockback applied")
+	else:
+		print(" ❌ NO knockback method found")
 
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
@@ -570,12 +578,10 @@ func _die() -> void:
 	if is_dead:
 		return
 
-	print("[Enemy DIE] called")
-
 	is_dead = true
 	state = DEAD
+	death_anim_locked = true
 
-	# stop AI
 	if agent:
 		agent.set_velocity(Vector2.ZERO)
 		agent.avoidance_enabled = false
@@ -583,22 +589,26 @@ func _die() -> void:
 	velocity = Vector2.ZERO
 	velocity_vec = Vector2.ZERO
 
-	# disable combat
 	if weapon:
 		weapon.queue_free()
 		weapon = null
 
 	if damage_area:
 		damage_area.monitoring = false
-		damage_area.set_deferred("collision_layer", 0)
-		damage_area.set_deferred("collision_mask", 0)
 
-	# 🔥 DO NOT stop AnimatedSprite2D
-	# Let AnimationPlayer drive them
+	# ✅ FORCE death frames ONCE (bypass lock)
+	if body_anim != null \
+	and body_anim.sprite_frames != null \
+	and body_anim.sprite_frames.has_animation("death"):
+		body_anim.play("death")
 
-	if anim_player:
-		print("[Enemy DIE] AnimationPlayer found:", anim_player.has_animation("death"))
-		anim_player.stop()
+	if head_anim != null \
+	and head_anim.sprite_frames != null \
+	and head_anim.sprite_frames.has_animation("death"):
+		head_anim.play("death")
+
+	# ✅ ALSO play AnimationPlayer for contrast
+	if anim_player and anim_player.has_animation("death"):
 		anim_player.play("death")
 
 	emit_signal("enemy_died", self)
