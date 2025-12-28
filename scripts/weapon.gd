@@ -1,11 +1,12 @@
 extends Node2D
 class_name Weapon
 
-# --- Layer constants (edit to match your project's mapping) ---
-const LAYER_PLAYER_BODY = 1 << 0   # layer 1
-const LAYER_PLAYER_WEAPON = 1 << 2 # layer 3
-const LAYER_ENEMY_BODY = 1 << 5    # layer 6
-const LAYER_ENEMY_WEAPON = 1 << 3  # layer 4 (example)
+# --- Collision Layers ---
+const LAYER_PLAYER_BODY  = 1 << 0  # 1: player
+const LAYER_WEAPON       = 1 << 2  # 3: weapon
+const LAYER_WALLS        = 1 << 4  # 5: walls
+const LAYER_ENEMY_BODY   = 1 << 5  # 6: enemy
+const LAYER_DAMAGE       = 1 << 6  # 7: damage / hurtbox ✅
 
 @export var attack_damage: int = 10
 @export var knockback_strength: float = 300.0
@@ -92,10 +93,20 @@ func initialize(owner) -> void:
 		hitbox.monitorable = true
 
 		# disconnect any stale connections (important after reparent)
-		if hitbox.body_entered.is_connected(_on_hitbox_body_entered):
-			hitbox.body_entered.disconnect(_on_hitbox_body_entered)
+		# connect hitbox callback (Area2D → Area2D)
+		if hitbox:
+			hitbox.monitoring = false
+			hitbox.monitorable = true
 
-		hitbox.body_entered.connect(_on_hitbox_body_entered)
+			if hitbox.area_entered.is_connected(_on_hitbox_area_entered):
+				hitbox.area_entered.disconnect(_on_hitbox_area_entered)
+
+			hitbox.area_entered.connect(_on_hitbox_area_entered)
+
+			print("[Weapon DEBUG] hitbox ready:",
+				"layer =", hitbox.collision_layer,
+				"mask =", hitbox.collision_mask
+			)
 
 		print("[Weapon DEBUG] hitbox ready:",
 			"layer =", hitbox.collision_layer,
@@ -257,36 +268,44 @@ func end_attack() -> void:
 	_hit_targets.clear()
 
 # ---------------------------
-func _on_hitbox_body_entered(body: Node) -> void:
-	print("🔥 HITBOX ENTERED 🔥", body.name, "groups:", body.get_groups())
-	if not attacking or body == null:
+func _on_hitbox_area_entered(area: Area2D) -> void:
+	if not attacking or area == null:
 		return
 
-	# prevent double hits
-	if body in _hit_targets:
+	# Only accept DAMAGE layer
+	if area.collision_layer != LAYER_DAMAGE:
+		if _debug_enabled:
+			print("[Weapon] Ignored non-damage area:", area.name)
 		return
-	_hit_targets.append(body)
 
-	print("[Weapon HIT]", weapon_owner.name, "hit", body.name, "groups:", body.get_groups())
+	# Prevent double hits
+	if area in _hit_targets:
+		return
+	_hit_targets.append(area)
 
-	# PLAYER weapon → ENEMY
-	if weapon_owner.is_in_group("Player") and body.is_in_group("Enemy"):
-		if body.has_method("take_damage"):
-			var dmg := get_damage()
-			var kb := get_knockback()
+	var target := area.get_parent()
+	if not target:
+		return
 
-			body.take_damage(
-				dmg,
-				weapon_owner.global_position,
-				kb
-			)
+	if _debug_enabled:
+		print(
+			"[Weapon HIT]",
+			"weapon owner:", weapon_owner.name,
+			"hit damage area:", area.name,
+			"target:", target.name
+		)
 
+	# PLAYER → ENEMY
+	if weapon_owner.is_in_group("Player") and target.has_method("take_damage"):
+		target.take_damage(
+			attack_damage,
+			weapon_owner.global_position,
+			knockback_strength
+		)
 
-
-	# ENEMY weapon → PLAYER
-	if weapon_owner.is_in_group("Enemy") and body.is_in_group("Player"):
-		if weapon_owner.has_method("weapon_notify_hit"):
-			weapon_owner.weapon_notify_hit(body)
+	# ENEMY → PLAYER
+	elif weapon_owner.is_in_group("Enemy") and weapon_owner.has_method("weapon_notify_hit"):
+		weapon_owner.weapon_notify_hit(area)
 
 # ---------------------------
 func _on_anim_finished(anim_name: String) -> void:
@@ -324,12 +343,19 @@ func _find_child_named(node: Node, target_name: String) -> Node:
 func equip_for_owner(kind: String) -> void:
 	if not hitbox:
 		return
-	if kind == "player":
-		hitbox.collision_layer = LAYER_PLAYER_WEAPON
-		hitbox.collision_mask = LAYER_ENEMY_BODY
-	elif kind == "enemy":
-		hitbox.collision_layer = LAYER_ENEMY_WEAPON
-		hitbox.collision_mask = LAYER_PLAYER_BODY
+
+	# Weapon exists on weapon layer
+	hitbox.collision_layer = LAYER_WEAPON
+
+	# Weapon ONLY detects hurtboxes
+	hitbox.collision_mask = LAYER_DAMAGE
+
+	if _debug_enabled:
+		print(
+			"[Weapon] equipped for", kind,
+			"| layer:", hitbox.collision_layer,
+			"| mask:", hitbox.collision_mask
+		)
 
 func get_damage() -> int:
 	return attack_damage

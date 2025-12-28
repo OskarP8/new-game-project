@@ -484,40 +484,25 @@ func weapon_notify_hit(body: Node) -> void:
 	if is_dead or not attack_can_hit:
 		return
 
-	print("\n[ENEMY HIT DEBUG]")
-	print(" Hit node:", body.name)
-	print(" Class:", body.get_class())
-	print(" Groups:", body.get_groups())
+	# ✅ MUST be the player's DamageCollision
+	if not (body is Area2D) or body.name != "DamageCollision":
+		print("[Enemy HIT] Ignored:", body.name)
+		return
 
-	if body is CollisionObject2D:
-		print(" Collision layer:", body.collision_layer)
-		print(" Collision mask:", body.collision_mask)
+	var player := body.get_parent()
+	if player == null:
+		return
 
-	var parent := body.get_parent()
-	if parent:
-		print(" Parent:", parent.name, "(", parent.get_class(), ")")
+	print("[Enemy HIT] Hurtbox confirmed")
 
-	# APPLY DAMAGE
-	if body.has_method("apply_damage"):
-		print(" ✅ apply_damage on body")
-		body.apply_damage(attack_damage)
-	elif parent and parent.has_method("apply_damage"):
-		print(" ✅ apply_damage on parent")
-		parent.apply_damage(attack_damage)
-	else:
-		print(" ❌ NO apply_damage method found")
+	# DAMAGE
+	if player.has_method("apply_damage"):
+		player.apply_damage(attack_damage)
 
-	# APPLY KNOCKBACK
-	var target := body
-	if not body.has_method("external_knockback") and parent:
-		target = parent
-
-	if target.has_method("external_knockback"):
-		var force = (target.global_position - global_position).normalized() * weapon.knockback_strength
-		target.external_knockback(force)
-		print(" ✅ knockback applied")
-	else:
-		print(" ❌ NO knockback method found")
+	# KNOCKBACK
+	if player.has_method("external_knockback"):
+		var force = (player.global_position - global_position).normalized() * weapon.knockback_strength
+		player.external_knockback(force)
 
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
