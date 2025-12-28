@@ -1,8 +1,11 @@
 extends CharacterBody2D
 
+signal lives_changed(current_lives: int)
+signal life_lost(current_lives: int)
+signal player_died
+
 #@export var inv: Inv
 @export var inventory: Inv = preload("res://inventory/inv.tres")
-
 # ----------------------
 # CONFIG
 # ----------------------
@@ -46,6 +49,7 @@ var weapon_holder_base_scale := Vector2.ONE
 var weapon_root_base_pos := Vector2.ZERO
 var nearby_item: WorldItem = null
 var knockback_force: Vector2 = Vector2.ZERO
+var default_lives = 5
 # ----------------------
 # NODES
 # ----------------------
@@ -55,6 +59,7 @@ var knockback_force: Vector2 = Vector2.ZERO
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
 # sword_anim_player node reference kept in case it exists in tree
 @onready var sword_anim_player := $Graphics/WeaponPivot/Sword/AnimationPlayer
+@onready var lives: CanvasLayer = $Lives
 
 func _dummy_set(v): pass
 
@@ -62,6 +67,9 @@ func _dummy_set(v): pass
 # READY
 # ----------------------
 func _ready() -> void:
+	life_lost.connect(_on_life_lost)
+	player_died.connect(_on_player_died)
+
 	if body_anim:
 		body_anim.z_as_relative = true
 	if head_anim:
@@ -813,7 +821,7 @@ func collect_world_item(world_item) -> void:
 			inv_ui.show_message("Inventory Full")
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
-func external_knockback(force: Vector2) -> void:
+func external_knockback(force: Vector2, damage: int = 1) -> void:
 	knockback_force = force
 	_debug_camera_lookup("Player took hit")
 
@@ -821,6 +829,7 @@ func external_knockback(force: Vector2) -> void:
 	if cam:
 		cam.shake(6.0, 0.15)
 
+	decrease_lives(damage)
 
 func _debug_camera_lookup(context: String) -> void:
 	var cams = get_tree().get_nodes_in_group("Camera")
@@ -837,3 +846,24 @@ func _debug_camera_lookup(context: String) -> void:
 
 	var viewport_cam = get_viewport().get_camera_2d()
 	print(" Viewport camera:", viewport_cam)
+
+func decrease_lives(damage: int = 1) -> void:
+	if default_lives <= 0:
+		return
+
+	default_lives -= damage
+	default_lives = max(default_lives, 0)
+
+	emit_signal("lives_changed", default_lives)
+	emit_signal("life_lost", default_lives)
+
+	if default_lives == 0:
+		emit_signal("player_died")
+
+func _on_life_lost(current_lives: int) -> void:
+	# purely optional here — usually UI handles effects
+	print("[Player] ❤️ Life lost, remaining:", current_lives)
+
+func _on_player_died() -> void:
+	print("[Player] ☠ Player died")
+	# disable movement, play animation, etc.

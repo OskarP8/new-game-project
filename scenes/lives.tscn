@@ -1,0 +1,76 @@
+[gd_scene load_steps=7 format=3 uid="uid://idlrb0tudha5"]
+
+[ext_resource type="Script" path="res://scripts/lives.gd" id="1_vamm4"]
+[ext_resource type="Script" path="res://scenes/leaf_slot.gd" id="2_16lbg"]
+[ext_resource type="Texture2D" uid="uid://bdbo81ugh655s" path="res://sprites/lives.kra" id="2_qpmr6"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_olb3m"]
+atlas = ExtResource("2_qpmr6")
+region = Rect2(0, 0, 71, 21)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_d32qk"]
+atlas = ExtResource("2_qpmr6")
+region = Rect2(0, 32, 32, 32)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_7vhil"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_d32qk")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[node name="Lives" type="CanvasLayer"]
+script = ExtResource("1_vamm4")
+
+[node name="Branch" type="Sprite2D" parent="."]
+position = Vector2(35, 11)
+texture = SubResource("AtlasTexture_olb3m")
+
+[node name="Leaves" type="Node2D" parent="."]
+
+[node name="LeafSlot1" type="Node2D" parent="Leaves"]
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot1"]
+position = Vector2(6, 24)
+sprite_frames = SubResource("SpriteFrames_7vhil")
+animation = &"idle"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot1"]
+root_node = NodePath("../../..")
+
+[node name="LeafSlot2" type="Node2D" parent="Leaves"]
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot2"]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot2"]
+root_node = NodePath("../../..")
+
+[node name="LeafSlot3" type="Node2D" parent="Leaves"]
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot3"]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot3"]
+root_node = NodePath("../../..")
+
+[node name="LeafSlot4" type="Node2D" parent="Leaves"]
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot4"]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot4"]
+root_node = NodePath("../../..")
+
+[node name="LeafSlot5" type="Node2D" parent="Leaves"]
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot5"]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot5"]
+root_node = NodePath("../../..")
