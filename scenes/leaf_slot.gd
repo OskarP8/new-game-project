@@ -1,54 +1,60 @@
 extends Node2D
 class_name LeafSlot
 
-@onready var sprite := $Leaf
-@onready var anim_player := $AnimationPlayer if has_node("AnimationPlayer") else null
-
 enum LeafState { EMPTY, GROWING, ALIVE, DYING }
 var state: LeafState = LeafState.EMPTY
+
+@onready var sprite := $Leaf
+@onready var anim := $AnimationPlayer
+
+func _state_name(s: int) -> String:
+	return ["EMPTY", "GROWING", "ALIVE", "DYING"][s]
 
 func set_alive() -> void:
 	state = LeafState.ALIVE
 	sprite.visible = true
 	sprite.modulate.a = 1.0
-	sprite.play("idle")
+	print("[LeafSlot]", name, "→ set_alive")
+	if anim.has_animation("alive"):
+		anim.play("alive")
 
 func start_growing() -> void:
 	if state != LeafState.EMPTY:
+		print("[LeafSlot]", name, "❌ start_growing ignored, state =", _state_name(state))
 		return
 
 	state = LeafState.GROWING
 	sprite.visible = true
-	sprite.modulate.a = 0.0
-	sprite.play("grow")
-
-	if anim_player and anim_player.has_animation("fade_in"):
-		anim_player.play("fade_in")
+	sprite.modulate.a = 0.5
+	print("[LeafSlot]", name, "🌱 start_growing")
+	anim.play("grow")
 
 func kill() -> void:
 	if state != LeafState.ALIVE:
+		print("[LeafSlot]", name, "❌ kill ignored, state =", _state_name(state))
 		return
 
 	state = LeafState.DYING
-	sprite.play("die")
-
-func _on_AnimatedSprite2D_animation_finished() -> void:
-	match sprite.animation:
-		"grow":
-			state = LeafState.ALIVE
-			sprite.play("idle")
-
-		"die":
-			if anim_player and anim_player.has_animation("fade_out"):
-				anim_player.play("fade_out")
-			else:
-				_reset()
+	print("[LeafSlot]", name, "💀 kill → playing 'die'")
+	anim.play("die")
 
 func _on_AnimationPlayer_animation_finished(anim_name: String) -> void:
-	if anim_name == "fade_out":
-		_reset()
+	print("[LeafSlot]", name, "🎞 animation_finished:", anim_name)
+
+	match anim_name:
+		"grow":
+			state = LeafState.ALIVE
+			sprite.modulate.a = 1.0
+			print("[LeafSlot]", name, "🌿 grown → ALIVE")
+			if anim.has_animation("alive"):
+				anim.play("alive")
+
+		"die":
+			print("[LeafSlot]", name, "☠ die finished → reset")
+			_reset()
 
 func _reset() -> void:
 	state = LeafState.EMPTY
 	sprite.visible = false
 	sprite.modulate.a = 1.0
+	print("[LeafSlot]", name, "🫥 reset → EMPTY")

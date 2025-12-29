@@ -848,17 +848,20 @@ func _debug_camera_lookup(context: String) -> void:
 	print(" Viewport camera:", viewport_cam)
 
 func decrease_lives(damage: int = 1) -> void:
-	if default_lives <= 0:
+	if default_lives <= 0 or damage <= 0:
 		return
 
-	default_lives -= damage
-	default_lives = max(default_lives, 0)
+	var lives_to_remove = min(damage, default_lives)
 
-	emit_signal("lives_changed", default_lives)
-	emit_signal("life_lost", default_lives)
+	for i in range(lives_to_remove):
+		default_lives -= 1
+		emit_signal("life_lost", default_lives)
+		emit_signal("lives_changed", default_lives)
 
-	if default_lives == 0:
-		emit_signal("player_died")
+		if default_lives <= 0:
+			default_lives = 0
+			emit_signal("player_died")
+			return
 
 func _on_life_lost(current_lives: int) -> void:
 	# purely optional here — usually UI handles effects

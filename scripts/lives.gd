@@ -10,11 +10,9 @@ func _ready() -> void:
 		push_warning("[Lives] Player not found")
 		return
 
-	# Initialize lives visually
 	if "default_lives" in player:
 		_set_initial_lives(player.default_lives)
 
-	# Signals from player
 	if player.has_signal("life_lost"):
 		player.life_lost.connect(_on_life_lost)
 
@@ -35,13 +33,9 @@ func _set_initial_lives(count: int) -> void:
 # LIFE LOSS
 # ----------------------
 func _on_life_lost(_current_lives: int) -> void:
-	# Kill the RIGHTMOST alive leaf
-	for i in range(leaf_slots.size() - 1, -1, -1):
-		if leaf_slots[i].state == leaf_slots[i].LeafState.ALIVE:
-			leaf_slots[i].kill()
-			break
+	_kill_rightmost_leaf()
+	_try_start_growth()
 
-	# Optional UI effects
 	if anim_player and anim_player.has_animation("life_lost"):
 		anim_player.play("life_lost")
 
@@ -49,17 +43,32 @@ func _on_life_lost(_current_lives: int) -> void:
 		particles.emitting = false
 		particles.emitting = true
 
+func _kill_rightmost_leaf() -> void:
+	for i in range(leaf_slots.size() - 1, -1, -1):
+		if leaf_slots[i].state == leaf_slots[i].LeafState.ALIVE:
+			leaf_slots[i].kill()
+			return
+
 # ----------------------
-# REGROWTH (call from timer / checkpoint)
+# REGROWTH LOGIC
 # ----------------------
-func try_regrow_leaf() -> void:
+func _try_start_growth() -> void:
+	if _has_growing_leaf():
+		return
+
 	for slot in leaf_slots:
 		if slot.state == slot.LeafState.EMPTY:
 			slot.start_growing()
 			return
 
+func _has_growing_leaf() -> bool:
+	for slot in leaf_slots:
+		if slot.state == slot.LeafState.GROWING:
+			return true
+	return false
+
 # ----------------------
-# DEATH
+# PLAYER DEATH
 # ----------------------
 func _on_player_died() -> void:
 	if anim_player and anim_player.has_animation("death"):
