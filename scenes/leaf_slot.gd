@@ -1,11 +1,17 @@
 extends Node2D
 class_name LeafSlot
 
+signal became_empty(slot: LeafSlot)
+
 enum LeafState { EMPTY, GROWING, ALIVE, DYING }
 var state: LeafState = LeafState.EMPTY
 
 @onready var sprite := $Leaf
 @onready var anim := $AnimationPlayer
+
+func _ready() -> void:
+	if not anim.animation_finished.is_connected(_on_AnimationPlayer_animation_finished):
+		anim.animation_finished.connect(_on_AnimationPlayer_animation_finished)
 
 func _state_name(s: int) -> String:
 	return ["EMPTY", "GROWING", "ALIVE", "DYING"][s]
@@ -58,3 +64,4 @@ func _reset() -> void:
 	sprite.visible = false
 	sprite.modulate.a = 1.0
 	print("[LeafSlot]", name, "🫥 reset → EMPTY")
+	emit_signal("became_empty", self)

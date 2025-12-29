@@ -1,8 +1,7 @@
-[gd_scene load_steps=22 format=3 uid="uid://idlrb0tudha5"]
+[gd_scene load_steps=27 format=3 uid="uid://idlrb0tudha5"]
 
 [ext_resource type="Script" path="res://scripts/lives.gd" id="1_vamm4"]
 [ext_resource type="Script" path="res://scenes/leaf_slot.gd" id="2_16lbg"]
-[ext_resource type="Texture2D" uid="uid://bdbo81ugh655s" path="res://sprites/lives.kra" id="2_qpmr6"]
 [ext_resource type="Texture2D" uid="uid://bxshddel1pggl" path="res://sprites/branch.kra" id="2_sfilk"]
 [ext_resource type="Texture2D" uid="uid://ckviaawsh73f4" path="res://sprites/leaves.kra" id="4_l0giw"]
 
@@ -22,8 +21,24 @@ region = Rect2(64, 0, 32, 32)
 atlas = ExtResource("4_l0giw")
 region = Rect2(96, 0, 32, 32)
 
-[sub_resource type="AtlasTexture" id="AtlasTexture_d32qk"]
-atlas = ExtResource("2_qpmr6")
+[sub_resource type="AtlasTexture" id="AtlasTexture_vx0np"]
+atlas = ExtResource("4_l0giw")
+region = Rect2(96, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_sgp7t"]
+atlas = ExtResource("4_l0giw")
+region = Rect2(64, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_4meb4"]
+atlas = ExtResource("4_l0giw")
+region = Rect2(32, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_aak2s"]
+atlas = ExtResource("4_l0giw")
+region = Rect2(0, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_jhswd"]
+atlas = ExtResource("4_l0giw")
 region = Rect2(0, 32, 32, 32)
 
 [sub_resource type="SpriteFrames" id="SpriteFrames_7vhil"]
@@ -47,7 +62,24 @@ animations = [{
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_d32qk")
+"texture": SubResource("AtlasTexture_vx0np")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_sgp7t")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_4meb4")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_aak2s")
+}],
+"loop": false,
+"name": &"grow",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_jhswd")
 }],
 "loop": true,
 "name": &"idle",
@@ -152,6 +184,18 @@ tracks/7/keys = {
 "update": 1,
 "values": [true]
 }
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("Leaves/LeafSlot1/Leaf:animation")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"grow"]
+}
 
 [sub_resource type="Animation" id="Animation_yicjl"]
 resource_name = "fade_out"
@@ -200,10 +244,10 @@ tracks/3/path = NodePath("Leaves/LeafSlot1/Leaf:position")
 tracks/3/interp = 1
 tracks/3/loop_wrap = true
 tracks/3/keys = {
-"times": PackedFloat32Array(0, 0.8, 0.9, 1),
-"transitions": PackedFloat32Array(1, 1, 1, 1),
+"times": PackedFloat32Array(0, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
 "update": 0,
-"values": [Vector2(49, 29), Vector2(49, 29), Vector2(50, 29), Vector2(49, 29)]
+"values": [Vector2(49, 29), Vector2(49, 29), Vector2(50, 29), Vector2(48, 29), Vector2(49, 29), Vector2(49, 29), Vector2(50, 29), Vector2(49, 29)]
 }
 tracks/4/type = "value"
 tracks/4/imported = false
@@ -253,11 +297,118 @@ tracks/7/keys = {
 "update": 1,
 "values": [true]
 }
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("Leaves/LeafSlot1/Leaf:animation")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"death"]
+}
+
+[sub_resource type="Animation" id="Animation_evkad"]
+resource_name = "grow"
+length = 23.0001
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Leaves/LeafSlot1/Leaf:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 7, 14, 21),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 2, 3]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Leaves/LeafSlot1/Leaf:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 21, 21.1),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(0.556953, 0.556953, 0.556953, 1), Color(0.556953, 0.556953, 0.556953, 1), Color(1, 1, 1, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Leaves/LeafSlot1/Leaf:scale")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 21, 21.1, 21.2),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(1, 1), Vector2(1, 1), Vector2(1.1, 1.1), Vector2(1, 1)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("Leaves/LeafSlot1/Leaf:position")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 21, 21.1, 21.2),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(49, 29), Vector2(49, 29), Vector2(49, 30), Vector2(49, 29)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("Leaves/LeafSlot1/Leaf:animation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"grow"]
+}
+
+[sub_resource type="Animation" id="Animation_mcq45"]
+resource_name = "idle"
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Leaves/LeafSlot1/Leaf:animation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"idle"]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Leaves/LeafSlot1/Leaf:frame")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [0]
+}
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_4i3e7"]
 _data = {
 "RESET": SubResource("Animation_onq4s"),
-"die": SubResource("Animation_yicjl")
+"alive": SubResource("Animation_mcq45"),
+"die": SubResource("Animation_yicjl"),
+"grow": SubResource("Animation_evkad")
 }
 
 [sub_resource type="Curve" id="Curve_kwj32"]
@@ -310,7 +461,7 @@ script = ExtResource("2_16lbg")
 [node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot1"]
 position = Vector2(49, 29)
 sprite_frames = SubResource("SpriteFrames_7vhil")
-animation = &"death"
+animation = &"grow"
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot1"]
 root_node = NodePath("../../..")
@@ -362,37 +513,5 @@ scale_amount_max = 0.8
 scale_amount_curve = SubResource("Curve_j1d2t")
 color = Color(0.18824, 0.111512, 1.20327e-08, 1)
 color_ramp = SubResource("Gradient_bv2pf")
-
-[node name="LeafSlot2" type="Node2D" parent="Leaves"]
-script = ExtResource("2_16lbg")
-
-[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot2"]
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot2"]
-root_node = NodePath("../../..")
-
-[node name="LeafSlot3" type="Node2D" parent="Leaves"]
-script = ExtResource("2_16lbg")
-
-[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot3"]
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot3"]
-root_node = NodePath("../../..")
-
-[node name="LeafSlot4" type="Node2D" parent="Leaves"]
-script = ExtResource("2_16lbg")
-
-[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot4"]
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot4"]
-root_node = NodePath("../../..")
-
-[node name="LeafSlot5" type="Node2D" parent="Leaves"]
-script = ExtResource("2_16lbg")
-
-[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot5"]
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot5"]
-root_node = NodePath("../../..")
 
 [connection signal="animation_finished" from="Leaves/LeafSlot1/AnimationPlayer" to="Leaves/LeafSlot1" method="_on_AnimationPlayer_animation_finished"]
