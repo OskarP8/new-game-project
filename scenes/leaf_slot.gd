@@ -10,6 +10,13 @@ var state: LeafState = LeafState.EMPTY
 @onready var anim := $AnimationPlayer
 
 func _ready() -> void:
+	var e := $Explosion
+	e.emitting = false
+	e.restart()   # <- THIS IS IMPORTANT
+	var c := $Crack
+	c.emitting = false
+	c.restart()   # <- THIS IS IMPORTANT
+
 	if not anim.animation_finished.is_connected(_on_AnimationPlayer_animation_finished):
 		anim.animation_finished.connect(_on_AnimationPlayer_animation_finished)
 
@@ -31,8 +38,14 @@ func start_growing() -> void:
 
 	state = LeafState.GROWING
 	sprite.visible = true
-	sprite.modulate.a = 0.5
+
+	# 🔧 HARD RESET VISUAL STATE
+	sprite.frame = 0                     # or first grow frame
+	sprite.scale = Vector2.ONE           # if you animate scale
+	sprite.modulate = Color(1, 1, 1, 0.5)
+
 	print("[LeafSlot]", name, "🌱 start_growing")
+	anim.stop()
 	anim.play("grow")
 
 func kill() -> void:
@@ -61,7 +74,11 @@ func _on_AnimationPlayer_animation_finished(anim_name: String) -> void:
 
 func _reset() -> void:
 	state = LeafState.EMPTY
+
+	anim.stop()
+
 	sprite.visible = false
-	sprite.modulate.a = 1.0
+	sprite.modulate = Color(1, 1, 1, 1)
+	sprite.frame = 0          # ⬅ VERY IMPORTANT
+
 	print("[LeafSlot]", name, "🫥 reset → EMPTY")
-	emit_signal("became_empty", self)

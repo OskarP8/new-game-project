@@ -1,0 +1,530 @@
+[gd_scene load_steps=25 format=3 uid="uid://buki0ftuqsr26"]
+
+[ext_resource type="Script" path="res://scenes/leaf_slot.gd" id="1_i0mxg"]
+[ext_resource type="Texture2D" uid="uid://ckviaawsh73f4" path="res://sprites/leaves.kra" id="2_yc0i3"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_gbten"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(0, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_vstcl"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(32, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_0hnlc"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(64, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_rhygr"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(96, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_vx0np"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(96, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_sgp7t"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(64, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_4meb4"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(32, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_aak2s"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(0, 32, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_jhswd"]
+atlas = ExtResource("2_yc0i3")
+region = Rect2(0, 32, 32, 32)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_7vhil"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_gbten")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_vstcl")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_0hnlc")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_rhygr")
+}],
+"loop": false,
+"name": &"death",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_vx0np")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_sgp7t")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_4meb4")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_aak2s")
+}],
+"loop": false,
+"name": &"grow",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_jhswd")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[sub_resource type="Animation" id="Animation_onq4s"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [0]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(1, 1, 1, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:scale")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(1, 1)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:position")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(49, 29)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:animation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"death"]
+}
+tracks/5/type = "value"
+tracks/5/imported = false
+tracks/5/enabled = true
+tracks/5/path = NodePath("@SubViewport@9101/LeafSlot/Explosion:emitting")
+tracks/5/interp = 1
+tracks/5/loop_wrap = true
+tracks/5/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [false]
+}
+tracks/6/type = "value"
+tracks/6/imported = false
+tracks/6/enabled = true
+tracks/6/path = NodePath("@SubViewport@9101/LeafSlot/Crack:emitting")
+tracks/6/interp = 1
+tracks/6/loop_wrap = true
+tracks/6/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [false]
+}
+tracks/7/type = "value"
+tracks/7/imported = false
+tracks/7/enabled = true
+tracks/7/path = NodePath("@SubViewport@9101/LeafSlot/Crack:one_shot")
+tracks/7/interp = 1
+tracks/7/loop_wrap = true
+tracks/7/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [true]
+}
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("@SubViewport@9101/LeafSlot/Explosion:one_shot")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [true]
+}
+
+[sub_resource type="Animation" id="Animation_mcq45"]
+resource_name = "idle"
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("@SubViewport@9101/LeafSlot/Explosion:emitting")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [false]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("@SubViewport@9101/LeafSlot/Crack:emitting")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [false]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:frame")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [0]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:animation")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"idle"]
+}
+
+[sub_resource type="Animation" id="Animation_yicjl"]
+resource_name = "fade_out"
+length = 1.00001
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.9, 1),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:scale")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.8, 0.9, 1),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(1, 1), Vector2(1, 1), Vector2(1.1, 1.1), Vector2(1, 1)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:position")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(49, 29), Vector2(49, 29), Vector2(50, 29), Vector2(48, 29), Vector2(49, 29), Vector2(49, 29), Vector2(50, 29), Vector2(49, 29)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:animation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"death"]
+}
+tracks/5/type = "value"
+tracks/5/imported = false
+tracks/5/enabled = true
+tracks/5/path = NodePath("@SubViewport@9101/LeafSlot/Explosion:emitting")
+tracks/5/interp = 1
+tracks/5/loop_wrap = true
+tracks/5/keys = {
+"times": PackedFloat32Array(0, 0.8),
+"transitions": PackedFloat32Array(1, 1),
+"update": 1,
+"values": [false, true]
+}
+tracks/6/type = "value"
+tracks/6/imported = false
+tracks/6/enabled = true
+tracks/6/path = NodePath("@SubViewport@9101/LeafSlot/Crack:emitting")
+tracks/6/interp = 1
+tracks/6/loop_wrap = true
+tracks/6/keys = {
+"times": PackedFloat32Array(0, 0.3),
+"transitions": PackedFloat32Array(1, 1),
+"update": 1,
+"values": [false, true]
+}
+tracks/7/type = "value"
+tracks/7/imported = false
+tracks/7/enabled = true
+tracks/7/path = NodePath("@SubViewport@9101/LeafSlot/Crack:one_shot")
+tracks/7/interp = 1
+tracks/7/loop_wrap = true
+tracks/7/keys = {
+"times": PackedFloat32Array(0.3),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [true]
+}
+tracks/8/type = "value"
+tracks/8/imported = false
+tracks/8/enabled = true
+tracks/8/path = NodePath("@SubViewport@9101/LeafSlot/Explosion:one_shot")
+tracks/8/interp = 1
+tracks/8/loop_wrap = true
+tracks/8/keys = {
+"times": PackedFloat32Array(0.8),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [true]
+}
+
+[sub_resource type="Animation" id="Animation_evkad"]
+resource_name = "grow"
+length = 21.2
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 7, 14, 21),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 2, 3]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 21, 21.1),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(0.716296, 0.716296, 0.716296, 1), Color(0.716296, 0.716296, 0.716296, 1), Color(1, 1, 1, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:scale")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 21, 21.1, 21.2),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(1, 1), Vector2(1, 1), Vector2(1.5, 1.5), Vector2(1, 1)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:position")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 21, 21.1, 21.2),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(49, 29), Vector2(49, 29), Vector2(49, 34), Vector2(49, 29)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("@SubViewport@9101/LeafSlot/Leaf:animation")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"grow"]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_4i3e7"]
+_data = {
+"RESET": SubResource("Animation_onq4s"),
+"alive": SubResource("Animation_mcq45"),
+"die": SubResource("Animation_yicjl"),
+"grow": SubResource("Animation_evkad")
+}
+
+[sub_resource type="Curve" id="Curve_kwj32"]
+min_value = -360.0
+max_value = 360.0
+_data = [Vector2(0, 360), 0.0, 0.0, 0, 0, Vector2(0.70122, 360), 0.0, 0.0, 0, 0, Vector2(0.847561, -3.95605), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Curve" id="Curve_ve7hk"]
+min_value = -200.0
+max_value = 200.0
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.189024, 2.19781), 0.0, 0.0, 0, 0, Vector2(0.5, -19.7802), 0.0, 0.0, 0, 0, Vector2(1, -19.7802), 0.0, 0.0, 0, 0]
+point_count = 4
+
+[sub_resource type="Curve" id="Curve_dj7yh"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.957317, 0.593407), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Gradient" id="Gradient_7lqo5"]
+offsets = PackedFloat32Array(0, 0.889706)
+colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
+
+[sub_resource type="Curve" id="Curve_sp4gp"]
+min_value = -200.0
+max_value = 200.0
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.27439, -2.19781), 0.0, 0.0, 0, 0, Vector2(0.518293, -15.3846), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Curve" id="Curve_j1d2t"]
+_data = [Vector2(0.0121951, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.351648), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Gradient" id="Gradient_bv2pf"]
+offsets = PackedFloat32Array(0.139706, 0.977941)
+colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
+
+[node name="LeafSlot" type="Node2D"]
+position = Vector2(-41, -5)
+script = ExtResource("1_i0mxg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="."]
+position = Vector2(49, 29)
+sprite_frames = SubResource("SpriteFrames_7vhil")
+animation = &"death"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../../..")
+libraries = {
+"": SubResource("AnimationLibrary_4i3e7")
+}
+
+[node name="Explosion" type="CPUParticles2D" parent="."]
+position = Vector2(49, 30)
+emitting = false
+amount = 50
+lifetime = 0.7
+one_shot = true
+explosiveness = 0.89
+randomness = 0.16
+lifetime_randomness = 0.13
+spread = 180.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 20.0
+initial_velocity_max = 40.0
+angular_velocity_curve = SubResource("Curve_kwj32")
+linear_accel_min = 10.0
+linear_accel_max = 20.0
+linear_accel_curve = SubResource("Curve_ve7hk")
+scale_amount_min = 0.6
+scale_amount_curve = SubResource("Curve_dj7yh")
+color = Color(0.266744, 0.1551, 0.00654513, 1)
+color_ramp = SubResource("Gradient_7lqo5")
+
+[node name="Crack" type="CPUParticles2D" parent="."]
+position = Vector2(49, 29)
+emitting = false
+amount = 80
+lifetime = 0.3
+one_shot = true
+explosiveness = 0.78
+emission_shape = 3
+emission_rect_extents = Vector2(5, 8)
+direction = Vector2(0, 1)
+spread = 180.0
+gravity = Vector2(0, 10)
+initial_velocity_min = 5.0
+initial_velocity_max = 5.0
+linear_accel_min = 1.0
+linear_accel_max = 1.0
+linear_accel_curve = SubResource("Curve_sp4gp")
+scale_amount_min = 0.1
+scale_amount_max = 0.8
+scale_amount_curve = SubResource("Curve_j1d2t")
+color = Color(0.18824, 0.111512, 1.20327e-08, 1)
+color_ramp = SubResource("Gradient_bv2pf")
+
+[connection signal="animation_finished" from="AnimationPlayer" to="." method="_on_AnimationPlayer_animation_finished"]
