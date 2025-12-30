@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-@onready var leaf_slots: Array = $Leaves.get_children()
+@onready var leaf_slots: Array[LeafSlot] = []
 @onready var anim_player := $AnimationPlayer if has_node("AnimationPlayer") else null
 @onready var particles := $Particles if has_node("Particles") else null
 @export var regrow_delay: float = 10.0  # seconds before a leaf starts growing
@@ -8,6 +8,11 @@ extends CanvasLayer
 var regrow_timer: Timer
 
 func _ready() -> void:
+	leaf_slots.clear()
+	for child in $Leaves.get_children():
+		if child is LeafSlot:
+			leaf_slots.append(child)
+
 	var player = get_tree().root.find_child("Player", true, false)
 	if not player:
 		push_warning("[Lives] Player not found")
@@ -59,8 +64,11 @@ func _on_life_lost(_current_lives: int) -> void:
 
 func _kill_rightmost_leaf() -> void:
 	for i in range(leaf_slots.size() - 1, -1, -1):
-		if leaf_slots[i].state == leaf_slots[i].LeafState.ALIVE:
-			leaf_slots[i].kill()
+		var slot := leaf_slots[i]
+		print("[Lives] checking", slot.name, "state =", slot._state_name(slot.state))
+		if slot.state == slot.LeafState.ALIVE:
+			print("[Lives] 💀 killing", slot.name)
+			slot.kill()
 			return
 
 # ----------------------
