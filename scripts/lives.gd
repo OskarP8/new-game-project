@@ -63,19 +63,13 @@ func _on_life_lost(_current_lives: int) -> void:
 		particles.emitting = true
 
 func _kill_rightmost_leaf() -> void:
-	var rightmost_slot: LeafSlot = null
-	var max_x := -INF
-
-	for slot in leaf_slots:
+	for i in range(leaf_slots.size() - 1, -1, -1):
+		var slot := leaf_slots[i]
+		print("[Lives] checking", slot.name, "state =", slot._state_name(slot.state))
 		if slot.state == slot.LeafState.ALIVE:
-			var x := slot.global_position.x
-			if x > max_x:
-				max_x = x
-				rightmost_slot = slot
-
-	if rightmost_slot:
-		print("[Lives] 💀 killing visually rightmost:", rightmost_slot.name)
-		rightmost_slot.kill()
+			print("[Lives] 💀 killing", slot.name)
+			slot.kill()
+			return
 
 # ----------------------
 # REGROWTH LOGIC
