@@ -50,6 +50,8 @@ var weapon_root_base_pos := Vector2.ZERO
 var nearby_item: WorldItem = null
 var knockback_force: Vector2 = Vector2.ZERO
 var default_lives = 5
+var dead: bool = false
+
 # ----------------------
 # NODES
 # ----------------------
@@ -95,6 +97,9 @@ func _ready() -> void:
 # MAIN LOOP
 # ----------------------
 func _physics_process(delta):
+	if dead:
+		return
+
 	if not attacking:
 		player_movement(delta)
 		update_animation()   # ✅ ONLY when not attacking
@@ -189,6 +194,8 @@ func _update_last_dir() -> void:
 # ATTACK
 # ----------------------
 func handle_attack() -> void:
+	if dead:
+		return
 	if not has_weapon or attacking:
 		return
 
@@ -848,7 +855,7 @@ func _debug_camera_lookup(context: String) -> void:
 	print(" Viewport camera:", viewport_cam)
 
 func decrease_lives(damage: int = 1) -> void:
-	if default_lives <= 0 or damage <= 0:
+	if dead or default_lives <= 0 or damage <= 0:
 		return
 
 	var lives_to_remove = min(damage, default_lives)
@@ -860,6 +867,7 @@ func decrease_lives(damage: int = 1) -> void:
 
 		if default_lives <= 0:
 			default_lives = 0
+			dead = true
 			emit_signal("player_died")
 			return
 
@@ -869,4 +877,22 @@ func _on_life_lost(current_lives: int) -> void:
 
 func _on_player_died() -> void:
 	print("[Player] ☠ Player died")
+
+	dead = true
+	attacking = false
+	input = Vector2.ZERO
+	velocity = Vector2.ZERO
+
+	# stop weapon visuals
+	if weapon_anim_player:
+		weapon_anim_player.stop()
+	if weapon_sprite:
+		weapon_sprite.stop()
+
+	# play player death animation
+	if $AnimationPlayer and $AnimationPlayer.has_animation("death"):
+		$AnimationPlayer.play("death")
+
 	# disable movement, play animation, etc.
+func apply_damage(damage: int = 1) -> void:
+	decrease_lives(damage)

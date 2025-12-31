@@ -7,7 +7,7 @@ class_name Enemy
 @export var notice_radius: float = 120.0
 @export var chase_radius: float = 220.0
 @export var attack_range: float = 24.0
-@export var attack_damage: int = 10
+@export var enemy_damage: int = 10
 @export var attack_cooldown: float = 3.0
 @export var detection_rays: int = 16
 @export var detection_interval: float = 0.12
@@ -497,7 +497,7 @@ func weapon_notify_hit(body: Node) -> void:
 
 	# DAMAGE
 	if player.has_method("apply_damage"):
-		player.apply_damage(attack_damage)
+		player.apply_damage(enemy_damage)
 
 	# KNOCKBACK
 	if player.has_method("external_knockback"):
@@ -699,7 +699,7 @@ func _apply_knockback_velocity(source_pos: Vector2, strength: float) -> void:
 			"velocity =", knockback_velocity
 		)
 func get_attack_damage() -> int:
-	return attack_damage
+	return enemy_damage
 
 func _handle_corpse_lifecycle() -> void:
 	print("[Enemy CORPSE] waiting for death animation")

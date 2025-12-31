@@ -8,7 +8,7 @@ const LAYER_WALLS        = 1 << 4  # 5: walls
 const LAYER_ENEMY_BODY   = 1 << 5  # 6: enemy
 const LAYER_DAMAGE       = 1 << 6  # 7: damage / hurtbox ✅
 
-@export var attack_damage: int = 10
+@export var weapon_damage: int = 10
 @export var knockback_strength: float = 300.0
 
 # Assigned by owner via initialize(owner)
@@ -298,7 +298,7 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	# PLAYER → ENEMY
 	if weapon_owner.is_in_group("Player") and target.has_method("take_damage"):
 		target.take_damage(
-			attack_damage,
+			weapon_damage,
 			weapon_owner.global_position,
 			knockback_strength
 		)
@@ -358,7 +358,7 @@ func equip_for_owner(kind: String) -> void:
 		)
 
 func get_damage() -> int:
-	return attack_damage
+	return weapon_damage
 
 func get_knockback() -> float:
 	return knockback_strength

@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=4 uid="uid://ncgeslw4eukd"]
+[gd_scene load_steps=20 format=4 uid="uid://ncgeslw4eukd"]
 
 [ext_resource type="PackedScene" uid="uid://bbv8wq1p3smc6" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://btfv2cckmual" path="res://sprites/tilesets/objects.kra" id="1_08we5"]
@@ -12,6 +12,7 @@
 [ext_resource type="PackedScene" uid="uid://bqemudqhp687a" path="res://scenes/spawn_point.tscn" id="8_067sx"]
 [ext_resource type="PackedScene" uid="uid://dhp5srs4m8eeq" path="res://scenes/Enemies/knight.tscn" id="9_wbwfa"]
 [ext_resource type="PackedScene" uid="uid://urm2igwsgbe4" path="res://scenes/Enemies/navigation_region_2d.tscn" id="10_h2n55"]
+[ext_resource type="PackedScene" uid="uid://b7gq2mp4dujc4" path="res://scenes/death_director.tscn" id="13_dldt2"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3xxoc"]
 texture = ExtResource("1_08we5")
@@ -173,3 +174,5 @@ max_active = 1
 
 [node name="NavigationRegion2D" parent="." instance=ExtResource("10_h2n55")]
 navigation_polygon = SubResource("NavigationPolygon_47jdn")
+
+[node name="DeathDirector" parent="." instance=ExtResource("13_dldt2")]
