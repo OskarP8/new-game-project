@@ -300,9 +300,6 @@ func _process_chase(delta: float) -> void:
 				# force a movement update so agent computes velocity this frame
 				_update_agent_movement()
 
-				if _debug_enabled:
-					print("[Enemy DEBUG] Circling -> target:", circle_target, " next:", agent.get_next_path_position())
-
 			# Update facing while circling
 			if player:
 				facing_left = player.global_position.x < global_position.x

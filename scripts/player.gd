@@ -828,15 +828,13 @@ func collect_world_item(world_item) -> void:
 			inv_ui.show_message("Inventory Full")
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
-func external_knockback(force: Vector2, damage: int = 1) -> void:
+func external_knockback(force: Vector2) -> void:
 	knockback_force = force
 	_debug_camera_lookup("Player took hit")
 
 	var cam := get_viewport().get_camera_2d()
 	if cam:
 		cam.shake(6.0, 0.15)
-
-	decrease_lives(damage)
 
 func _debug_camera_lookup(context: String) -> void:
 	var cams = get_tree().get_nodes_in_group("Camera")
@@ -855,18 +853,18 @@ func _debug_camera_lookup(context: String) -> void:
 	print(" Viewport camera:", viewport_cam)
 
 func decrease_lives(damage: int = 1) -> void:
-	if dead or default_lives <= 0 or damage <= 0:
+	if dead:
 		return
 
-	var lives_to_remove = min(damage, default_lives)
+	for i in damage:
+		if default_lives <= 0:
+			return
 
-	for i in range(lives_to_remove):
 		default_lives -= 1
 		emit_signal("life_lost", default_lives)
 		emit_signal("lives_changed", default_lives)
 
-		if default_lives <= 0:
-			default_lives = 0
+		if default_lives == 0:
 			dead = true
 			emit_signal("player_died")
 			return
