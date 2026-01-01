@@ -828,13 +828,18 @@ func collect_world_item(world_item) -> void:
 			inv_ui.show_message("Inventory Full")
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
-func external_knockback(force: Vector2) -> void:
+
+func external_knockback(force: Vector2, damage: int = 1) -> void:
+	if dead:
+		return
+
 	knockback_force = force
-	_debug_camera_lookup("Player took hit")
 
 	var cam := get_viewport().get_camera_2d()
 	if cam:
 		cam.shake(6.0, 0.15)
+
+	apply_damage(damage)  # ✅ RESTORE THIS (but via apply_damage)
 
 func _debug_camera_lookup(context: String) -> void:
 	var cams = get_tree().get_nodes_in_group("Camera")
@@ -856,18 +861,17 @@ func decrease_lives(damage: int = 1) -> void:
 	if dead:
 		return
 
-	for i in damage:
+	for i in range(damage):
 		if default_lives <= 0:
-			return
+			break
 
 		default_lives -= 1
 		emit_signal("life_lost", default_lives)
 		emit_signal("lives_changed", default_lives)
 
-		if default_lives == 0:
-			dead = true
-			emit_signal("player_died")
-			return
+	# ✅ Evaluate death ONCE, after all damage is applied
+	if default_lives <= 0:
+		_die()
 
 func _on_life_lost(current_lives: int) -> void:
 	# purely optional here — usually UI handles effects
@@ -876,7 +880,6 @@ func _on_life_lost(current_lives: int) -> void:
 func _on_player_died() -> void:
 	print("[Player] ☠ Player died")
 
-	dead = true
 	attacking = false
 	input = Vector2.ZERO
 	velocity = Vector2.ZERO
@@ -887,10 +890,28 @@ func _on_player_died() -> void:
 	if weapon_sprite:
 		weapon_sprite.stop()
 
+	# disable collisions immediately
+	if $CollisionShape2D:
+		$CollisionShape2D.disabled = true
+
 	# play player death animation
 	if $AnimationPlayer and $AnimationPlayer.has_animation("death"):
 		$AnimationPlayer.play("death")
 
-	# disable movement, play animation, etc.
 func apply_damage(damage: int = 1) -> void:
 	decrease_lives(damage)
+
+func _die() -> void:
+	if dead:
+		return
+
+	dead = true
+	emit_signal("player_died")
+
+	# Disable collisions
+	if $CollisionShape2D:
+		$CollisionShape2D.disabled = true
+
+	# Stop movement & combat
+	velocity = Vector2.ZERO
+	attacking = false
