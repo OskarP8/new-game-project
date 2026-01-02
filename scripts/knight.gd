@@ -7,7 +7,7 @@ func _ready():
 	# Knight-specific stats
 	max_hp = 16
 	speed = 70.0
-	attack_damage = 8
+	enemy_damage = 8
 	attack_range = 26.0
 	attack_cooldown = 1.1
 

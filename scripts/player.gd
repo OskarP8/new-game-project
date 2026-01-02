@@ -51,6 +51,9 @@ var nearby_item: WorldItem = null
 var knockback_force: Vector2 = Vector2.ZERO
 var default_lives = 5
 var dead: bool = false
+var invincible := false
+var invincible_time := 0.4
+var dying := false
 
 # ----------------------
 # NODES
@@ -861,17 +864,20 @@ func decrease_lives(damage: int = 1) -> void:
 	if dead:
 		return
 
+	var lost_any := false
+
 	for i in range(damage):
 		if default_lives <= 0:
 			break
 
 		default_lives -= 1
+		lost_any = true
 		emit_signal("life_lost", default_lives)
 		emit_signal("lives_changed", default_lives)
 
-	# ✅ Evaluate death ONCE, after all damage is applied
-	if default_lives <= 0:
-		_die()
+	# 🔥 THIS is the key line
+	if lost_any and default_lives <= 0:
+		_start_death_sequence()
 
 func _on_life_lost(current_lives: int) -> void:
 	# purely optional here — usually UI handles effects
@@ -899,7 +905,14 @@ func _on_player_died() -> void:
 		$AnimationPlayer.play("death")
 
 func apply_damage(damage: int = 1) -> void:
+	if dead or invincible or default_lives <= 0:
+		return
+
+	invincible = true
 	decrease_lives(damage)
+
+	await get_tree().create_timer(invincible_time).timeout
+	invincible = false
 
 func _die() -> void:
 	if dead:
@@ -915,3 +928,21 @@ func _die() -> void:
 	# Stop movement & combat
 	velocity = Vector2.ZERO
 	attacking = false
+
+func check_death():
+	if dead:
+		return
+
+	if default_lives <= 0:
+		_die()
+
+func _start_death_sequence():
+	if dying:
+		return
+
+	dying = true
+
+	# allow knockback + camera shake + leaf animation to start
+	await get_tree().create_timer(0.15).timeout
+
+	_die()

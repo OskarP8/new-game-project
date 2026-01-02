@@ -18,6 +18,7 @@ var _loot_dropped: bool = false
 var is_dead: bool = false
 var attack_can_hit := false
 var death_anim_locked := false
+var ai_disabled := false
 
 # Scenes/resources
 @export var loot_table: Array[LootDrop] = []
@@ -177,6 +178,12 @@ func _ready() -> void:
 
 # ------------------------------
 func _physics_process(delta: float) -> void:
+	if ai_disabled:
+		# allow animations to run, but NO logic
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
 	if is_dead:
 		if knockback_time > 0.0:
 			knockback_time -= delta
@@ -729,3 +736,18 @@ func _debug_camera_lookup(context: String) -> void:
 
 	var viewport_cam = get_viewport().get_camera_2d()
 	print(" Viewport camera:", viewport_cam)
+
+func disable_ai_and_idle():
+	ai_disabled = true
+
+	attack_can_hit = false
+	attack_active = false
+
+	if agent:
+		agent.set_velocity(Vector2.ZERO)
+
+	velocity = Vector2.ZERO
+	velocity_vec = Vector2.ZERO
+
+	# force idle animation once
+	_play_anim_if_exists("idle")

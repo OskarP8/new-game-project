@@ -20,29 +20,26 @@ func _on_player_died():
 
 	print("[DeathDirector] ☠ Death sequence started")
 
-	# 1. Pause the entire game
-	get_tree().paused = true
+	# 1️⃣ LET HIT FINISH
+	await get_tree().create_timer(0.2).timeout
 
-	# 2. Allow THIS node to keep running
-	process_mode = Node.PROCESS_MODE_ALWAYS
+	# 2️⃣ NOW slow time (leaf dying moment)
+	Engine.time_scale = 0.35
 
-	# 3. Start fade / animation
-	$AnimationPlayer.play("fade_to_black")
+	# 3️⃣ Freeze enemies into idle
+	_disable_enemy_ai()
 
-func start_death_sequence():
+	# 4️⃣ Wait for leaf death to finish
+	await get_tree().create_timer(0.6).timeout
+
+	# 5️⃣ Restore time for player death animation
+	Engine.time_scale = 1.0
+
+	# 6️⃣ Fade
 	fade.visible = true
+	anim.play("fade_in")
 
-	if anim.has_animation("fade_in"):
-		anim.play("fade_in")
-	else:
-		# fallback if animation missing
-		fade.color = Color(0, 0, 0, 1)
-		_finish_death()
-
-func _finish_death():
-	# pause AFTER visuals finish
-	get_tree().paused = true
-
-	# show death menu here
-	#var death_menu = preload("res://ui/DeathMenu.tscn").instantiate()
-	#add_child(death_menu)
+func _disable_enemy_ai():
+	for enemy in get_tree().get_nodes_in_group("Enemy"):
+		if enemy.has_method("disable_ai_and_idle"):
+			enemy.disable_ai_and_idle()
