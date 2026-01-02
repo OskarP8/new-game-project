@@ -1223,6 +1223,54 @@ tracks/0/keys = {
 "update": 1,
 "values": [&"grow"]
 }
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Leaf:frame")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 7, 14, 21),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 2, 3]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Leaf:modulate")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 21, 21.1),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(0.627451, 0.627451, 0.627451, 1), Color(0.627451, 0.627451, 0.627451, 1), Color(1, 1, 1, 1)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("Leaf:scale")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(21, 21.1, 21.2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector2(1, 1), Vector2(1.1, 1.1), Vector2(1, 1)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("Leaf:position")
+tracks/4/interp = 1
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(21, 21.1, 21.2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector2(0, 0), Vector2(0, 1), Vector2(0, 0)]
+}
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_0hmdk"]
 _data = {
@@ -1395,6 +1443,120 @@ color = Color(0.266744, 0.1551, 0.00654513, 1)
 color_ramp = SubResource("Gradient_7lqo5")
 
 [node name="Crack" type="CPUParticles2D" parent="Leaves/LeafSlot3"]
+emitting = false
+amount = 80
+lifetime = 0.3
+one_shot = true
+explosiveness = 0.78
+emission_shape = 3
+emission_rect_extents = Vector2(5, 8)
+direction = Vector2(0, 1)
+spread = 180.0
+gravity = Vector2(0, 10)
+initial_velocity_min = 5.0
+initial_velocity_max = 5.0
+linear_accel_min = 1.0
+linear_accel_max = 1.0
+linear_accel_curve = SubResource("Curve_sp4gp")
+scale_amount_min = 0.1
+scale_amount_max = 0.8
+scale_amount_curve = SubResource("Curve_j1d2t")
+color = Color(0.18824, 0.111512, 1.20327e-08, 1)
+color_ramp = SubResource("Gradient_bv2pf")
+
+[node name="LeafSlot4" type="Node2D" parent="Leaves"]
+position = Vector2(49, 19)
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot4"]
+sprite_frames = SubResource("SpriteFrames_ljxgj")
+animation = &"die"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot4"]
+libraries = {
+"": SubResource("AnimationLibrary_0hmdk")
+}
+
+[node name="Explosion" type="CPUParticles2D" parent="Leaves/LeafSlot4"]
+position = Vector2(0, 1)
+emitting = false
+amount = 50
+lifetime = 0.7
+one_shot = true
+explosiveness = 0.89
+randomness = 0.16
+lifetime_randomness = 0.13
+spread = 180.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 20.0
+initial_velocity_max = 40.0
+angular_velocity_curve = SubResource("Curve_kwj32")
+linear_accel_min = 10.0
+linear_accel_max = 20.0
+linear_accel_curve = SubResource("Curve_ve7hk")
+scale_amount_min = 0.6
+scale_amount_curve = SubResource("Curve_dj7yh")
+color = Color(0.266744, 0.1551, 0.00654513, 1)
+color_ramp = SubResource("Gradient_7lqo5")
+
+[node name="Crack" type="CPUParticles2D" parent="Leaves/LeafSlot4"]
+emitting = false
+amount = 80
+lifetime = 0.3
+one_shot = true
+explosiveness = 0.78
+emission_shape = 3
+emission_rect_extents = Vector2(5, 8)
+direction = Vector2(0, 1)
+spread = 180.0
+gravity = Vector2(0, 10)
+initial_velocity_min = 5.0
+initial_velocity_max = 5.0
+linear_accel_min = 1.0
+linear_accel_max = 1.0
+linear_accel_curve = SubResource("Curve_sp4gp")
+scale_amount_min = 0.1
+scale_amount_max = 0.8
+scale_amount_curve = SubResource("Curve_j1d2t")
+color = Color(0.18824, 0.111512, 1.20327e-08, 1)
+color_ramp = SubResource("Gradient_bv2pf")
+
+[node name="LeafSlot5" type="Node2D" parent="Leaves"]
+position = Vector2(62, 20)
+script = ExtResource("2_16lbg")
+
+[node name="Leaf" type="AnimatedSprite2D" parent="Leaves/LeafSlot5"]
+sprite_frames = SubResource("SpriteFrames_ljxgj")
+animation = &"die"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Leaves/LeafSlot5"]
+libraries = {
+"": SubResource("AnimationLibrary_0hmdk")
+}
+
+[node name="Explosion" type="CPUParticles2D" parent="Leaves/LeafSlot5"]
+position = Vector2(0, 1)
+emitting = false
+amount = 50
+lifetime = 0.7
+one_shot = true
+explosiveness = 0.89
+randomness = 0.16
+lifetime_randomness = 0.13
+spread = 180.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 20.0
+initial_velocity_max = 40.0
+angular_velocity_curve = SubResource("Curve_kwj32")
+linear_accel_min = 10.0
+linear_accel_max = 20.0
+linear_accel_curve = SubResource("Curve_ve7hk")
+scale_amount_min = 0.6
+scale_amount_curve = SubResource("Curve_dj7yh")
+color = Color(0.266744, 0.1551, 0.00654513, 1)
+color_ramp = SubResource("Gradient_7lqo5")
+
+[node name="Crack" type="CPUParticles2D" parent="Leaves/LeafSlot5"]
 emitting = false
 amount = 80
 lifetime = 0.3
