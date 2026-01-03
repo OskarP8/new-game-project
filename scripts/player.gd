@@ -3,6 +3,7 @@ extends CharacterBody2D
 signal lives_changed(current_lives: int)
 signal life_lost(current_lives: int)
 signal player_died
+signal player_dying_started
 
 #@export var inv: Inv
 @export var inventory: Inv = preload("res://inventory/inv.tres")
@@ -861,22 +862,19 @@ func _debug_camera_lookup(context: String) -> void:
 	print(" Viewport camera:", viewport_cam)
 
 func decrease_lives(damage: int = 1) -> void:
-	if dead:
+	if dead or dying:
 		return
-
-	var lost_any := false
 
 	for i in range(damage):
 		if default_lives <= 0:
 			break
-
 		default_lives -= 1
-		lost_any = true
 		emit_signal("life_lost", default_lives)
 		emit_signal("lives_changed", default_lives)
 
-	# 🔥 THIS is the key line
-	if lost_any and default_lives <= 0:
+	# ✅ only trigger once, and DO NOT kill immediately
+	if default_lives <= 0:
+		await _last_leaf_sequence()
 		_start_death_sequence()
 
 func _on_life_lost(current_lives: int) -> void:
@@ -921,13 +919,14 @@ func _die() -> void:
 	dead = true
 	emit_signal("player_died")
 
-	# Disable collisions
+	velocity = Vector2.ZERO
+	attacking = false
+
 	if $CollisionShape2D:
 		$CollisionShape2D.disabled = true
 
-	# Stop movement & combat
-	velocity = Vector2.ZERO
-	attacking = false
+	if $AnimationPlayer and $AnimationPlayer.has_animation("death"):
+		$AnimationPlayer.play("death")
 
 func check_death():
 	if dead:
@@ -937,12 +936,30 @@ func check_death():
 		_die()
 
 func _start_death_sequence():
+	if dead:
+		return
+
+	_die()
+
+func _last_leaf_sequence() -> void:
 	if dying:
 		return
 
 	dying = true
+	emit_signal("player_dying_started")
 
-	# allow knockback + camera shake + leaf animation to start
-	await get_tree().create_timer(0.15).timeout
+	# slow motion DURING leaf death
+	Engine.time_scale = 0.35
 
-	_die()
+	# wait for leaf animation (scaled time!)
+	await get_tree().create_timer(0.6, true).timeout
+
+	# restore time BEFORE impact
+	Engine.time_scale = 1.0
+
+	# final emotional hit
+	var cam := get_viewport().get_camera_2d()
+	if cam:
+		cam.shake(12.0, 0.4)
+
+	await get_tree().create_timer(0.08).timeout
