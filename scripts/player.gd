@@ -880,14 +880,6 @@ func _on_player_died() -> void:
 	if weapon_sprite:
 		weapon_sprite.stop()
 
-	# disable collisions immediately
-	if $CollisionShape2D:
-		$CollisionShape2D.disabled = true
-
-	# play player death animation
-	if $AnimationPlayer and $AnimationPlayer.has_animation("death"):
-		$AnimationPlayer.play("death")
-
 func apply_damage(damage: int = 1) -> void:
 	if dead or invincible or default_lives <= 0:
 		return
