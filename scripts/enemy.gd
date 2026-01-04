@@ -155,18 +155,21 @@ func _ready() -> void:
 
 	await get_tree().process_frame
 
-	# instantiate weapon and initialize
-	if weapon_scene:
+	if weapon_scene and weapon_pivot:
 		var inst = weapon_scene.instantiate()
 		if inst:
 			weapon = inst
-			add_child(weapon) # will reparent itself
+			weapon_pivot.add_child(weapon)   # ✅ CORRECT
+			weapon.position = Vector2.ZERO   # important
+
 			if weapon.has_method("initialize"):
 				weapon.initialize(self)
-				if weapon.has_method("equip_for_owner"):
-					weapon.equip_for_owner("enemy")
-				if weapon.has_method("update_weapon"):
-					weapon.update_weapon(0.0)
+
+			if weapon.has_method("equip_for_owner"):
+				weapon.equip_for_owner("enemy")
+
+			if weapon.has_method("update_weapon"):
+				weapon.update_weapon(0.0)
 
 	# initial facing
 	if player:
@@ -662,11 +665,6 @@ func _update_flip_and_layers() -> void:
 		body_anim.flip_h = facing_left
 	if head_anim:
 		head_anim.flip_h = facing_left
-	if weapon_pivot:
-		body_anim.z_index = 0
-		weapon_pivot.z_index = 1
-		if head_anim:
-			head_anim.z_index = 2
 
 func _find_reachable_near(center: Vector2, tries: int = 8, radius: float = 16.0) -> Vector2:
 	if not agent:

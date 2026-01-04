@@ -96,7 +96,6 @@ func _process(delta: float) -> void:
 # SPAWN LOGIC
 # --------------------------------------------------------------
 func _spawn_enemy() -> void:
-
 	var scene: PackedScene = _pick_weighted_enemy()
 	if scene == null:
 		return
@@ -104,15 +103,19 @@ func _spawn_enemy() -> void:
 	var inst: Node2D = scene.instantiate()
 	inst.global_position = global_position
 
-	get_tree().current_scene.add_child(inst)
+	# 🔑 FIND YSORT
+	var ysort := get_tree().current_scene.get_node_or_null("Y-Sort")
+	if ysort == null:
+		push_error("Y-Sort node not found in World scene!")
+		return
+
+	ysort.add_child(inst)
 	active_enemies.append(inst)
 
-	# connect death signal (safe)
 	if inst.has_signal("enemy_died"):
 		inst.enemy_died.connect(_on_enemy_died)
 
-	print("[SpawnPoint] Spawned: ", inst)
-
+	print("[SpawnPoint] Spawned:", inst.name)
 
 # --------------------------------------------------------------
 # WEIGHTED RANDOM PICK

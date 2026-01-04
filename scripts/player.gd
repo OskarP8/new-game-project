@@ -72,16 +72,13 @@ func _dummy_set(v): pass
 # ----------------------
 # READY
 # ----------------------
-func _ready() -> void:
+func _ready():
+	body_anim.z_index = 0
+	head_anim.z_index = 0
+	weapon_pivot.z_index = 0
+
 	life_lost.connect(_on_life_lost)
 	player_died.connect(_on_player_died)
-
-	if body_anim:
-		body_anim.z_as_relative = true
-	if head_anim:
-		head_anim.z_as_relative = true
-	if weapon_pivot:
-		weapon_pivot.z_as_relative = true
 
 	# find existing holder if present (safety)
 	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder") if weapon_pivot else null
@@ -130,7 +127,6 @@ func _process(delta):
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
-	z_index = int(global_position.y)
 	update_layers()
 
 # ----------------------
@@ -423,23 +419,13 @@ func _play_with_optional_flip(anim_sprite: AnimatedSprite2D, anim_name: String, 
 # LAYER ORDER (relative within the player)
 # ----------------------
 func update_layers() -> void:
-	if not body_anim or not weapon_pivot:
+	if not weapon_pivot:
 		return
 
-	# base relative order inside the player
-	# body always lowest, head always top
-	if has_weapon and vert_dir == "down":
-		# Facing down → weapon in front of body
-		body_anim.z_index = 0
-		weapon_pivot.z_index = 1
+	if vert_dir == "up":
+		weapon_pivot.reparent(body_anim)
 	else:
-		# Facing up → weapon behind body
-		weapon_pivot.z_index = 0
-		body_anim.z_index = 1
-
-	if head_anim:
-		head_anim.z_index = 2  # always top within player
-
+		weapon_pivot.reparent($Graphics)
 # ----------------------
 # HEAD SYNC
 # ----------------------

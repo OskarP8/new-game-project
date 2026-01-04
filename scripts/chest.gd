@@ -183,7 +183,6 @@ func spawn_and_collect(player: Node2D, entry: InventoryEntry) -> void:
 	for i in range(entry.quantity):
 		var sprite := Sprite2D.new()
 		sprite.texture = item.texture
-		sprite.z_index = int(global_position.y)
 		var offset := Vector2(randf_range(-2, 2), randf_range(-2, 2))
 		sprite.global_position = item_start_pos.global_position + offset
 
@@ -207,7 +206,7 @@ func spawn_and_collect(player: Node2D, entry: InventoryEntry) -> void:
 
 
 func _process(delta):
-	z_index = int(global_position.y)
+	pass
 
 func _show_inventory_full_message():
 	var ui := get_tree().get_root().get_node("world/UI") # adjust if needed
