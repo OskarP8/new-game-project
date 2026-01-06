@@ -49,18 +49,24 @@ var weapon_grip_node: Node2D = null
 var weapon_holder_base_scale := Vector2.ONE
 var weapon_root_base_pos := Vector2.ZERO
 var nearby_item: WorldItem = null
-var knockback_force: Vector2 = Vector2.ZERO
+var knockback_velocity: Vector2 = Vector2.ZERO
+var knockback_time: float = 0.0
 var default_lives = 5
 var dead: bool = false
 var invincible := false
 var invincible_time := 0.4
 var dying := false
+# ----------------------
+# KNOCKBACK (PLAYER)
+# ----------------------
+var is_in_knockback := false
+var knockback_timer := 0.0
 
 # ----------------------
 # NODES
 # ----------------------
 @onready var body_anim := $Graphics/Body as AnimatedSprite2D
-@onready var head_anim := $Graphics/Head as AnimatedSprite2D
+@onready var head_anim := $Head as AnimatedSprite2D
 @onready var weapon_pivot := $Graphics/WeaponPivot as Node2D
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
 # sword_anim_player node reference kept in case it exists in tree
@@ -101,12 +107,16 @@ func _physics_process(delta):
 	if dead:
 		return
 
+	if knockback_time > 0.0:
+		knockback_time -= delta
+		velocity = knockback_velocity
+		move_and_slide()
+		return
+
 	if not attacking:
 		player_movement(delta)
 		update_animation()   # ✅ ONLY when not attacking
 
-	velocity += knockback_force
-	knockback_force = lerp(knockback_force, Vector2.ZERO, 0.2)
 	move_and_slide()
 
 	handle_attack()
@@ -426,6 +436,7 @@ func update_layers() -> void:
 		weapon_pivot.reparent(body_anim)
 	else:
 		weapon_pivot.reparent($Graphics)
+
 # ----------------------
 # HEAD SYNC
 # ----------------------
@@ -819,17 +830,30 @@ func collect_world_item(world_item) -> void:
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
 
-func external_knockback(force: Vector2, damage: int = 1) -> void:
-	if dead:
+func external_knockback(
+	source_pos: Vector2,
+	strength: float,
+	damage: int = 1,
+	duration: float = 0.25
+) -> void:
+	if dead or invincible:
 		return
 
-	knockback_force = force
+	invincible = true
+
+	var dir := global_position - source_pos
+	if dir.length() == 0:
+		dir = Vector2.RIGHT
+
+	var velocity_mag := strength / duration
+	knockback_velocity = dir.normalized() * velocity_mag
+	knockback_time = duration
 
 	var cam := get_viewport().get_camera_2d()
 	if cam:
 		cam.shake(6.0, 0.15)
 
-	apply_damage(damage)  # ✅ RESTORE THIS (but via apply_damage)
+	apply_damage(damage)
 
 func _debug_camera_lookup(context: String) -> void:
 	var cams = get_tree().get_nodes_in_group("Camera")
@@ -897,6 +921,9 @@ func _die() -> void:
 	dead = true
 	emit_signal("player_died")
 
+	# 🔴 UNEQUIP WEAPON FIRST
+	unequip_weapon()
+
 	velocity = Vector2.ZERO
 	attacking = false
 
@@ -911,7 +938,8 @@ func check_death():
 		return
 
 	if default_lives <= 0:
-		_die()
+		await _last_leaf_sequence()
+		_start_death_sequence()
 
 func _start_death_sequence():
 	if dead:
@@ -929,15 +957,16 @@ func _last_leaf_sequence() -> void:
 	# slow motion DURING leaf death
 	Engine.time_scale = 0.35
 
-	# wait for leaf animation (scaled time!)
+	# wait for leaf animation (scaled time)
 	await get_tree().create_timer(0.6, true).timeout
 
-	# restore time BEFORE impact
+	# restore time BEFORE player death
 	Engine.time_scale = 1.0
 
-	# final emotional hit
+	# impact shake when leaf dies
 	var cam := get_viewport().get_camera_2d()
 	if cam:
 		cam.shake(12.0, 0.4)
 
-	await get_tree().create_timer(0.08).timeout
+	# emotional beat (real time)
+	await get_tree().create_timer(0.12).timeout

@@ -123,6 +123,7 @@ texture = ExtResource("1_08we5")
 0:0/size_in_atlas = Vector2i(2, 2)
 0:0/0 = 0
 0:0/0/texture_origin = Vector2i(-8, 8)
+0:0/0/y_sort_origin = -1
 0:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(5, -3.125, 8, -4, 11, -3, 11.375, -0.875, 8, 0.25, 4.25, -0.875)
 0:0/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_dvw53")
 

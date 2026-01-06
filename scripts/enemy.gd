@@ -32,7 +32,7 @@ var weapon: Node = null
 @onready var head_anim: AnimatedSprite2D = $Graphics/Head
 @onready var weapon_pivot: Node2D = $Graphics/WeaponPivot
 @onready var damage_area: Area2D = $Damage if has_node("Damage") else null
-@onready var anim_player: AnimationPlayer = $Graphics/AnimationPlayer
+@onready var anim_player: AnimationPlayer = $AnimationPlayer
 @export var attack_step_in_distance := 8.0
 
 # State enum
@@ -508,8 +508,12 @@ func weapon_notify_hit(body: Node) -> void:
 
 	# KNOCKBACK
 	if player.has_method("external_knockback"):
-		var force = (player.global_position - global_position).normalized() * weapon.knockback_strength
-		player.external_knockback(force)
+		player.external_knockback(
+			global_position,
+			weapon.knockback_strength,
+			enemy_damage,
+			0.25
+		)
 
 # ------------------------------
 func take_damage(amount: int, source_pos: Vector2, knockback_velocity_strength: float) -> void:
