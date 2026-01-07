@@ -266,7 +266,7 @@ animations = [{
 [node name="Pitchfork" type="Node2D"]
 script = ExtResource("1_3wihp")
 weapon_damage = 1
-knockback_strength = 50.0
+knockback_strength = 25.0
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
@@ -290,6 +290,6 @@ monitorable = false
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
 position = Vector2(2, -3)
 rotation = 1.5708
-polygon = PackedVector2Array(2, -3, 2, -6, 0, -7, 0, -10, 2, -11, 3, -11, 5, -10, 5, -7, 3, -6, 3, -3)
+polygon = PackedVector2Array(0.999982, -5, -1.00003, -7, -1.00004, -10, 0.999956, -12, 3.99996, -12, 5.99996, -10, 5.99997, -7.00002, 3.99998, -5.00001)
 
 [node name="Grip" type="Node2D" parent="."]

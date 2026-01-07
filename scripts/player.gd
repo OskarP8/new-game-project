@@ -830,14 +830,11 @@ func collect_world_item(world_item) -> void:
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
 
-func external_knockback(
-	source_pos: Vector2,
-	strength: float,
-	damage: int = 1,
-	duration: float = 0.25
-) -> void:
-	if dead or invincible:
-		return
+func external_knockback(source_pos: Vector2, strength: float, damage: int = 1, duration: float = 0.25) -> void:
+	print("PLAYER external_knockback CALLED", strength)
+
+	#if dead or invincible:
+		#return
 
 	invincible = true
 
