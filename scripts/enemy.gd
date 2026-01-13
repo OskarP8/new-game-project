@@ -78,6 +78,11 @@ signal enemy_damaged(amount)
 signal enemy_died(enemy)
 
 var _debug_enabled: bool = true
+var vert_dir := "down"   # "up" or "down"
+@onready var weapon_pivot_back := $Graphics/WeaponPivotBack/WeaponPivot
+@onready var weapon_pivot_front := $Graphics/WeaponPivotFront/WeaponPivot
+
+var weapon_holder: Node2D = null
 
 # ------------------------------
 func _set_state(new_state: int) -> void:
@@ -124,6 +129,8 @@ func _ready() -> void:
 	hp = max_hp
 	var players: Array = get_tree().get_nodes_in_group("Player")
 	player = players[0] if players.size() > 0 else null
+	weapon_pivot = weapon_pivot_front
+	weapon_holder = weapon_pivot.get_node("WeaponHolder")
 
 	# Agent tuning
 	if agent:
@@ -159,11 +166,21 @@ func _ready() -> void:
 		var inst = weapon_scene.instantiate()
 		if inst:
 			weapon = inst
-			weapon_pivot.add_child(weapon)   # ✅ CORRECT
-			weapon.position = Vector2.ZERO   # important
+			weapon_holder = weapon_pivot.get_node("WeaponHolder")
+			weapon_holder.add_child(weapon)
 
-			if weapon.has_method("initialize"):
-				weapon.initialize(self)
+			weapon.initialize(
+				self,
+				weapon_pivot,
+				weapon_holder
+			)
+
+			# 🔧 ALIGN WEAPON USING GRIP
+			if weapon.has_node("Grip"):
+				var grip := weapon.get_node("Grip") as Node2D
+				weapon.position = -grip.position
+			else:
+				weapon.position = Vector2.ZERO
 
 			if weapon.has_method("equip_for_owner"):
 				weapon.equip_for_owner("enemy")
@@ -178,6 +195,9 @@ func _ready() -> void:
 
 	if agent.radius < 1:
 		agent.radius = 12
+
+func _process(delta):
+	update_weapon_layer()
 
 # ------------------------------
 func _physics_process(delta: float) -> void:
@@ -753,3 +773,15 @@ func disable_ai_and_idle():
 
 	# force idle animation once
 	_play_anim_if_exists("idle")
+
+func update_weapon_layer():
+	var target_parent: Node2D
+
+	if vert_dir == "up":
+		target_parent = $Graphics/WeaponPivotBack
+	else:
+		target_parent = $Graphics/WeaponPivotFront
+
+	if weapon_pivot.get_parent() != target_parent:
+		weapon_pivot.reparent(target_parent)
+		weapon_pivot.position = Vector2.ZERO

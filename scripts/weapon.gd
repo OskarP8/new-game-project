@@ -35,23 +35,15 @@ var post_attack_left: bool = false
 var _hit_targets: Array = []
 
 # ---------------------------
-func initialize(owner) -> void:
+func initialize(owner, pivot: Node2D, holder: Node2D) -> void:
+	weapon_owner = owner
+	weapon_pivot = pivot
+	weapon_holder = holder
+
 	weapon_owner = owner
 	if not weapon_owner:
 		push_error("[Weapon] initialize: owner is null")
 		return
-
-	weapon_pivot = weapon_owner.get_node_or_null("Graphics/WeaponPivot")
-	if weapon_pivot == null:
-		push_error("[Weapon] initialize: owner missing Graphics/WeaponPivot -> check owner scene.")
-		return
-
-	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
-	if weapon_holder == null:
-		weapon_holder = Node2D.new()
-		weapon_holder.name = "WeaponHolder"
-		weapon_pivot.add_child(weapon_holder)
-		weapon_holder.position = Vector2.ZERO
 
 	# find visuals/hitbox/grip inside this weapon scene
 	sprite = _find_child(self, "AnimatedSprite2D")
@@ -113,8 +105,6 @@ func initialize(owner) -> void:
 			"mask =", hitbox.collision_mask
 		)
 
-	# Reparent to holder and align grip
-	reparent_and_align_to_grip()
 	# Force initial visual state after reparent so weapon isn't stuck visually
 	if sprite and sprite.sprite_frames:
 		if sprite.sprite_frames.has_animation("idle"):
@@ -143,19 +133,6 @@ func initialize(owner) -> void:
 		print("[Weapon] initialized for owner:", weapon_owner.name if weapon_owner else "null")
 
 # ---------------------------
-func reparent_and_align_to_grip() -> void:
-	var grip_local := Vector2.ZERO
-	if grip_node:
-		grip_local = grip_node.position
-	var current_parent := get_parent()
-	if current_parent:
-		current_parent.remove_child(self)
-	if weapon_holder:
-		weapon_holder.add_child(self)
-		self.position = -grip_local
-		self.rotation = 0
-	else:
-		push_warning("[Weapon] reparent_and_align_to_grip: weapon_holder missing")
 
 # ---------------------------
 func update_weapon(delta: float) -> void:

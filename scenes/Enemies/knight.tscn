@@ -11,6 +11,88 @@ script = ExtResource("2_1bo31")
 item = ExtResource("3_3c4kd")
 chance = 0.2
 
+[sub_resource type="Animation" id="Animation_kw0c2"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Body:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [0]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Body:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(1, 1, 1, 1)]
+}
+
+[sub_resource type="Animation" id="Animation_a2grx"]
+resource_name = "death"
+length = 0.40001
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Body:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.1, 0.2, 0.3, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 1, 2, 3]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Body:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.1, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(0.359069, 0.359069, 0.359069, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Body:sprite_frames")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(),
+"transitions": PackedFloat32Array(),
+"update": 1,
+"values": []
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_g2hrw"]
+_data = {
+"RESET": SubResource("Animation_kw0c2"),
+"death": SubResource("Animation_a2grx")
+}
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
+radius = 5.0
+height = 16.0
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_3tb0x"]
+radius = 5.0
+height = 10.0
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_dwbrn"]
 atlas = ExtResource("3_j5nu6")
 region = Rect2(0, 480, 32, 32)
@@ -200,88 +282,6 @@ animations = [{
 "speed": 10.0
 }]
 
-[sub_resource type="Animation" id="Animation_kw0c2"]
-length = 0.001
-tracks/0/type = "value"
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/path = NodePath("Body:frame")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/keys = {
-"times": PackedFloat32Array(0),
-"transitions": PackedFloat32Array(1),
-"update": 1,
-"values": [0]
-}
-tracks/1/type = "value"
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/path = NodePath("Body:modulate")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/keys = {
-"times": PackedFloat32Array(0),
-"transitions": PackedFloat32Array(1),
-"update": 0,
-"values": [Color(1, 1, 1, 1)]
-}
-
-[sub_resource type="Animation" id="Animation_a2grx"]
-resource_name = "death"
-length = 0.40001
-step = 0.1
-tracks/0/type = "value"
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/path = NodePath("Body:frame")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/keys = {
-"times": PackedFloat32Array(0, 0.1, 0.2, 0.3, 0.4),
-"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
-"update": 1,
-"values": [0, 1, 1, 2, 3]
-}
-tracks/1/type = "value"
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/path = NodePath("Body:modulate")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/keys = {
-"times": PackedFloat32Array(0, 0.1, 0.4),
-"transitions": PackedFloat32Array(1, 1, 1),
-"update": 0,
-"values": [Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(0.359069, 0.359069, 0.359069, 1)]
-}
-tracks/2/type = "value"
-tracks/2/imported = false
-tracks/2/enabled = true
-tracks/2/path = NodePath("Body:sprite_frames")
-tracks/2/interp = 1
-tracks/2/loop_wrap = true
-tracks/2/keys = {
-"times": PackedFloat32Array(),
-"transitions": PackedFloat32Array(),
-"update": 1,
-"values": []
-}
-
-[sub_resource type="AnimationLibrary" id="AnimationLibrary_g2hrw"]
-_data = {
-"RESET": SubResource("Animation_kw0c2"),
-"death": SubResource("Animation_a2grx")
-}
-
-[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_xyxyh"]
-radius = 5.0
-height = 16.0
-
-[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_3tb0x"]
-radius = 5.0
-height = 10.0
-
 [node name="Knight" type="CharacterBody2D" groups=["Enemy"]]
 y_sort_enabled = true
 collision_layer = 32
@@ -292,29 +292,6 @@ attack_range = 23.0
 enemy_damage = 2
 loot_table = Array[ExtResource("2_1bo31")]([SubResource("Resource_pmakn")])
 weapon_scene = ExtResource("2_kepdu")
-
-[node name="Graphics" type="Node2D" parent="."]
-y_sort_enabled = true
-position = Vector2(4, -5)
-
-[node name="Body" type="AnimatedSprite2D" parent="Graphics"]
-y_sort_enabled = true
-position = Vector2(-4, 5)
-sprite_frames = SubResource("SpriteFrames_qpvev")
-animation = &"death"
-offset = Vector2(0, -16)
-
-[node name="WeaponPivot" type="Node2D" parent="Graphics"]
-y_sort_enabled = true
-position = Vector2(-4, 0)
-
-[node name="WeaponHolder" type="Node2D" parent="Graphics/WeaponPivot"]
-y_sort_enabled = true
-
-[node name="Head" type="AnimatedSprite2D" parent="Graphics"]
-y_sort_enabled = true
-position = Vector2(-4, 5)
-animation = &""
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 root_node = NodePath("../Graphics")
@@ -338,3 +315,36 @@ shape = SubResource("CapsuleShape2D_xyxyh")
 position = Vector2(-1, -4)
 scale = Vector2(1, 0.8)
 shape = SubResource("CapsuleShape2D_3tb0x")
+
+[node name="Graphics" type="Node2D" parent="."]
+y_sort_enabled = true
+position = Vector2(4, -5)
+
+[node name="WeaponPivotBack" type="Node2D" parent="Graphics"]
+position = Vector2(-4, 0)
+
+[node name="WeaponPivot" type="Node2D" parent="Graphics/WeaponPivotBack"]
+y_sort_enabled = true
+
+[node name="WeaponHolder" type="Node2D" parent="Graphics/WeaponPivotBack/WeaponPivot"]
+y_sort_enabled = true
+
+[node name="Body" type="AnimatedSprite2D" parent="Graphics"]
+y_sort_enabled = true
+position = Vector2(-4, 5)
+sprite_frames = SubResource("SpriteFrames_qpvev")
+animation = &"death"
+offset = Vector2(0, -16)
+
+[node name="WeaponPivotFront" type="Node2D" parent="Graphics"]
+position = Vector2(-4, 0)
+
+[node name="WeaponPivot" type="Node2D" parent="Graphics/WeaponPivotFront"]
+y_sort_enabled = true
+
+[node name="WeaponHolder" type="Node2D" parent="Graphics/WeaponPivotFront/WeaponPivot"]
+y_sort_enabled = true
+
+[node name="Head" type="AnimatedSprite2D" parent="."]
+y_sort_enabled = true
+animation = &""

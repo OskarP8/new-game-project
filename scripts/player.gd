@@ -67,10 +67,12 @@ var knockback_timer := 0.0
 # ----------------------
 @onready var body_anim := $Graphics/Body as AnimatedSprite2D
 @onready var head_anim := $Head as AnimatedSprite2D
-@onready var weapon_pivot := $Graphics/WeaponPivot as Node2D
+@onready var weapon_pivot_back := $Graphics/WeaponPivotBack/WeaponPivot
+@onready var weapon_pivot_front := $Graphics/WeaponPivotFront/WeaponPivot
+var weapon_pivot: Node2D
+
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
-# sword_anim_player node reference kept in case it exists in tree
-@onready var sword_anim_player := $Graphics/WeaponPivot/Sword/AnimationPlayer
+
 @onready var lives: CanvasLayer = $Lives
 
 func _dummy_set(v): pass
@@ -79,6 +81,9 @@ func _dummy_set(v): pass
 # READY
 # ----------------------
 func _ready():
+	weapon_pivot = weapon_pivot_front
+	weapon_holder = weapon_pivot.get_node("WeaponHolder")
+
 	body_anim.z_index = 0
 	head_anim.z_index = 0
 	weapon_pivot.z_index = 0
@@ -251,13 +256,8 @@ func handle_attack() -> void:
 		# --- Play attack animation ---
 		var played := false
 
-		# Sword
-		if sword_anim_player and sword_anim_player.has_animation("attack"):
-			sword_anim_player.play("attack")
-			played = true
-
 		# Weapon scene AnimationPlayer
-		elif weapon_anim_player and weapon_anim_player.has_animation("attack"):
+		if weapon_anim_player and weapon_anim_player.has_animation("attack"):
 			weapon_anim_player.play("attack")
 			played = true
 
@@ -432,10 +432,17 @@ func update_layers() -> void:
 	if not weapon_pivot:
 		return
 
+	var target_parent: Node
+
 	if vert_dir == "up":
-		weapon_pivot.reparent(body_anim)
+		target_parent = $Graphics/WeaponPivotBack
 	else:
-		weapon_pivot.reparent($Graphics)
+		target_parent = $Graphics/WeaponPivotFront
+
+	if weapon_pivot.get_parent() != target_parent:
+		weapon_pivot.reparent(target_parent)
+		weapon_pivot.position = Vector2.ZERO
+		weapon_holder = weapon_pivot.get_node("WeaponHolder")
 
 # ----------------------
 # HEAD SYNC
@@ -623,8 +630,11 @@ func equip_weapon(packed_or_path) -> void:
 	has_weapon = true
 
 	# ---- INITIALIZE WEAPON LOGIC ----
-	if current_weapon_scene.has_method("initialize"):
-		current_weapon_scene.initialize(self)
+	current_weapon_scene.initialize(
+		self,
+		weapon_pivot,
+		weapon_holder
+	)
 
 	if current_weapon_scene.has_method("equip_for_owner"):
 		current_weapon_scene.equip_for_owner("player")
@@ -642,13 +652,10 @@ func equip_weapon(packed_or_path) -> void:
 		weapon_anim_player.play("idle")
 
 	print("[player] ✅ Equipped weapon:", current_weapon_scene.name)
+	update_layers()
+	update_weapon_rotation()
 
 func _play_weapon_anim(name: String) -> void:
-	# Sword AnimationPlayer
-	if sword_anim_player and sword_anim_player.has_animation(name):
-		sword_anim_player.play(name)
-		return
-
 	# Weapon scene AnimationPlayer
 	if weapon_anim_player and weapon_anim_player.has_animation(name):
 		weapon_anim_player.play(name)

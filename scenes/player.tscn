@@ -710,6 +710,15 @@ libraries = {
 
 [node name="Graphics" type="Node2D" parent="."]
 
+[node name="WeaponPivotBack" type="Node2D" parent="Graphics"]
+position = Vector2(0, -3)
+
+[node name="WeaponPivot" type="Node2D" parent="Graphics/WeaponPivotBack"]
+y_sort_enabled = true
+
+[node name="WeaponHolder" type="Node2D" parent="Graphics/WeaponPivotBack/WeaponPivot"]
+y_sort_enabled = true
+
 [node name="Body" type="AnimatedSprite2D" parent="Graphics"]
 y_sort_enabled = true
 position = Vector2(0, 3)
@@ -723,8 +732,14 @@ zoom = Vector2(7, 7)
 position_smoothing_enabled = true
 script = ExtResource("4_cmjpu")
 
-[node name="WeaponPivot" type="Node2D" parent="Graphics"]
+[node name="WeaponPivotFront" type="Node2D" parent="Graphics"]
 position = Vector2(0, -3)
+
+[node name="WeaponPivot" type="Node2D" parent="Graphics/WeaponPivotFront"]
+y_sort_enabled = true
+
+[node name="WeaponHolder" type="Node2D" parent="Graphics/WeaponPivotFront/WeaponPivot"]
+y_sort_enabled = true
 
 [node name="Head" type="AnimatedSprite2D" parent="."]
 y_sort_enabled = true
