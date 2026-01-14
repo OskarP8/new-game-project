@@ -54,7 +54,7 @@ var knockback_time: float = 0.0
 var default_lives = 5
 var dead: bool = false
 var invincible := false
-var invincible_time := 0.4
+var invincible_time := 0.18
 var dying := false
 # ----------------------
 # KNOCKBACK (PLAYER)
@@ -628,6 +628,14 @@ func equip_weapon(packed_or_path) -> void:
 	current_weapon_scene.rotation = 0
 
 	has_weapon = true
+	# ---- ALIGN WEAPON TO GRIP ----
+	weapon_grip_node = _find_child_named(current_weapon_scene, "Grip")
+
+	if weapon_grip_node:
+		# Move weapon so Grip sits on pivot origin
+		current_weapon_scene.position = -weapon_grip_node.position
+	else:
+		push_warning("[Weapon] Grip node not found in weapon scene")
 
 	# ---- INITIALIZE WEAPON LOGIC ----
 	current_weapon_scene.initialize(

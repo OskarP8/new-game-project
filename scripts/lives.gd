@@ -38,6 +38,9 @@ func _ready() -> void:
 		if slot.has_signal("became_empty"):
 			slot.became_empty.connect(_on_leaf_became_empty)
 
+		if slot.has_signal("became_alive"):
+			slot.became_alive.connect(_on_leaf_became_alive)
+
 # ----------------------
 # INITIAL SETUP
 # ----------------------
@@ -129,3 +132,19 @@ func _has_empty_leaf() -> bool:
 
 func _on_leaf_became_empty(_slot) -> void:
 	_schedule_regrow_check()
+
+func _on_leaf_became_alive(_slot: LeafSlot) -> void:
+	var player = get_tree().root.find_child("Player", true, false)
+	if not player:
+		return
+
+	if "default_lives" in player:
+		player.default_lives += 1
+		player.default_lives = min(player.default_lives, leaf_slots.size())
+		if player.has_signal("lives_changed"):
+			player.emit_signal("lives_changed", player.default_lives)
+
+	# 🔁 CRITICAL: schedule next regrow if more leaves are empty
+	_schedule_regrow_check()
+
+	print("[Lives] ❤️ Life restored →", player.default_lives)

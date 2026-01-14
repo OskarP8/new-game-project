@@ -2,6 +2,7 @@ extends Node2D
 class_name LeafSlot
 
 signal became_empty(slot: LeafSlot)
+signal became_alive(slot: LeafSlot)
 
 enum LeafState { EMPTY, GROWING, ALIVE, DYING }
 var state: LeafState = LeafState.EMPTY
@@ -52,6 +53,8 @@ func _on_AnimationPlayer_animation_finished(anim_name: String) -> void:
 			state = LeafState.ALIVE
 			sprite.modulate.a = 1.0
 			print("[LeafSlot]", name, "🌿 grown → ALIVE")
+			emit_signal("became_alive", self)
+
 			if anim.has_animation("alive"):
 				anim.play("alive")
 
