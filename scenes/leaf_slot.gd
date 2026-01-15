@@ -14,6 +14,11 @@ func _ready() -> void:
 	if not anim.animation_finished.is_connected(_on_AnimationPlayer_animation_finished):
 		anim.animation_finished.connect(_on_AnimationPlayer_animation_finished)
 
+func _process(_delta):
+	if state == LeafState.GROWING and anim.current_animation == "grow":
+		if anim.current_animation_position > 0.05:
+			sprite.visible = true
+
 func _state_name(s: int) -> String:
 	return ["EMPTY", "GROWING", "ALIVE", "DYING"][s]
 
@@ -31,7 +36,7 @@ func start_growing() -> void:
 		return
 
 	state = LeafState.GROWING
-	sprite.visible = true
+	sprite.visible = false
 	sprite.modulate.a = 0.5
 	print("[LeafSlot]", name, "🌱 start_growing")
 	anim.play("grow")

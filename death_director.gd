@@ -35,6 +35,25 @@ func _on_player_died():
 	# 5️⃣ Restore time for player death animation
 	Engine.time_scale = 1.0
 
+	# ⏱ wait ONE frame so time_scale fully applies
+	await get_tree().process_frame
+
+	# ▶️ NOW play player death animation
+	var player = get_tree().root.find_child("Player", true, false)
+	if player:
+		# 🔒 HARD STOP sprite-driven animation RIGHT BEFORE death anim
+		if player.has_node("Graphics/Body"):
+			player.get_node("Graphics/Body").stop()
+		if player.has_node("Head"):
+			player.get_node("Head").stop()
+		if player.weapon_sprite:
+			player.weapon_sprite.stop()
+
+		if player.has_node("AnimationPlayer"):
+			var ap: AnimationPlayer = player.get_node("AnimationPlayer")
+			ap.stop(true)
+			ap.play("death")
+
 	# 6️⃣ Fade
 	fade.visible = true
 	anim.play("fade_in")

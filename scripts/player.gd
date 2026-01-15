@@ -62,6 +62,9 @@ var dying := false
 var is_in_knockback := false
 var knockback_timer := 0.0
 
+var suppress_weapon_rotation_frame := false
+var suppress_body_anim_frame := false
+
 # ----------------------
 # NODES
 # ----------------------
@@ -109,7 +112,7 @@ func _ready():
 # MAIN LOOP
 # ----------------------
 func _physics_process(delta):
-	if dead:
+	if dead or dying:
 		return
 
 	if knockback_time > 0.0:
@@ -128,6 +131,8 @@ func _physics_process(delta):
 	update_layers()
 
 func _process(delta):
+	if dead or dying:
+		return
 	# weapon pivot and player flip are updated every frame; during attack weapon uses stored angle
 	if Input.is_action_just_pressed("test_add_item"):
 		print("Adding test item to inventory")
@@ -143,6 +148,8 @@ func _process(delta):
 	update_player_flip()
 	sync_head_to_body()
 	update_layers()
+	if suppress_weapon_rotation_frame:
+		suppress_weapon_rotation_frame = false
 
 # ----------------------
 # INPUT
@@ -287,8 +294,11 @@ func handle_attack() -> void:
 # Called by AnimatedSprite2D animation_finished or body animation finished signal
 func _on_attack_finished() -> void:
 	# single handler for AnimatedSprite2D attack finished
-	# ensure the same cleanup as the AnimationPlayer path
+	suppress_weapon_rotation_frame = true
+
 	attacking = false
+	suppress_body_anim_frame = true
+
 	# force reset of pivot and holder as used by attack
 	if current_weapon_scene and current_weapon_scene.has_method("end_attack"):
 		current_weapon_scene.end_attack()
@@ -317,7 +327,13 @@ func _on_body_animation_finished() -> void:
 # ANIMATION (body & head & weapon idle/walk)
 # ----------------------
 func update_animation() -> void:
+	if dead or dying:
+		return
 	# don't override during attack
+	if suppress_body_anim_frame:
+		suppress_body_anim_frame = false
+		return
+
 	if attacking or not body_anim:
 		return
 
@@ -448,6 +464,9 @@ func update_layers() -> void:
 # HEAD SYNC
 # ----------------------
 func sync_head_to_body() -> void:
+	if dead or dying:
+		return
+
 	if not head_anim or not head_anim.visible or not body_anim:
 		return
 
@@ -471,7 +490,16 @@ func sync_head_to_body() -> void:
 # UPDATE WEAPON ROTATION (flips from origin)
 # -------------------------------------------------------------------------
 func update_weapon_rotation():
+	if dead or dying:
+		return
 	# ensure holder is grabbed
+	if attacking:
+		return
+
+	if suppress_weapon_rotation_frame:
+		suppress_weapon_rotation_frame = false
+		return
+
 	if not weapon_holder and weapon_pivot:
 		weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
 
@@ -508,13 +536,13 @@ func update_weapon_rotation():
 # PLAYER FLIP
 # ----------------------
 func update_player_flip() -> void:
+	if dead or dying:
+		return
 	# Flip body and head visually based on facing_left
 	if body_anim:
 		body_anim.flip_h = facing_left
 	if head_anim:
 		head_anim.flip_h = facing_left
-	if weapon_holder:
-		weapon_holder.scale.x = -1 if facing_left else 1
 
 func collect(item: InvItem, quantity: int = 1) -> void:
 	var entry = InventoryEntry.new()
@@ -942,9 +970,6 @@ func _die() -> void:
 	if $CollisionShape2D:
 		$CollisionShape2D.disabled = true
 
-	if $AnimationPlayer and $AnimationPlayer.has_animation("death"):
-		$AnimationPlayer.play("death")
-
 func check_death():
 	if dead:
 		return
@@ -954,26 +979,20 @@ func check_death():
 		_start_death_sequence()
 
 func _start_death_sequence():
-	if dead:
+	if dead or dying:
 		return
 
+	dying = true
 	_die()
 
 func _last_leaf_sequence() -> void:
 	if dying:
 		return
 
-	dying = true
 	emit_signal("player_dying_started")
-
-	# slow motion DURING leaf death
-	Engine.time_scale = 0.35
 
 	# wait for leaf animation (scaled time)
 	await get_tree().create_timer(0.6, true).timeout
-
-	# restore time BEFORE player death
-	Engine.time_scale = 1.0
 
 	# impact shake when leaf dies
 	var cam := get_viewport().get_camera_2d()
