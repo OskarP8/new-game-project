@@ -12,11 +12,12 @@ config_version=5
 
 config/name="New Game Project"
 run/main_scene="res://scenes/start_screen.tscn"
-config/features=PackedStringArray("4.3", "Forward Plus")
+config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://sprites/icon.svg"
 
 [autoload]
 
+GameState="*res://scripts/game_state.gd"
 DeathDirector="*res://scenes/death_director.tscn"
 
 [editor_plugins]

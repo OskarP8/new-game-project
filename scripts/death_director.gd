@@ -49,7 +49,11 @@ func _on_player_died():
 			ap.play("death")
 			await ap.animation_finished
 	# 🔁 USE SAME FADE SYSTEM
-	fade_to_scene("res://scenes/world.tscn")
+	if GameState.has_checkpoint():
+		var data = GameState.get_respawn_data()
+		fade_to_scene(data.scene)
+	else:
+		fade_to_scene(get_tree().current_scene.scene_file_path)
 
 func _disable_enemy_ai():
 	for enemy in get_tree().get_nodes_in_group("Enemy"):
@@ -71,6 +75,14 @@ func _do_scene_change():
 
 	print("[DeathDirector] 🔁 Changing scene to:", _target_scene)
 	get_tree().change_scene_to_file(_target_scene)
+
+	# ⏳ wait for scene to load
+	await get_tree().process_frame
+
+	if GameState.has_checkpoint():
+		var player = get_tree().root.find_child("Player", true, false)
+		if player:
+			player.global_position = GameState.checkpoint_position
 
 func _on_fade_anim_finished(anim_name: String) -> void:
 	if anim_name != "fade":

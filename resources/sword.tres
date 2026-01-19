@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="InvItem" load_steps=5 format=3 uid="uid://cgekbi4xs6d27"]
 
-[ext_resource type="Script" path="res://inventory/inventory_item.gd" id="1_4fcnl"]
+[ext_resource type="Script" uid="uid://cra455dn4vv1i" path="res://inventory/inventory_item.gd" id="1_4fcnl"]
 [ext_resource type="Texture2D" uid="uid://dqbhoehs27ayk" path="res://sprites/icons/sword_icon.kra" id="1_h7fvs"]
 [ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="2_5r6be"]
 
@@ -10,7 +10,6 @@ region = Rect2(14, 69, 9, 22)
 
 [resource]
 script = ExtResource("1_4fcnl")
-id = ""
 texture = SubResource("AtlasTexture_7ykan")
 name = "Sword"
 icon = ExtResource("1_h7fvs")
