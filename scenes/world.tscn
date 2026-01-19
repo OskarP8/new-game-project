@@ -12,7 +12,7 @@
 [ext_resource type="PackedScene" uid="uid://bqemudqhp687a" path="res://scenes/spawn_point.tscn" id="8_067sx"]
 [ext_resource type="PackedScene" uid="uid://dhp5srs4m8eeq" path="res://scenes/Enemies/knight.tscn" id="9_wbwfa"]
 [ext_resource type="PackedScene" uid="uid://urm2igwsgbe4" path="res://scenes/Enemies/navigation_region_2d.tscn" id="10_h2n55"]
-[ext_resource type="PackedScene" uid="uid://b7gq2mp4dujc4" path="res://scenes/death_director.tscn" id="13_dldt2"]
+[ext_resource type="PackedScene" uid="uid://cc7waq14h7pof" path="res://scenes/death_director.tscn" id="13_dldt2"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3xxoc"]
 texture = ExtResource("1_08we5")

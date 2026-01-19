@@ -8,8 +8,13 @@ var _target_scene: String = ""
 var _transitioning := false
 
 func _ready():
+	add_to_group("DeathDirector")
+
 	fade.visible = false
 	fade.color = Color(0, 0, 0, 0)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	anim.animation_finished.connect(_on_fade_anim_finished)
 
 	var player = get_tree().root.find_child("Player", true, false)
 	if player:
@@ -42,7 +47,7 @@ func _on_player_died():
 			var ap: AnimationPlayer = player.get_node("AnimationPlayer")
 			ap.stop(true)
 			ap.play("death")
-
+			await ap.animation_finished
 	# 🔁 USE SAME FADE SYSTEM
 	fade_to_scene("res://scenes/world.tscn")
 
@@ -61,5 +66,21 @@ func fade_to_scene(scene_path: String) -> void:
 	anim.play("fade")
 
 func _do_scene_change():
-	if _target_scene != "":
-		get_tree().change_scene_to_file(_target_scene)
+	if _target_scene == "":
+		return
+
+	print("[DeathDirector] 🔁 Changing scene to:", _target_scene)
+	get_tree().change_scene_to_file(_target_scene)
+
+func _on_fade_anim_finished(anim_name: String) -> void:
+	if anim_name != "fade":
+		return
+
+	_transitioning = false
+	_target_scene = ""
+	fade.visible = false
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _input(event):
+	if _transitioning:
+		get_viewport().set_input_as_handled()

@@ -1,8 +1,8 @@
-[gd_scene load_steps=5 format=3 uid="uid://b7gq2mp4dujc4"]
+[gd_scene load_steps=5 format=3 uid="uid://cc7waq14h7pof"]
 
-[ext_resource type="Script" path="res://death_director.gd" id="1_5m7lw"]
+[ext_resource type="Script" path="res://scripts/death_director.gd" id="1_5m7lw"]
 
-[sub_resource type="Animation" id="Animation_6jacm"]
+[sub_resource type="Animation" id="Animation_70ky3"]
 length = 0.001
 tracks/0/type = "value"
 tracks/0/imported = false
@@ -14,11 +14,11 @@ tracks/0/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 0,
-"values": [Color(1, 1, 1, 0)]
+"values": [Color(0, 0, 0, 0)]
 }
 
-[sub_resource type="Animation" id="Animation_4pql6"]
-resource_name = "fade_in"
+[sub_resource type="Animation" id="Animation_1vtm4"]
+resource_name = "fade"
 length = 3.00001
 step = 0.1
 tracks/0/type = "value"
@@ -28,10 +28,10 @@ tracks/0/path = NodePath("Fade:color")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = {
-"times": PackedFloat32Array(0, 0.5, 0.7, 2.7, 3),
+"times": PackedFloat32Array(0, 0.5, 0.8, 2.5, 3),
 "transitions": PackedFloat32Array(1, 1, 1, 1, 1),
 "update": 0,
-"values": [Color(1, 1, 1, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 1), Color(0, 0, 0, 1), Color(0, 0, 0, 0)]
+"values": [Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 1), Color(0, 0, 0, 1), Color(0, 0, 0, 0)]
 }
 tracks/1/type = "method"
 tracks/1/imported = false
@@ -40,30 +40,33 @@ tracks/1/path = NodePath(".")
 tracks/1/interp = 1
 tracks/1/loop_wrap = true
 tracks/1/keys = {
-"times": PackedFloat32Array(),
-"transitions": PackedFloat32Array(),
-"values": []
+"times": PackedFloat32Array(2.4),
+"transitions": PackedFloat32Array(1),
+"values": [{
+"args": [],
+"method": &"_do_scene_change"
+}]
 }
 
-[sub_resource type="AnimationLibrary" id="AnimationLibrary_ojdck"]
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_mdcbx"]
 _data = {
-"RESET": SubResource("Animation_6jacm"),
-"fade_in": SubResource("Animation_4pql6")
+"RESET": SubResource("Animation_70ky3"),
+"fade": SubResource("Animation_1vtm4")
 }
 
 [node name="DeathDirector" type="CanvasLayer"]
-process_mode = 3
-scale = Vector2(100, 100)
-transform = Transform2D(100, 0, 0, 100, 0, 0)
+layer = 2
 script = ExtResource("1_5m7lw")
 
 [node name="Fade" type="ColorRect" parent="."]
-offset_right = 40.0
-offset_bottom = 40.0
-color = Color(1, 1, 1, 0)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-process_mode = 3
 libraries = {
-"": SubResource("AnimationLibrary_ojdck")
+"": SubResource("AnimationLibrary_mdcbx")
 }
