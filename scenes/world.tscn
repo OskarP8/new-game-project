@@ -7,13 +7,13 @@
 [ext_resource type="PackedScene" uid="uid://cqlnk6vf6c6i5" path="res://scenes/player_inv.tscn" id="3_d3s2d"]
 [ext_resource type="PackedScene" uid="uid://bbdgfmv21n0be" path="res://scenes/inv_ui.tscn" id="4_uat3m"]
 [ext_resource type="PackedScene" uid="uid://bbfq50yyk3pwu" path="res://scenes/chest.tscn" id="5_ixe8f"]
-[ext_resource type="Script" uid="uid://dxahd8mpljye4" path="res://scripts/inventory_entry.gd" id="5_l7sjb"]
+[ext_resource type="Script" path="res://scripts/inventory_entry.gd" id="5_l7sjb"]
 [ext_resource type="Resource" uid="uid://chg8qlokgknrt" path="res://resources/pitchfork_res.tres" id="6_jhs7l"]
 [ext_resource type="PackedScene" uid="uid://bqemudqhp687a" path="res://scenes/spawn_point.tscn" id="8_067sx"]
 [ext_resource type="PackedScene" uid="uid://dhp5srs4m8eeq" path="res://scenes/Enemies/knight.tscn" id="9_wbwfa"]
 [ext_resource type="PackedScene" uid="uid://urm2igwsgbe4" path="res://scenes/Enemies/navigation_region_2d.tscn" id="10_h2n55"]
 [ext_resource type="PackedScene" uid="uid://cc7waq14h7pof" path="res://scenes/death_director.tscn" id="13_dldt2"]
-[ext_resource type="PackedScene" uid="uid://dihji23xxltkc" path="res://scenes/checkpoint.tscn" id="14_o8fc1"]
+[ext_resource type="PackedScene" uid="uid://dvpfw8fjdjk55" path="res://scenes/checkpoint.tscn" id="14_o8fc1"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3xxoc"]
 texture = ExtResource("1_08we5")
@@ -111,6 +111,7 @@ sources/0 = SubResource("TileSetAtlasSource_3xxoc")
 [sub_resource type="Resource" id="Resource_ypyvp"]
 script = ExtResource("5_l7sjb")
 item = ExtResource("6_jhs7l")
+quantity = 1
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_dvw53"]
 vertices = PackedVector2Array(14.5859, -9.32813, 17.0625, -3.17188, 14.6797, 2.67969, 8, 6.05469, 1.09375, 2.875, -0.796875, -3.375, 1.39063, -9.625, 7.9375, -12.3047)
