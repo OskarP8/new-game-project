@@ -84,6 +84,16 @@ func _dummy_set(v): pass
 # READY
 # ----------------------
 func _ready():
+	# --- RESPAWN POSITION ---
+	if GameState.has_checkpoint():
+		global_position = GameState.checkpoint_position
+	elif GameState.has_save():
+		var data = GameState.get_save_data()
+		global_position = data.position
+	var cam := get_viewport().get_camera_2d()
+	if cam:
+		cam.reset_smoothing()
+
 	weapon_pivot = weapon_pivot_front
 	weapon_holder = weapon_pivot.get_node("WeaponHolder")
 

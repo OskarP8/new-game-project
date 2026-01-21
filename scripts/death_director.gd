@@ -51,7 +51,7 @@ func _on_player_died():
 			ap.stop(true)
 			ap.play("death")
 			await ap.animation_finished
-	# 🔁 USE SAME FADE SYSTEM
+
 	if GameState.has_checkpoint():
 		var data = GameState.get_respawn_data()
 		fade_to_scene(data.scene)
@@ -72,13 +72,6 @@ func fade_to_scene(scene_path: String) -> void:
 	fade.visible = true
 	anim.play("fade")
 
-	# Disconnect previous connection safely
-	if get_tree().scene_changed.is_connected(_on_scene_changed):
-		get_tree().scene_changed.disconnect(_on_scene_changed)
-
-	print("[DeathDirector] 🔹 Connecting scene_changed signal")
-	get_tree().scene_changed.connect(_on_scene_changed)
-
 func _do_scene_change() -> void:
 	print("[DeathDirector] 🔹 _do_scene_change() called, target_scene:", _target_scene)
 	if _target_scene == "":
@@ -86,8 +79,6 @@ func _do_scene_change() -> void:
 
 	get_tree().change_scene_to_file(_target_scene)
 	print("[DeathDirector] 🔹 change_scene_to_file called")
-
-	call_deferred("_apply_checkpoint")
 
 func _on_fade_anim_finished(anim_name: String) -> void:
 	if anim_name != "fade":
@@ -106,40 +97,6 @@ func _input(event):
 	if _transitioning:
 		get_viewport().set_input_as_handled()
 
-func _apply_checkpoint():
-	print("[DeathDirector] 🔹 _apply_checkpoint() called")
-	var scene := get_tree().current_scene
-	if not scene:
-		print("[DeathDirector] ❌ Scene not ready yet")
-		return
-
-	var player := scene.get_node_or_null("Player")
-	if not player:
-		print("[DeathDirector] ❌ Player not found in scene")
-		return
-
-	if _use_custom_spawn:
-		print("[DeathDirector] ✅ Using custom spawn:", _pending_spawn_position)
-		player.global_position = _pending_spawn_position
-		_use_custom_spawn = false
-	elif GameState.has_checkpoint():
-		print("[DeathDirector] ✅ Respawning at checkpoint:", GameState.checkpoint_position)
-		player.global_position = GameState.checkpoint_position
-	elif GameState.has_save():
-		var data = GameState.get_save_data()
-		print("[DeathDirector] ✅ Loading saved game position:", data.position)
-		player.global_position = data.position
-	else:
-		print("[DeathDirector] ❌ No checkpoint or save, spawning at default")
-
 func set_pending_spawn_position(pos: Vector2):
 	_pending_spawn_position = pos
 	_use_custom_spawn = true
-
-func _on_scene_changed(new_scene: Node) -> void:
-	# Disconnect immediately to avoid multiple calls
-	if get_tree().scene_changed.is_connected(_on_scene_changed):
-		get_tree().scene_changed.disconnect(_on_scene_changed)
-
-	print("[DeathDirector] ✅ New scene loaded:", new_scene.name)
-	_apply_checkpoint()
