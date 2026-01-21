@@ -1,29 +1,58 @@
-[gd_scene load_steps=8 format=3 uid="uid://c6tkfubcn2ar0"]
+[gd_scene load_steps=15 format=3 uid="uid://c6tkfubcn2ar0"]
 
 [ext_resource type="Script" path="res://scenes/start_screen.gd" id="1_j5idd"]
 [ext_resource type="Texture2D" uid="uid://wmufkwqxqt3n" path="res://sprites/menu_buttons.kra" id="1_qau8g"]
 [ext_resource type="Texture2D" uid="uid://d345et8d7gcem" path="res://sprites/main_menu.kra" id="2_rnnjn"]
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_cwuoq"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(6, 8, 53, 16)
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_txfbp"]
 atlas = ExtResource("1_qau8g")
-region = Rect2(6, 8, 52, 15)
+region = Rect2(5, 87, 53, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_6iou0"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(63, 8, 53, 16)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_xg5cn"]
 atlas = ExtResource("1_qau8g")
-region = Rect2(6, 24, 52, 15)
+region = Rect2(6, 40, 53, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_r824f"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(63, 24, 53, 16)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_eben3"]
 atlas = ExtResource("1_qau8g")
-region = Rect2(6, 40, 52, 15)
+region = Rect2(6, 40, 53, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_0uo34"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(5, 119, 53, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_acv4c"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(63, 40, 53, 16)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_v1n8n"]
 atlas = ExtResource("1_qau8g")
-region = Rect2(6, 56, 52, 15)
+region = Rect2(6, 56, 53, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ubf08"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(5, 135, 53, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_4dsjv"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(63, 56, 53, 16)
 
 [node name="StartScreen" type="CanvasLayer"]
 script = ExtResource("1_j5idd")
 
 [node name="TextureRect" type="TextureRect" parent="."]
+visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -45,19 +74,28 @@ scale = Vector2(4, 4)
 
 [node name="Start" type="TextureButton" parent="VBoxContainer"]
 layout_mode = 2
-texture_normal = SubResource("AtlasTexture_txfbp")
+texture_normal = SubResource("AtlasTexture_cwuoq")
+texture_pressed = SubResource("AtlasTexture_txfbp")
+texture_hover = SubResource("AtlasTexture_6iou0")
 
 [node name="Resume" type="TextureButton" parent="VBoxContainer"]
 layout_mode = 2
 texture_normal = SubResource("AtlasTexture_xg5cn")
+texture_pressed = SubResource("AtlasTexture_xg5cn")
+texture_hover = SubResource("AtlasTexture_r824f")
 
 [node name="Options" type="TextureButton" parent="VBoxContainer"]
+visible = false
 layout_mode = 2
 texture_normal = SubResource("AtlasTexture_eben3")
+texture_pressed = SubResource("AtlasTexture_0uo34")
+texture_hover = SubResource("AtlasTexture_acv4c")
 
 [node name="Quit" type="TextureButton" parent="VBoxContainer"]
 layout_mode = 2
 texture_normal = SubResource("AtlasTexture_v1n8n")
+texture_pressed = SubResource("AtlasTexture_ubf08")
+texture_hover = SubResource("AtlasTexture_4dsjv")
 
 [connection signal="pressed" from="VBoxContainer/Start" to="." method="_on_start_pressed"]
 [connection signal="pressed" from="VBoxContainer/Resume" to="." method="_on_resume_pressed"]
