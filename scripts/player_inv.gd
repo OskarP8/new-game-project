@@ -358,10 +358,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if player:
 			for i in range(slots.size()):
 				var slot_node = slots[i]
-				if slot_node.slot_type == "weapon":
+				if slot_node.slot_type in ["weapon", "secondary"]:
 					var s := inv.slots[i]
 					if s == null or s.item == null:
-						player.equip_weapon(null)
+						# remove from player
+						player.refresh_equipped_weapon_from_inventory()
 				elif slot_node.slot_type == "armor":
 					var s := inv.slots[i]
 					if s == null or s.item == null:

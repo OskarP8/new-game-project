@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://c6tkfubcn2ar0"]
+[gd_scene load_steps=16 format=3 uid="uid://c6tkfubcn2ar0"]
 
 [ext_resource type="Script" path="res://scenes/start_screen.gd" id="1_j5idd"]
 [ext_resource type="Texture2D" uid="uid://wmufkwqxqt3n" path="res://sprites/menu_buttons.kra" id="1_qau8g"]
@@ -16,9 +16,13 @@ region = Rect2(5, 87, 53, 16)
 atlas = ExtResource("1_qau8g")
 region = Rect2(63, 8, 53, 16)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_87x3a"]
+atlas = ExtResource("1_qau8g")
+region = Rect2(6, 24, 53, 16)
+
 [sub_resource type="AtlasTexture" id="AtlasTexture_xg5cn"]
 atlas = ExtResource("1_qau8g")
-region = Rect2(6, 40, 53, 16)
+region = Rect2(5, 103, 53, 16)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_r824f"]
 atlas = ExtResource("1_qau8g")
@@ -52,7 +56,6 @@ region = Rect2(63, 56, 53, 16)
 script = ExtResource("1_j5idd")
 
 [node name="TextureRect" type="TextureRect" parent="."]
-visible = false
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -66,8 +69,8 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 126.0
 offset_top = 168.0
-offset_right = 126.0
-offset_bottom = 168.0
+offset_right = -973.0
+offset_bottom = -404.0
 grow_horizontal = 2
 grow_vertical = 2
 scale = Vector2(4, 4)
@@ -80,12 +83,11 @@ texture_hover = SubResource("AtlasTexture_6iou0")
 
 [node name="Resume" type="TextureButton" parent="VBoxContainer"]
 layout_mode = 2
-texture_normal = SubResource("AtlasTexture_xg5cn")
+texture_normal = SubResource("AtlasTexture_87x3a")
 texture_pressed = SubResource("AtlasTexture_xg5cn")
 texture_hover = SubResource("AtlasTexture_r824f")
 
 [node name="Options" type="TextureButton" parent="VBoxContainer"]
-visible = false
 layout_mode = 2
 texture_normal = SubResource("AtlasTexture_eben3")
 texture_pressed = SubResource("AtlasTexture_0uo34")

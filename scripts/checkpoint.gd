@@ -4,13 +4,11 @@ extends Area2D
 var activated := false
 
 func _on_body_entered(body):
-	if activated and activate_once:
-		return
-
 	if body.name != "Player":
 		return
 
-	activated = true
+	if GameState.checkpoint_position == global_position:
+		return  # Already active
 
 	GameState.set_checkpoint(
 		get_tree().current_scene.scene_file_path,

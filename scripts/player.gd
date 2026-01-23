@@ -48,6 +48,8 @@ var weapon_grip_node: Node2D = null
 # store transforms so we can reset safely
 var weapon_holder_base_scale := Vector2.ONE
 var weapon_root_base_pos := Vector2.ZERO
+var weapon_instances := {}  # scene_path -> Node
+
 var nearby_item: WorldItem = null
 var knockback_velocity: Vector2 = Vector2.ZERO
 var knockback_time: float = 0.0
@@ -93,9 +95,24 @@ func _ready():
 	var cam := get_viewport().get_camera_2d()
 	if cam:
 		cam.reset_smoothing()
+	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
+	if player_inv and player_inv.has_signal("inventory_changed"):
+		player_inv.inventory_changed.connect(refresh_equipped_weapon_from_inventory)
+
+	has_weapon = false
+
+	if last_equipped_scene_path != "":
+		equip_weapon(last_equipped_scene_path)
 
 	weapon_pivot = weapon_pivot_front
-	weapon_holder = weapon_pivot.get_node("WeaponHolder")
+	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
+	if not weapon_holder:
+		weapon_holder = Node2D.new()
+		weapon_holder.name = "WeaponHolder"
+		weapon_pivot.add_child(weapon_holder)
+		weapon_holder.position = Vector2.ZERO
+		weapon_holder.rotation = 0
+		weapon_holder.scale = Vector2.ONE
 
 	body_anim.z_index = 0
 	head_anim.z_index = 0
@@ -117,6 +134,7 @@ func _ready():
 
 	# initial state: no weapon
 	has_weapon = false
+	refresh_equipped_weapon_from_inventory()
 
 # ----------------------
 # MAIN LOOP
@@ -607,8 +625,9 @@ func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 func unequip_weapon() -> void:
 	# clear current weapon
 	if current_weapon_scene:
-		current_weapon_scene.queue_free()
+		current_weapon_scene.visible = false
 		current_weapon_scene = null
+
 	weapon_sprite = null
 	weapon_anim_player = null
 	current_weapon_root = null
@@ -627,11 +646,11 @@ func unequip_weapon() -> void:
 	print("[player] Unequipped weapon")
 
 func equip_weapon(packed_or_path) -> void:
-	# ---- REMOVE OLD WEAPON ----
-	if current_weapon_scene:
-		current_weapon_scene.queue_free()
-		current_weapon_scene = null
+	# ---- HIDE OLD WEAPON (DO NOT FREE) ----
+	if is_instance_valid(current_weapon_scene):
+		current_weapon_scene.visible = false
 
+	current_weapon_scene = null
 	has_weapon = false
 
 	# ---- LOAD PACKED SCENE ----
@@ -639,7 +658,7 @@ func equip_weapon(packed_or_path) -> void:
 
 	if packed_or_path is PackedScene:
 		packed = packed_or_path
-	elif packed_or_path is String:
+	elif packed_or_path is String and packed_or_path != "":
 		packed = load(packed_or_path)
 	elif packed_or_path is InvItem and packed_or_path.scene_path != "":
 		packed = load(packed_or_path.scene_path)
@@ -659,13 +678,27 @@ func equip_weapon(packed_or_path) -> void:
 	weapon_holder.scale = Vector2.ONE
 
 	# ---- INSTANCE WEAPON ----
-	current_weapon_scene = packed.instantiate()
-	weapon_holder.add_child(current_weapon_scene)
+	var scene_path := packed.resource_path
+
+	if weapon_instances.has(scene_path) and is_instance_valid(weapon_instances[scene_path]):
+		current_weapon_scene = weapon_instances[scene_path]
+		if not current_weapon_scene.get_parent():
+			weapon_holder.add_child(current_weapon_scene)
+	else:
+		current_weapon_scene = packed.instantiate()
+		weapon_instances[scene_path] = current_weapon_scene
+		weapon_holder.add_child(current_weapon_scene)
+
+	current_weapon_scene.visible = true
+	# ---- REFRESH CACHED VISUAL REFERENCES ----
+	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
+	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
 
 	current_weapon_scene.position = Vector2.ZERO
 	current_weapon_scene.rotation = 0
 
 	has_weapon = true
+
 	# ---- ALIGN WEAPON TO GRIP ----
 	weapon_grip_node = _find_child_named(current_weapon_scene, "Grip")
 
@@ -703,14 +736,20 @@ func equip_weapon(packed_or_path) -> void:
 
 func _play_weapon_anim(name: String) -> void:
 	# Weapon scene AnimationPlayer
-	if weapon_anim_player and weapon_anim_player.has_animation(name):
-		weapon_anim_player.play(name)
-		return
+	if is_instance_valid(weapon_anim_player):
+		if weapon_anim_player.has_animation(name):
+			weapon_anim_player.play(name)
+			return
+	else:
+		weapon_anim_player = null
 
-	# AnimatedSprite2D (pitchfork)
-	if weapon_sprite and weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation(name):
-		weapon_sprite.play(name)
-		return
+	# AnimatedSprite2D fallback
+	if is_instance_valid(weapon_sprite):
+		if weapon_sprite.sprite_frames and weapon_sprite.sprite_frames.has_animation(name):
+			weapon_sprite.play(name)
+			return
+	else:
+		weapon_sprite = null
 
 # Recursive search for the first child of a specific class name
 func _find_child_of_type(node: Node, target_class_name: String) -> Node:
@@ -777,53 +816,37 @@ var last_equipped_scene_path: String = ""  # store the last equipped weapon’s 
 var using_secondary: bool = false          # track which weapon is active
 
 func swap_weapons():
-	print("\n--- swap_weapons() start ---")
-
 	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
-	if player_inv == null:
-		push_warning("[swap_weapons] ⚠ PlayerInv not found!")
+	if not player_inv:
+		push_warning("[swap_weapons] PlayerInv not found")
 		return
-	print("[swap_weapons] ✅ Using PlayerInv:", player_inv.name)
 
 	var weapon_slot_ui: InvUISlot = player_inv.get_slot_by_type("weapon")
 	var secondary_slot_ui: InvUISlot = player_inv.get_slot_by_type("secondary")
 
 	if not weapon_slot_ui or not secondary_slot_ui:
-		print("[swap_weapons] ⚠ Missing one of the slots — aborting.")
+		print("[swap_weapons] Missing weapon slots")
 		return
 
-	var weapon_item: InvItem = null
-	var secondary_item: InvItem = null
+	var weapon_item: InvItem = weapon_slot_ui.item_stack.origin_item if weapon_slot_ui.item_stack else null
+	var secondary_item: InvItem = secondary_slot_ui.item_stack.origin_item if secondary_slot_ui.item_stack else null
 
-	if weapon_slot_ui.item_stack and weapon_slot_ui.item_stack.slot:
-		weapon_item = weapon_slot_ui.item_stack.slot.item
-	if secondary_slot_ui.item_stack and secondary_slot_ui.item_stack.slot:
-		secondary_item = secondary_slot_ui.item_stack.slot.item
-
-	print("[swap_weapons] current_weapon:", weapon_item, " secondary:", secondary_item)
-
-	# --- Logic ---
+	# Swap logic
 	if not using_secondary:
-		# switching to secondary
-		if not secondary_item:
-			print("[swap_weapons] ⚠ No secondary weapon equipped.")
-			return
-		# remember current (main) weapon’s scene path
-		if weapon_item and weapon_item.scene_path != "":
-			last_equipped_scene_path = weapon_item.scene_path
-		print("[swap_weapons] 🎯 Equipping secondary visually:", secondary_item.scene_path)
-		equip_weapon(secondary_item.scene_path)
-		using_secondary = true
+		if secondary_item:
+			equip_weapon(secondary_item.scene_path)
+			using_secondary = true
+		elif weapon_item:
+			# fallback: still primary if no secondary
+			equip_weapon(weapon_item.scene_path)
 	else:
-		# switching back to main
-		if last_equipped_scene_path != "":
-			print("[swap_weapons] 🔁 Switching back to main:", last_equipped_scene_path)
-			equip_weapon(last_equipped_scene_path)
+		if weapon_item:
+			equip_weapon(weapon_item.scene_path)
 			using_secondary = false
-		else:
-			print("[swap_weapons] ⚠ No previous main weapon stored.")
+		elif secondary_item:
+			# fallback: still secondary if no primary
+			equip_weapon(secondary_item.scene_path)
 
-	print("[swap_weapons] ✅ Weapon swap complete (visual only).")
 func equip_armor(scene_path: String = "") -> void:
 	if scene_path == "":
 		print("[Player] Unequipped armor")
@@ -973,6 +996,9 @@ func _die() -> void:
 
 	# 🔴 UNEQUIP WEAPON FIRST
 	unequip_weapon()
+	# hide separate head (death body already has one)
+	if head_anim:
+		head_anim.visible = false
 
 	velocity = Vector2.ZERO
 	attacking = false
@@ -1011,3 +1037,34 @@ func _last_leaf_sequence() -> void:
 
 	# emotional beat (real time)
 	await get_tree().create_timer(0.12).timeout
+
+func refresh_equipped_weapon_from_inventory():
+	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
+	if not player_inv:
+		return
+
+	var weapon_slot: InvUISlot = player_inv.get_slot_by_type("weapon")
+	var secondary_slot: InvUISlot = player_inv.get_slot_by_type("secondary")
+
+	var weapon_item = weapon_slot.item_stack.origin_item if weapon_slot and weapon_slot.item_stack else null
+	var secondary_item = secondary_slot.item_stack.origin_item if secondary_slot and secondary_slot.item_stack else null
+
+	# Decide what to equip
+	if using_secondary:
+		if secondary_item:
+			equip_weapon(secondary_item.scene_path)
+		else:
+			using_secondary = false
+			if weapon_item:
+				equip_weapon(weapon_item.scene_path)
+			else:
+				unequip_weapon()
+	else:
+		if weapon_item:
+			equip_weapon(weapon_item.scene_path)
+		elif secondary_item:
+			# auto-equip secondary if primary missing
+			equip_weapon(secondary_item.scene_path)
+			using_secondary = true
+		else:
+			unequip_weapon()

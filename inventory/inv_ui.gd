@@ -1,5 +1,7 @@
 extends Control
 
+signal inventory_changed
+
 @export var inv: Inv
 @onready var isgc = preload("res://scenes/item_stack_ui.tscn")
 @onready var slots: Array = $NinePatchRect/GridContainer.get_children()
@@ -88,6 +90,7 @@ func update_slots() -> void:
 
 		item_stack.slot = inv_slot
 		item_stack.update()
+	emit_signal("inventory_changed")
 
 
 func open() -> void:
@@ -219,15 +222,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					if target_slot.item == null:
 						print("[inv_ui] ✅ Placed", moving_item.name, "into", pslot.slot_type)
 
-						# Auto-equip weapons when dropped into weapon slot
-						if str(pslot.slot_type).to_lower() == "weapon":
-							var player := get_tree().root.find_child("Player", true, false)
-							if player and moving_item and moving_item.scene_path != "":
-								print("[inv_ui] 🗡 Equipping weapon from:", moving_item.scene_path)
-								player.equip_weapon(moving_item.scene_path)
-							else:
-								print("[inv_ui] ⚠️ Could not equip weapon — missing player or scene_path")
-
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
 
@@ -304,6 +298,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				slot.update_visual()
 		if player_inv:
 			player_inv.update_slots()
+	emit_signal("inventory_changed")
 
 func _update_item_in_hand():
 	if ghost_item == null:
@@ -354,10 +349,12 @@ func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:
 	var player = get_tree().get_first_node_in_group("player")
 	if not player:
 		return
+	if from_slot.slot_type == "weapon" and to_slot.item_stack == null:
+		player.unequip_weapon()
 
 	# Weapon slot update
 	if to_slot.slot_type == "weapon" and to_slot.item_stack:
-		player.equip_weapon(to_slot.item_stack.item)
+		player.equip_weapon(to_slot.item_stack.item.scene_path)
 	elif from_slot.slot_type == "weapon" and to_slot.item_stack == null:
 		player.has_weapon = false
 

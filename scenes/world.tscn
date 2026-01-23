@@ -213,3 +213,6 @@ tile_set = SubResource("TileSet_ejlfg")
 
 [node name="Checkpoint" parent="Checkpoints" instance=ExtResource("14_o8fc1")]
 position = Vector2(186, -19)
+
+[node name="Checkpoint2" parent="Checkpoints" instance=ExtResource("14_o8fc1")]
+position = Vector2(-185, -8)
