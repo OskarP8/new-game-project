@@ -235,6 +235,10 @@ func _unhandled_input(event: InputEvent) -> void:
 						picked_slot.amount = tmp_amt
 
 					dropped = true
+					var player := get_tree().root.find_child("Player", true, false)
+					if player:
+						player.refresh_equipped_weapon_from_inventory()
+
 					break
 
 		# 3️⃣ Drop outside → spawn world drop
