@@ -228,6 +228,7 @@ func _update_ghost_position():
 	ghost_item.global_position = mouse_pos - offset
 # --- Drop handling ---
 func _unhandled_input(event: InputEvent) -> void:
+	var player_node: Node = get_tree().get_root().find_child("Player", true, false)
 	if ghost_item == null or picked_slot == null:
 		return
 
@@ -264,7 +265,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					target_slot.item = moving_item
 					target_slot.amount = moving_amount
 
-					var player_node: Node = get_tree().get_root().find_child("Player", true, false)
 					if player_node:
 						if moving_item.type == "weapon" and moving_item.scene_path != "" and player_node.has_method("equip_weapon"):
 							player_node.equip_weapon(moving_item.scene_path)
@@ -354,19 +354,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			picked_slot.item = moving_item
 			picked_slot.amount = moving_amount
 
-		# --- 5️⃣ Unequip emptied slots ---
-		if player:
-			for i in range(slots.size()):
-				var slot_node = slots[i]
-				if slot_node.slot_type in ["weapon", "secondary"]:
-					var s := inv.slots[i]
-					if s == null or s.item == null:
-						# remove from player
-						player.refresh_equipped_weapon_from_inventory()
-				elif slot_node.slot_type == "armor":
-					var s := inv.slots[i]
-					if s == null or s.item == null:
-						player.equip_armor("")
+		# --- 5️⃣ Refresh equipped items ---
+		if player_node:
+			player_node.refresh_equipped_weapon_from_inventory()
+			# optionally: player_node.refresh_equipped_armor_from_inventory() if you have armor logic
 
 		# --- Cleanup ---
 		dragging = false

@@ -816,6 +816,8 @@ var last_equipped_scene_path: String = ""  # store the last equipped weapon’s 
 var using_secondary: bool = false          # track which weapon is active
 
 func swap_weapons():
+	print("\n--- swap_weapons() start ---")
+
 	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
 	if not player_inv:
 		push_warning("[swap_weapons] PlayerInv not found")
@@ -828,24 +830,31 @@ func swap_weapons():
 		print("[swap_weapons] Missing weapon slots")
 		return
 
-	var weapon_item: InvItem = weapon_slot_ui.item_stack.origin_item if weapon_slot_ui.item_stack else null
-	var secondary_item: InvItem = secondary_slot_ui.item_stack.origin_item if secondary_slot_ui.item_stack else null
+	var weapon_item: InvItem = null
+	var secondary_item: InvItem = null
 
-	# Swap logic
+	if weapon_slot_ui.item_stack and weapon_slot_ui.item_stack.slot:
+		weapon_item = weapon_slot_ui.item_stack.slot.item
+	if secondary_slot_ui.item_stack and secondary_slot_ui.item_stack.slot:
+		secondary_item = secondary_slot_ui.item_stack.slot.item
+
+	print("[swap_weapons] weapon:", weapon_item, "secondary:", secondary_item)
+
+	# Decide based on current state
 	if not using_secondary:
-		if secondary_item:
-			equip_weapon(secondary_item.scene_path)
-			using_secondary = true
-		elif weapon_item:
-			# fallback: still primary if no secondary
-			equip_weapon(weapon_item.scene_path)
+		if not secondary_item:
+			print("[swap_weapons] No secondary weapon")
+			return
+		equip_weapon(secondary_item.scene_path)
+		using_secondary = true
 	else:
-		if weapon_item:
-			equip_weapon(weapon_item.scene_path)
-			using_secondary = false
-		elif secondary_item:
-			# fallback: still secondary if no primary
-			equip_weapon(secondary_item.scene_path)
+		if not weapon_item:
+			print("[swap_weapons] No primary weapon")
+			return
+		equip_weapon(weapon_item.scene_path)
+		using_secondary = false
+
+	print("[swap_weapons] Swap complete")
 
 func equip_armor(scene_path: String = "") -> void:
 	if scene_path == "":
@@ -1046,25 +1055,27 @@ func refresh_equipped_weapon_from_inventory():
 	var weapon_slot: InvUISlot = player_inv.get_slot_by_type("weapon")
 	var secondary_slot: InvUISlot = player_inv.get_slot_by_type("secondary")
 
-	var weapon_item = weapon_slot.item_stack.origin_item if weapon_slot and weapon_slot.item_stack else null
-	var secondary_item = secondary_slot.item_stack.origin_item if secondary_slot and secondary_slot.item_stack else null
+	var weapon_item = weapon_slot.item_stack.slot.item if weapon_slot and weapon_slot.item_stack else null
+	var secondary_item = secondary_slot.item_stack.slot.item if secondary_slot and secondary_slot.item_stack else null
 
-	# Decide what to equip
 	if using_secondary:
 		if secondary_item:
 			equip_weapon(secondary_item.scene_path)
-		else:
+		elif weapon_item:
+			# fallback to main if secondary removed
 			using_secondary = false
-			if weapon_item:
-				equip_weapon(weapon_item.scene_path)
-			else:
-				unequip_weapon()
+			equip_weapon(weapon_item.scene_path)
+		else:
+			# nothing left
+			using_secondary = false
+			unequip_weapon()
 	else:
 		if weapon_item:
 			equip_weapon(weapon_item.scene_path)
 		elif secondary_item:
-			# auto-equip secondary if primary missing
-			equip_weapon(secondary_item.scene_path)
+			# main removed, fallback to secondary
 			using_secondary = true
+			equip_weapon(secondary_item.scene_path)
 		else:
+			# nothing left
 			unequip_weapon()
