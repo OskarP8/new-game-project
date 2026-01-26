@@ -286,6 +286,8 @@ animations = [{
 y_sort_enabled = true
 collision_layer = 32
 collision_mask = 16
+motion_mode = 1
+wall_min_slide_angle = 0.0
 script = ExtResource("1_3hyev")
 speed = 30.0
 attack_range = 23.0
@@ -300,8 +302,10 @@ libraries = {
 }
 
 [node name="Agent" type="NavigationAgent2D" parent="."]
-avoidance_enabled = true
+path_desired_distance = 2.0
+target_desired_distance = 2.0
 radius = 5.0
+debug_path_custom_color = Color(1, 0, 0, 1)
 
 [node name="Damage" type="Area2D" parent="."]
 collision_layer = 64
@@ -315,6 +319,7 @@ shape = SubResource("CapsuleShape2D_xyxyh")
 position = Vector2(-1, -4)
 scale = Vector2(1, 0.8)
 shape = SubResource("CapsuleShape2D_3tb0x")
+disabled = true
 
 [node name="Graphics" type="Node2D" parent="."]
 y_sort_enabled = true

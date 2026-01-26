@@ -26,6 +26,22 @@ var ai_disabled := false
 @export var weapon_scene: PackedScene
 var weapon: Node = null
 
+# ---- Local obstacle-avoidance tuning (replace the prior block) ----
+@export var obstacle_avoidance_enabled: bool = true
+@export var obstacle_avoidance_strength: float = 10.0   # peak strength when deeply inside obstacle
+@export var obstacle_avoidance_padding: float = 0.0      # UNUSED in new logic (kept for compatibility)
+@export var obstacle_refresh_interval: float = 2.0       # seconds to refresh cache of obstacles
+@export var obstacle_desired_clearance: float = 0.0      # pixels beyond obstacle radius the enemy should avoid (0 => no extra gap)
+@export var obstacle_avoidance_min_strength: float = 1.0 # minimum push when just inside (small to avoid sudden large shove)
+
+# NEW: influence radius settings (how far from an obstacle repulsion starts)
+@export var obstacle_influence_multiplier: float = 2.5  # influence radius = obstacle_radius * multiplier
+@export var obstacle_influence_min: float = 8.0          # minimum extra influence beyond obstacle radius
+
+# ---- internal cache ----
+var _nav_obstacles: Array = []
+var _obstacle_refresh_timer: float = 0.0
+
 # Nodes (ensure paths exist)
 @onready var agent: NavigationAgent2D = $Agent
 @onready var body_anim: AnimatedSprite2D = $Graphics/Body
@@ -134,13 +150,9 @@ func _ready() -> void:
 
 	# Agent tuning
 	if agent:
-		agent.path_desired_distance = 2.0
-		agent.target_desired_distance = 2.0
 		agent.avoidance_enabled = true
 		agent.avoidance_layers = 1
 		agent.avoidance_mask = 1
-		if agent.radius == 0:
-			agent.radius = 8.0
 
 	# connect velocity callback
 	if agent:
@@ -148,6 +160,18 @@ func _ready() -> void:
 		if agent.velocity_computed.is_connected(callable):
 			agent.velocity_computed.disconnect(callable)
 		agent.velocity_computed.connect(callable)
+
+	# in _ready() after agent exists
+	await get_tree().process_frame
+	if agent:
+		print("Agent navigation map RID:", agent.get_navigation_map())
+
+	# in _process(delta)
+	if agent and agent.target_position != Vector2.ZERO:
+		var path := agent.get_current_navigation_path()
+		print("Agent path length:", path.size())
+		if path.size() > 0:
+			print("path sample:", path[0], path[min(path.size()-1, 3)])
 
 	# connect damage area
 	if damage_area:
@@ -192,9 +216,6 @@ func _ready() -> void:
 	if player:
 		facing_left = player.global_position.x < global_position.x
 	_update_flip_and_layers()
-
-	if agent.radius < 1:
-		agent.radius = 12
 
 func _process(delta):
 	update_weapon_layer()
@@ -474,15 +495,214 @@ func _scan_for_player(radius: float) -> bool:
 
 	return hit.collider.is_in_group("Player")
 
-# ------------------------------
+# call this during _ready() after the scene exists (add this line in your _ready if not present)
+#	_collect_nav_obstacles()
+# and keep the rest of your existing _ready flow
+
+func _collect_nav_obstacles() -> void:
+	_nav_obstacles.clear()
+	var root = get_tree().current_scene if get_tree().current_scene else get_tree().get_root()
+	var stack := [root]
+	while stack.size() > 0:
+		var n = stack.pop_back()
+		if n is NavigationObstacle2D:
+			_nav_obstacles.append(n)
+		for i in range(n.get_child_count()):
+			stack.append(n.get_child(i))
+
+	# debug summary
+	if _debug_enabled:
+		print("[NavDebug] Enemy collected obstacles:", _nav_obstacles.size())
+		for o in _nav_obstacles:
+			if not is_instance_valid(o):
+				continue
+			var info = _get_obstacle_radius_and_worldpos(o)
+			print("\t[NavDebug] OBS:", o.name, "pos:", info.pos, "radius:", info.radius, "owner:", o.get_parent().name)
+
+func _get_obstacle_radius_and_worldpos(obs: NavigationObstacle2D) -> Dictionary:
+	# returns {pos: Vector2, radius: float}
+	# - prefer an actual CollisionShape2D child (use child global_position + scaled extents)
+	# - if none found, fallback to radius = 0 (no accidental avoidance)
+	var out := {"pos": obs.global_position, "radius": 0.0}
+	var found_shape := false
+
+	for i in range(obs.get_child_count()):
+		var ch = obs.get_child(i)
+		if not (ch is CollisionShape2D):
+			continue
+		var shape = ch.shape
+		# child global position is authoritative for the collision world pos
+		var child_world_pos = ch.global_position
+		# Circle shape -> direct radius
+		if shape is CircleShape2D:
+			var gsx := 1.0
+			if "global_scale" in ch:
+				gsx = ch.global_scale.x
+			out.pos = child_world_pos
+			out.radius = float(shape.radius) * gsx
+			found_shape = true
+			break
+		# Rectangle shape -> use half-diagonal as circular approx
+		elif shape is RectangleShape2D:
+			var gsx := 1.0
+			var gsy := 1.0
+			if "global_scale" in ch:
+				gsx = ch.global_scale.x
+				gsy = ch.global_scale.y
+			var ext := Vector2(shape.extents.x * gsx, shape.extents.y * gsy)
+			out.pos = child_world_pos
+			out.radius = ext.length() # half-diagonal -> circular approx
+			found_shape = true
+			break
+		# (add other shapes if you want)
+
+	# If no CollisionShape2D child, return radius 0 (do not assume agent radius)
+	if not found_shape:
+		out.pos = obs.global_position
+		out.radius = 0.0
+		if _debug_enabled:
+			print("[NavDebug] OBS has no CollisionShape2D, treating as radius=0. Owner:", obs.get_parent().name, "pos:", out.pos)
+	return out
+
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
+	# don't override knockback
 	if knockback_time > 0.0:
-		return  # 🔒 do NOT override knockback
+		return
+
+	# refresh obstacle cache periodically
+	_obstacle_refresh_timer -= get_physics_process_delta_time()
+	if _obstacle_refresh_timer <= 0.0:
+		_obstacle_refresh_timer = obstacle_refresh_interval
+		_collect_nav_obstacles()
+
+	# base velocity from agent
+	var final_vel := safe_velocity
+
+	# compute repulsion
+	var rep := Vector2.ZERO
+	# track nearest for debug
+	var nearest_info = null
+	var nearest_dist := 1e9
+
+	for obs in _nav_obstacles:
+		if not is_instance_valid(obs):
+			continue
+		var info = _get_obstacle_radius_and_worldpos(obs)
+		var obs_pos: Vector2 = info.pos
+		var obs_radius: float = float(info.radius)
+		var to_enemy := global_position - obs_pos
+		var dist := to_enemy.length()
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_info = {"pos": obs_pos, "radius": obs_radius, "node": obs}
+
+		# INFLUENCE radius used for steering (separate from the "cannot enter" nav radius)
+		var influence_radius = max(obs_radius * obstacle_influence_multiplier, obs_radius + obstacle_influence_min)
+
+		# if we're outside the influence radius, skip
+		if dist >= influence_radius:
+			continue
+
+		# penetration relative to the influence boundary
+		var penetration = influence_radius - dist
+		if dist <= 0.0001:
+			# overlapping exactly
+			rep += Vector2(randf() - 0.5, randf() - 0.5).normalized() * obstacle_avoidance_strength
+			continue
+
+		# outward direction
+		var dir_out := (to_enemy / dist).normalized()
+
+		# compute how strong the push should be (0..1) depending where inside influence we are
+		# scale so near the real obstacle radius produces stronger push than outer influence band
+		var strength_factor := 1.0
+		if obs_radius > 0.0:
+			# if we're outside actual obstacle_radius but inside influence_radius, ramp from 0..1
+			if dist > obs_radius:
+				var denom = max(0.0001, influence_radius - obs_radius)
+				strength_factor = clamp(1.0 - ((dist - obs_radius) / denom), 0.0, 1.0)
+			else:
+				# inside the actual obstacle radius -> full factor
+				strength_factor = 1.0
+		else:
+			# zero-radius obstacle -> treat the full influence as ramp to full factor
+			var denom = max(0.0001, influence_radius)
+			strength_factor = clamp(1.0 - ((dist) / denom), 0.0, 1.0)
+
+		# gain + min strength logic like before, but now scaled by strength_factor
+		var gain := obstacle_avoidance_strength * 0.5
+		var mag = max(obstacle_avoidance_min_strength, gain * strength_factor)
+
+		# convert penetration -> velocity-like push (smaller when closer to outer edge)
+		var push = dir_out * (mag * (penetration / max(influence_radius, 1.0)))
+
+		rep += push
+
+	# debug print: nearest obstacle status and repulsion length
+	if _debug_enabled and nearest_info != null:
+		var dbg_line := "[NavDebug] nearest obs pos:%s radius:%.2f dist:%.2f infl:%.2f rep_len:%.2f" % [
+			str(nearest_info.pos),
+			nearest_info.radius,
+			nearest_dist,
+			max(nearest_info.radius * obstacle_influence_multiplier, nearest_info.radius + obstacle_influence_min),
+			rep.length()
+		]
+		print(dbg_line)
+
+	if rep != Vector2.ZERO:
+		final_vel += rep
+		if final_vel.length() > 0:
+			final_vel = final_vel.normalized() * min(final_vel.length(), speed)
 
 	if state in [CHASE, SEARCH, FLEE]:
-		velocity_vec = safe_velocity.limit_length(speed)
+		velocity_vec = final_vel.limit_length(speed)
 	else:
 		velocity_vec = Vector2.ZERO
+
+func _compute_obstacle_repulsion_vector() -> Vector2:
+	if not obstacle_avoidance_enabled or _nav_obstacles.size() == 0:
+		return Vector2.ZERO
+
+	var repulse := Vector2.ZERO
+	for obs in _nav_obstacles:
+		if not is_instance_valid(obs):
+			continue
+		var info = _get_obstacle_radius_and_worldpos(obs)
+		var obs_pos: Vector2 = info.pos
+		var obs_radius: float = float(info.radius)
+
+		var to_enemy := global_position - obs_pos
+		var dist := to_enemy.length()
+		if dist <= 0.0001:
+			repulse += Vector2(randf() - 0.5, randf() - 0.5).normalized() * obstacle_avoidance_strength
+			continue
+
+		# influence radius
+		var influence_radius = max(obs_radius * obstacle_influence_multiplier, obs_radius + obstacle_influence_min)
+		if dist >= influence_radius:
+			continue
+
+		var penetration = influence_radius - dist
+		var dir_out := (to_enemy / dist).normalized()
+
+		var strength_factor := 1.0
+		if obs_radius > 0.0:
+			if dist > obs_radius:
+				var denom = max(0.0001, influence_radius - obs_radius)
+				strength_factor = clamp(1.0 - ((dist - obs_radius) / denom), 0.0, 1.0)
+			else:
+				strength_factor = 1.0
+		else:
+			var denom = max(0.0001, influence_radius)
+			strength_factor = clamp(1.0 - ((dist) / denom), 0.0, 1.0)
+
+		var gain := obstacle_avoidance_strength * 0.5
+		var mag = max(obstacle_avoidance_min_strength, gain * strength_factor)
+
+		var push = dir_out * (mag * (penetration / max(influence_radius, 1.0)))
+		repulse += push
+
+	return repulse
 
 # ------------------------------
 func _perform_attack() -> void:

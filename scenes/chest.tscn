@@ -125,5 +125,5 @@ position = Vector2(0, -9)
 position = Vector2(0, -26)
 
 [node name="NavigationObstacle2D" type="NavigationObstacle2D" parent="."]
-position = Vector2(0, -6)
-radius = 8.0
+position = Vector2(0, -3)
+radius = 7.0
