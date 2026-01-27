@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=4 uid="uid://ncgeslw4eukd"]
+[gd_scene load_steps=33 format=4 uid="uid://ncgeslw4eukd"]
 
 [ext_resource type="PackedScene" uid="uid://bbv8wq1p3smc6" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://btfv2cckmual" path="res://sprites/tilesets/objects.kra" id="1_08we5"]
@@ -194,6 +194,8 @@ vertices = PackedVector2Array(-180, -100, 150, -100, 150, 100, -180, 100)
 polygons = Array[PackedInt32Array]([PackedInt32Array(0, 1, 2, 3)])
 outlines = Array[PackedVector2Array]([PackedVector2Array(-180, -100, 150, -100, 150, 100, -180, 100)])
 
+[sub_resource type="CircleShape2D" id="CircleShape2D_7oycm"]
+
 [node name="world" type="Node2D"]
 z_as_relative = false
 
@@ -254,6 +256,15 @@ z_as_relative = false
 scale = Vector2(0.6, 0.6)
 slots = Array[ExtResource("5_l7sjb")]([SubResource("Resource_ypyvp")])
 
+[node name="Checkpoints" type="Node2D" parent="Y-Sort"]
+y_sort_enabled = true
+
+[node name="Checkpoint" parent="Y-Sort/Checkpoints" instance=ExtResource("14_o8fc1")]
+position = Vector2(186, -19)
+
+[node name="Checkpoint2" parent="Y-Sort/Checkpoints" instance=ExtResource("14_o8fc1")]
+position = Vector2(-185, -8)
+
 [node name="NavigationRegion2D" parent="." instance=ExtResource("10_h2n55")]
 visible = false
 navigation_polygon = SubResource("NavigationPolygon_47jdn")
@@ -261,10 +272,11 @@ enabled = false
 
 [node name="DeathDirector" parent="." instance=ExtResource("13_dldt2")]
 
-[node name="Checkpoints" type="Node2D" parent="."]
+[node name="Area2D" type="Area2D" parent="."]
+collision_layer = 16
+collision_mask = 0
 
-[node name="Checkpoint" parent="Checkpoints" instance=ExtResource("14_o8fc1")]
-position = Vector2(186, -19)
-
-[node name="Checkpoint2" parent="Checkpoints" instance=ExtResource("14_o8fc1")]
-position = Vector2(-185, -8)
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+position = Vector2(-85, -6)
+scale = Vector2(-2.00283, -2.21122)
+shape = SubResource("CircleShape2D_7oycm")

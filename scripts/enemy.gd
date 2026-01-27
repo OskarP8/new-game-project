@@ -510,15 +510,6 @@ func _collect_nav_obstacles() -> void:
 		for i in range(n.get_child_count()):
 			stack.append(n.get_child(i))
 
-	# debug summary
-	if _debug_enabled:
-		print("[NavDebug] Enemy collected obstacles:", _nav_obstacles.size())
-		for o in _nav_obstacles:
-			if not is_instance_valid(o):
-				continue
-			var info = _get_obstacle_radius_and_worldpos(o)
-			print("\t[NavDebug] OBS:", o.name, "pos:", info.pos, "radius:", info.radius, "owner:", o.get_parent().name)
-
 func _get_obstacle_radius_and_worldpos(obs: NavigationObstacle2D) -> Dictionary:
 	# returns {pos: Vector2, radius: float}
 	# - prefer an actual CollisionShape2D child (use child global_position + scaled extents)
@@ -560,8 +551,7 @@ func _get_obstacle_radius_and_worldpos(obs: NavigationObstacle2D) -> Dictionary:
 	if not found_shape:
 		out.pos = obs.global_position
 		out.radius = 0.0
-		if _debug_enabled:
-			print("[NavDebug] OBS has no CollisionShape2D, treating as radius=0. Owner:", obs.get_parent().name, "pos:", out.pos)
+
 	return out
 
 func _on_agent_velocity(safe_velocity: Vector2) -> void:
@@ -637,17 +627,6 @@ func _on_agent_velocity(safe_velocity: Vector2) -> void:
 		var push = dir_out * (mag * (penetration / max(influence_radius, 1.0)))
 
 		rep += push
-
-	# debug print: nearest obstacle status and repulsion length
-	if _debug_enabled and nearest_info != null:
-		var dbg_line := "[NavDebug] nearest obs pos:%s radius:%.2f dist:%.2f infl:%.2f rep_len:%.2f" % [
-			str(nearest_info.pos),
-			nearest_info.radius,
-			nearest_dist,
-			max(nearest_info.radius * obstacle_influence_multiplier, nearest_info.radius + obstacle_influence_min),
-			rep.length()
-		]
-		print(dbg_line)
 
 	if rep != Vector2.ZERO:
 		final_vel += rep

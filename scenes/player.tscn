@@ -679,6 +679,8 @@ animations = [{
 [node name="Player" type="CharacterBody2D" groups=["Player"]]
 y_sort_enabled = true
 collision_mask = 16
+motion_mode = 1
+wall_min_slide_angle = 0.0
 script = ExtResource("1_gjq3l")
 
 [node name="InteractionComponent" parent="." instance=ExtResource("4_u73uf")]
