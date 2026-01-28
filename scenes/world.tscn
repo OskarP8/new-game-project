@@ -1,4 +1,4 @@
-[gd_scene load_steps=33 format=4 uid="uid://ncgeslw4eukd"]
+[gd_scene load_steps=34 format=4 uid="uid://ncgeslw4eukd"]
 
 [ext_resource type="PackedScene" uid="uid://bbv8wq1p3smc6" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://btfv2cckmual" path="res://sprites/tilesets/objects.kra" id="1_08we5"]
@@ -15,6 +15,7 @@
 [ext_resource type="PackedScene" uid="uid://cc7waq14h7pof" path="res://scenes/death_director.tscn" id="13_dldt2"]
 [ext_resource type="Script" path="res://scenes/nav.gd" id="14_27xw6"]
 [ext_resource type="PackedScene" uid="uid://dvpfw8fjdjk55" path="res://scenes/checkpoint.tscn" id="14_o8fc1"]
+[ext_resource type="PackedScene" uid="uid://cjengv43kwgx4" path="res://scenes/pause_menu.tscn" id="16_4u6q3"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3xxoc"]
 texture = ExtResource("1_08we5")
@@ -280,3 +281,5 @@ collision_mask = 0
 position = Vector2(-85, -6)
 scale = Vector2(-2.00283, -2.21122)
 shape = SubResource("CircleShape2D_7oycm")
+
+[node name="PauseMenu" parent="." instance=ExtResource("16_4u6q3")]

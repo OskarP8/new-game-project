@@ -5,6 +5,11 @@ extends CanvasLayer
 func _ready():
 	Engine.time_scale = 1.0
 
+	# Ensure GameState has loaded any on-disk save so has_save() is accurate.
+	if GameState.has_method("load"):
+		GameState.load()
+
+	# Now check for save presence
 	if not GameState.has_save():
 		resume_button.visible = false
 		resume_button.disabled = true
