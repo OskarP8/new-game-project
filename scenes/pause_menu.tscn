@@ -1,11 +1,68 @@
-[gd_scene load_steps=2 format=3 uid="uid://cjengv43kwgx4"]
+[gd_scene load_steps=15 format=3 uid="uid://cjengv43kwgx4"]
 
-[ext_resource type="Script" path="res://pause_menu.gd" id="1_6lii3"]
+[ext_resource type="Script" path="res://scripts/pause_menu.gd" id="1_6lii3"]
+[ext_resource type="Texture2D" uid="uid://f6qqehg71csc" path="res://sprites/pause_buttons.kra" id="2_rwqwn"]
 
-[node name="PauseMenu" type="CanvasLayer"]
+[sub_resource type="AtlasTexture" id="AtlasTexture_rbcce"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(0, 0, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_tl0br"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(1, 68, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_c0e53"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(74, 0, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_dfopp"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(0, 32, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_cuk4t"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(1, 100, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_r67g5"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(74, 32, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_l5pxj"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(0, 16, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_6jkyj"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(1, 84, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_lkrbu"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(74, 16, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_anxss"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(0, 48, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_4vbla"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(1, 116, 63, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_rybb1"]
+atlas = ExtResource("2_rwqwn")
+region = Rect2(74, 48, 63, 16)
+
+[node name="PauseMenu" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1_6lii3")
 
 [node name="Panel" type="Panel" parent="."]
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -19,21 +76,45 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.576471)
+scale = Vector2(7.92, 4.60211)
+color = Color(0, 0, 0, 0.615686)
 
 [node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -864.0
+offset_bottom = -486.0
+grow_horizontal = 2
+grow_vertical = 2
+scale = Vector2(4, 4)
+alignment = 1
 
 [node name="Resume" type="TextureButton" parent="Panel/VBoxContainer"]
 layout_mode = 2
+size_flags_horizontal = 4
+texture_normal = SubResource("AtlasTexture_rbcce")
+texture_pressed = SubResource("AtlasTexture_tl0br")
+texture_hover = SubResource("AtlasTexture_c0e53")
 
 [node name="Options" type="TextureButton" parent="Panel/VBoxContainer"]
 layout_mode = 2
+size_flags_horizontal = 4
+texture_normal = SubResource("AtlasTexture_dfopp")
+texture_pressed = SubResource("AtlasTexture_cuk4t")
+texture_hover = SubResource("AtlasTexture_r67g5")
 
 [node name="QuitMenu" type="TextureButton" parent="Panel/VBoxContainer"]
 layout_mode = 2
+size_flags_horizontal = 4
+texture_normal = SubResource("AtlasTexture_l5pxj")
+texture_pressed = SubResource("AtlasTexture_6jkyj")
+texture_hover = SubResource("AtlasTexture_lkrbu")
 
 [node name="SaveQuit" type="TextureButton" parent="Panel/VBoxContainer"]
 layout_mode = 2
+size_flags_horizontal = 4
+texture_normal = SubResource("AtlasTexture_anxss")
+texture_pressed = SubResource("AtlasTexture_4vbla")
+texture_hover = SubResource("AtlasTexture_rybb1")
