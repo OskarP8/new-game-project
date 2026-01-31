@@ -87,11 +87,25 @@ func _dummy_set(v): pass
 # ----------------------
 func _ready():
 	# --- RESPAWN POSITION ---
+	# (replace your existing checkpoint/save block with the following)
 	if GameState.has_checkpoint():
+		# checkpoint_position should already be a Vector2
 		global_position = GameState.checkpoint_position
 	elif GameState.has_save():
 		var data = GameState.get_save_data()
-		global_position = data.position
+		# defensive conversion: data.position may be a Vector2 or a Dictionary {"x","y"}
+		var pos: Vector2 = Vector2.ZERO
+		if typeof(data.position) == TYPE_VECTOR2:
+			pos = data.position
+		elif typeof(data.position) == TYPE_DICTIONARY:
+			var p = data.position
+			pos = Vector2(p.get("x", 0.0), p.get("y", 0.0))
+		else:
+			# fallback: if GameState returned something unexpected, keep origin
+			pos = Vector2.ZERO
+
+		global_position = pos
+
 	var cam := get_viewport().get_camera_2d()
 	if cam:
 		cam.reset_smoothing()
