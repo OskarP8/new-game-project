@@ -18,9 +18,27 @@ signal slot_swapped(from_slot, to_slot)
 # Setup
 # ---------------------------
 func _ready():
-	print("[inv_ui][DBG READY] _ready() running; root children:", get_tree().root.get_child_count(), " groups Player->", get_tree().get_first_node_in_group("Player"), " player->", get_tree().get_first_node_in_group("player"))
+	print("[inv_ui][DBG READY] _ready() running; root children:", get_tree().root.get_child_count(), " groups Player->", get_tree().get_first_node_in_group("Player"))
 	drag_layer = CanvasLayer.new()
 	get_tree().root.call_deferred("add_child", drag_layer)
+
+	# If player exists and player has an inventory resource, prefer to bind inv to that so UI ↔ player stay in sync
+	var player = get_tree().get_first_node_in_group("Player")
+	if player:
+		if player.has_method("get_inventory"):
+			var p_inv = player.get_inventory()
+			if p_inv and inv == null:
+				inv = p_inv
+				print("[Inv_UI] bound inv to Player.inventory (slots:", inv.slots.size() if inv and 'slots' in inv else 0, ")")
+		elif "inventory" in player and inv == null:
+			inv = player.inventory
+			print("[Inv_UI] bound inv to Player.inventory (slots:", inv.slots.size() if inv and 'slots' in inv else 0, ")")
+
+	# restore main inventory (GameState) if present (keeps old behaviour)
+	if has_node("/root/GameState"):
+		var gs = get_node("/root/GameState")
+		if gs and gs.has_method("restore_main_inventory_to_ui"):
+			gs.restore_main_inventory_to_ui()
 
 	for slot in get_children():
 		if slot is InvUISlot:
@@ -31,10 +49,18 @@ func _ready():
 	for i in range(slots.size()):
 		slots[i].index = i
 
+	# connect to inv resource signal and perform initial update
 	if inv:
 		if not inv.is_connected("inventory_changed", Callable(self, "update_slots")):
 			inv.connect("inventory_changed", Callable(self, "update_slots"))
 	update_slots()
+
+	# repeat the GameState restore call AFTER update so UI visuals reflect restored slots
+	if has_node("/root/GameState"):
+		var gs2 = get_node("/root/GameState")
+		if gs2 and gs2.has_method("restore_main_inventory_to_ui"):
+			gs2.restore_main_inventory_to_ui()
+
 	for slot in slots:
 		if slot and slot.has_method("update_visual"):
 			slot.update_visual()

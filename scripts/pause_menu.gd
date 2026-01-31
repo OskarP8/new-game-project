@@ -60,12 +60,23 @@ func _pause_game() -> void:
 	# show mouse so player can click
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
+	# ---- NEW: flush UI and save snapshot BEFORE pausing ----
+	# This ensures Inv_UI contents are up-to-date and then persisted.
+	if has_node("/root/GameState"):
+		# Try to flush local UI first (best-effort)
+		var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+		if inv_ui and inv_ui.has_method("update_slots"):
+			inv_ui.update_slots()
+		# Call GameState.save (this will call save_game which reads the UI/player)
+		var gs = get_node("/root/GameState")
+		if gs and gs.has_method("save"):
+			gs.save()
+
 	# pause AFTER showing menu so UI can grab focus
 	get_tree().paused = true
 
 	if btn_resume:
 		btn_resume.grab_focus()
-
 
 func _resume_game() -> void:
 	if not paused_state:
@@ -111,29 +122,37 @@ func _on_save_and_quit_pressed() -> void:
 		get_tree().paused = false
 	paused_state = false
 	print("[PauseMenu] Save and Quit requested")
-	get_tree().quit()
-
+	# in your menu script:
+	if has_node("/root/GameState"):
+		get_node("/root/GameState").save()
+		get_tree().quit()
 
 func _on_quitmenu_pressed() -> void:
 	# Save then go back to main menu (don't quit the app)
 	_save_game_once()
 
-	# ensure the game is unpaused and menu hidden so the main menu receives input
+	# ensure the game is unpaused so nodes are back to normal and not paused
 	if get_tree().paused:
 		get_tree().paused = false
+
+	# small safety: give Godot one idle frame to process node changes if needed
+	# (we do NOT wait asynchronously; call_deferred ensures the scene change happens next)
 	panel.visible = false
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
 	paused_state = false
-
+	if has_node("/root/GameState"):
+		get_node("/root/GameState").save()
 	# change scene safely
 	if ResourceLoader.exists(MAIN_MENU_SCENE):
-		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+		# defer the actual change a frame so save flushes have a chance to finish
+		call_deferred("_deferred_change_to_main")
 	else:
 		push_error("[PauseMenu] MAIN_MENU_SCENE not found: %s" % MAIN_MENU_SCENE)
-		# fallback: quit the app
 		get_tree().quit()
 
+func _deferred_change_to_main() -> void:
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 func _on_about_to_quit() -> void:
 	# called on some platforms before exit
