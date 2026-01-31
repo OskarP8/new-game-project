@@ -18,6 +18,7 @@ signal slot_swapped(from_slot, to_slot)
 # Setup
 # ---------------------------
 func _ready():
+	print("[inv_ui][DBG READY] _ready() running; root children:", get_tree().root.get_child_count(), " groups Player->", get_tree().get_first_node_in_group("Player"), " player->", get_tree().get_first_node_in_group("player"))
 	drag_layer = CanvasLayer.new()
 	get_tree().root.call_deferred("add_child", drag_layer)
 
@@ -156,6 +157,25 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 
 	_update_item_in_hand()
 
+# Helper: place a world item under the world's Resources/YSort node and set z_index
+func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
+	# prefer explicit world/layers/Resources node
+	var resources_node = get_tree().root.get_node_or_null("world/layers/Resources")
+	if resources_node == null:
+		# try current scene fallback path
+		if get_tree().current_scene and get_tree().current_scene.has_node("layers/Resources"):
+			resources_node = get_tree().current_scene.get_node("layers/Resources")
+	# final fallback to current scene root or global root
+	if resources_node == null:
+		resources_node = get_tree().current_scene if get_tree().current_scene else get_tree().root
+
+	# set position and z_index (Y-sort by Y)
+	world_item.global_position = spawn_pos
+	if "z_index" in world_item:
+		world_item.z_index = int(spawn_pos.y)
+
+	# add under resources node so it's in the visible world layer
+	resources_node.add_child(world_item)
 
 # ---------------------------
 # Drag & drop handling
@@ -217,32 +237,105 @@ func _unhandled_input(event: InputEvent) -> void:
 						continue
 
 					var idx = player_inv.slots.find(pslot)
+					if idx == -1:
+						continue
+
+					# Ensure the resource slot exists
+					while player_inv.inv.slots.size() <= idx:
+						player_inv.inv.slots.append(InvSlot.new())
 					var target_slot: InvSlot = player_inv.inv.slots[idx]
 
+					# Place / swap logic
 					if target_slot.item == null:
-						print("[inv_ui] ✅ Placed", moving_item.name, "into", pslot.slot_type)
-
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
-
 					else:
-						print("[inv_ui] 🔄 Swapped with existing item in", pslot.slot_type)
+						# swap with whatever was in the player slot
 						var tmp_item = target_slot.item
 						var tmp_amt = target_slot.amount
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
-						picked_slot.item = tmp_item
-						picked_slot.amount = tmp_amt
+						if picked_slot:
+							picked_slot.item = tmp_item
+							picked_slot.amount = tmp_amt
+
+					# --- Robust equip logic (REPLACE EXISTING equip block WITH THIS) ---
+					var player_node := get_tree().root.find_child("Player", true, false)
+					if player_node:
+						if slot_t == "weapon":
+							# Defensive: ensure target resource is set first (we set target_slot.item earlier)
+							# Try to produce the *type* the player's equip function expects:
+							var equip_arg = null
+							var loaded_scene = null
+
+							# 1) If there's an explicit scene_path, try to load it (PackedScene or Resource).
+							if moving_item and moving_item.scene_path != "":
+								if ResourceLoader.exists(moving_item.scene_path):
+									loaded_scene = ResourceLoader.load(moving_item.scene_path)
+									# prefer PackedScene / Resource instance
+									equip_arg = loaded_scene
+
+							# 2) If no scene loaded, fall back to the InvItem resource itself (some projects accept that)
+							if equip_arg == null:
+								equip_arg = moving_item
+
+							# 3) Call equip in a safe way depending on what player's API accepts
+							var did_equip := false
+							if player_node.has_method("equip_weapon"):
+								# Try variants: PackedScene/resource first, then path string
+								# If equip_weapon expects a path, passing equip_arg (PackedScene) may still fail — try both.
+								# We'll attempt to call with equip_arg, then fallback to scene_path string.
+								match typeof(equip_arg):
+									TYPE_OBJECT:
+										# object / resource passed
+										player_node.equip_weapon(equip_arg)
+										did_equip = true
+									_:
+										# try string fallback
+										if moving_item and moving_item.scene_path != "":
+											player_node.equip_weapon(moving_item.scene_path)
+											did_equip = true
+
+							# 4) Mark player state + refresh visuals
+							player_node.has_weapon = true
+							if player_node.has_method("refresh_equipped_weapon_from_inventory"):
+								player_node.refresh_equipped_weapon_from_inventory()
+							if player_node.has_method("update_weapon_visuals"):
+								player_node.update_weapon_visuals()
+
+							# 5) Force UI ghost to update so hand shows the equipped weapon (if dragging)
+							if ghost_item and is_instance_valid(ghost_item):
+								# prefer icon, fallback to texture
+								if moving_item.icon and "item_visual" in ghost_item:
+									ghost_item.item_visual.texture = moving_item.icon
+								elif moving_item.texture and "item_visual" in ghost_item:
+									ghost_item.item_visual.texture = moving_item.texture
+								ghost_item.call_deferred("update")
+								_update_item_in_hand()
+
+							# Debug
+							print("[EQUIP] weapon equip attempt; player_node:", player_node, "equip_arg:", equip_arg, "loaded_scene:", loaded_scene, "moving_item:", moving_item)
+						elif slot_t == "armor":
+							if moving_item.scene_path != "" and player_node.has_method("equip_armor"):
+								# same robust loading pattern for armor if needed
+								if ResourceLoader.exists(moving_item.scene_path):
+									player_node.equip_armor(ResourceLoader.load(moving_item.scene_path))
+								else:
+									player_node.equip_armor(moving_item)
+							# optional refresh
+							if player_node.has_method("refresh_equipped_armor_from_inventory"):
+								player_node.refresh_equipped_armor_from_inventory()
 
 					dropped = true
-					var player := get_tree().root.find_child("Player", true, false)
-					if player:
-						player.refresh_equipped_weapon_from_inventory()
 
+					# signal UI to update
+					if player_inv:
+						player_inv.update_slots()
 					break
 
 		# 3️⃣ Drop outside → spawn world drop
 		if not dropped and moving_item:
+			# detect whether mouse is over UI background; if so restore
 			var ui_under_mouse := false
 			if get_global_rect().has_point(mouse_pos):
 				ui_under_mouse = true
@@ -257,36 +350,49 @@ func _unhandled_input(event: InputEvent) -> void:
 				dropped = true
 			else:
 				var world_item_scene = preload("res://scenes/world_item.tscn")
-				var world_item: WorldItem = world_item_scene.instantiate()
-				world_item.item = moving_item
-				world_item.quantity = moving_amount
+				var world_item := world_item_scene.instantiate()
+				# assign item & quantity if those properties exist
+				if "item" in world_item:
+					world_item.item = moving_item
+				if "quantity" in world_item:
+					world_item.quantity = moving_amount
 
-				# Debug info
-				print("[inv_ui][DEBUG] moving_item resource:", moving_item)
-				print("[inv_ui][DEBUG] moving_item.texture:", moving_item.texture)
-				print("[inv_ui][DEBUG] moving_item.icon:", moving_item.icon)
+				# Set texture safely (prefer 'texture' over 'icon')
+				if moving_item.texture and world_item.has_node("Sprite2D"):
+					world_item.get_node("Sprite2D").texture = moving_item.texture
+					world_item.world_texture = moving_item.texture if "world_texture" in world_item else null
+				elif moving_item.icon and world_item.has_node("Sprite2D"):
+					world_item.get_node("Sprite2D").texture = moving_item.icon
+					world_item.world_texture = moving_item.icon if "world_texture" in world_item else null
 
-				# Force using the 'texture' property
-				if moving_item.texture:
-					print("[inv_ui][DEBUG] Setting world sprite texture to moving_item.texture")
-					if world_item.has_node("Sprite2D"):
-						world_item.get_node("Sprite2D").texture = moving_item.texture
-					world_item.world_texture = moving_item.texture
+				# Choose best parent: prefer world/layers/Resources (common project layout), fallback to current_scene
+				var resources_node := get_tree().root.get_node_or_null("world/layers/Resources")
+				if resources_node == null:
+					# try other common paths
+					resources_node = get_tree().current_scene
+				# Add to the world layer so it is not under the UI/background
+				resources_node.add_child(world_item)
+
+				# Place near player (global coords) or mouse as fallback
+				var spawn_pos: Vector2
+				var player_node := get_tree().root.find_child("Player", true, false)
+				if player_node != null:
+					spawn_pos = player_node.global_position + Vector2(0, -16)
 				else:
-					print("[inv_ui][DEBUG] ⚠️ moving_item.texture not found, fallback to icon")
-					if moving_item.icon and world_item.has_node("Sprite2D"):
-						world_item.get_node("Sprite2D").texture = moving_item.icon
-						world_item.world_texture = moving_item.icon
+					spawn_pos = mouse_pos
 
-				# Drop near player
-				var player = get_tree().root.find_child("Player", true, false)
-				if player:
-					world_item.position = player.global_position + Vector2(0, -16)
-					world_item.z_index = int(world_item.position.y)
-				else:
-					world_item.position = Vector2.ZERO
+				world_item.global_position = spawn_pos
 
-				get_tree().current_scene.add_child(world_item)
+				# IMPORTANT: set z_index (helps YSort or manual z ordering)
+				# Force dropped items to appear above background (-1). Always use z_index 0.
+				if world_item is Node2D:
+					world_item.z_index = 0
+				elif "z_index" in world_item:
+					world_item.z_index = 0
+
+				print("[inv_ui] 🌍 Dropped item near player at:", world_item.global_position)
+				dropped = true
+
 				print("[inv_ui] 🌍 Dropped item near player:", moving_item.name)
 
 		# Cleanup
@@ -350,13 +456,23 @@ func get_slot_by_type(slot_type: String) -> InvUISlot:
 	return null
 
 func _on_slot_swapped(from_slot: InvUISlot, to_slot: InvUISlot) -> void:
-	var player = get_tree().get_first_node_in_group("player")
+	print("[inv_ui][DBG _on_slot_swapped] from:", from_slot.slot_type, " to:", to_slot.slot_type)
+	var player = get_tree().get_first_node_in_group("Player")
+	if not player:
+		player = get_tree().get_first_node_in_group("player")
+	print("[inv_ui][DBG _on_slot_swapped] resolved player ->", player, " suppress_unequip:", (player.get_meta("suppress_unequip") if player and player.has_meta("suppress_unequip") else "false"))
 	if not player:
 		return
-	if from_slot.slot_type == "weapon" and to_slot.item_stack == null:
-		player.unequip_weapon()
 
-	# Weapon slot update
+
+	# If the player temporarily suppressed unequip (to avoid UI race), skip unequip
+	if player.has_meta("suppress_unequip") and player.get_meta("suppress_unequip") == true:
+		print("[inv_ui][DBG] suppress_unequip active, skipping unequip for slot swap")
+	else:
+		if from_slot.slot_type == "weapon" and to_slot.item_stack == null:
+			player.unequip_weapon()
+
+	# Weapon slot update (existing behavior)
 	if to_slot.slot_type == "weapon" and to_slot.item_stack:
 		player.equip_weapon(to_slot.item_stack.item.scene_path)
 	elif from_slot.slot_type == "weapon" and to_slot.item_stack == null:

@@ -145,6 +145,10 @@ func _ready():
 		weapon_holder.position = Vector2.ZERO
 		weapon_holder.rotation = 0
 		weapon_holder.scale = Vector2.ONE
+	# DEBUG: sanity at end of _ready
+	print("[player][DBG READY] _ready() finished. last_equipped_scene_path:", last_equipped_scene_path, " weapon_pivot:", weapon_pivot, " weapon_holder:", weapon_holder)
+	var _inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+	print("[player][DBG READY] Inv_UI found ->", _inv_ui, " Player in groups ->", get_tree().get_first_node_in_group("Player"))
 
 	# initial state: no weapon
 	has_weapon = false
@@ -637,7 +641,16 @@ func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 # EQUIP / UNEQUIP WEAPON
 # -------------------------------------------------------------------------
 func unequip_weapon() -> void:
-	# clear current weapon
+	# Respect any UI-supplied suppression flag to avoid race conditions
+	var suppressed = has_meta("suppress_unequip") and get_meta("suppress_unequip") == true
+	print("[player][DBG unequip] called; suppress_unequip? ->", suppressed, " current_weapon_scene:", current_weapon_scene, " has_weapon:", has_weapon)
+
+	if suppressed:
+		# Don't actually unequip while suppression active — just log and return
+		print("[player][DBG unequip] suppressed => skipping actual unequip")
+		return
+
+	# clear current weapon (hide, don't free)
 	if current_weapon_scene:
 		current_weapon_scene.visible = false
 		current_weapon_scene = null
@@ -648,7 +661,7 @@ func unequip_weapon() -> void:
 	weapon_grip_node = null
 	has_weapon = false
 
-	# reset pivot and holder flips
+	# reset pivot and holder transforms
 	if weapon_pivot:
 		weapon_pivot.rotation = 0
 	if weapon_holder:
@@ -660,12 +673,23 @@ func unequip_weapon() -> void:
 	print("[player] Unequipped weapon")
 
 func equip_weapon(packed_or_path) -> void:
+	print("[player][DBG equip_weapon ENTRY] arg:", packed_or_path, " typeof:", typeof(packed_or_path))
+
 	# ---- HIDE OLD WEAPON (DO NOT FREE) ----
 	if is_instance_valid(current_weapon_scene):
 		current_weapon_scene.visible = false
+	# --- REPLACE the small problematic chunk at the top of equip_weapon() with this ---
 
-	current_weapon_scene = null
-	has_weapon = false
+	print("[player][DBG] equip_weapon called; arg type:", typeof(packed_or_path), "arg:", packed_or_path)
+# existing first lines follow...
+
+
+	# hide old weapon if it's still alive (don't free it; just hide)
+	if is_instance_valid(current_weapon_scene):
+		current_weapon_scene.visible = false
+
+	# NOTE: do NOT null-out current_weapon_scene/has_weapon here.
+	# We'll assign them only after we successfully instantiate/load the new scene.
 
 	# ---- LOAD PACKED SCENE ----
 	var packed: PackedScene = null
@@ -704,6 +728,11 @@ func equip_weapon(packed_or_path) -> void:
 		weapon_holder.add_child(current_weapon_scene)
 
 	current_weapon_scene.visible = true
+	has_weapon = true
+	# store for persistence / debugging
+	if scene_path != null and scene_path != "":
+		last_equipped_scene_path = scene_path
+
 	# ---- REFRESH CACHED VISUAL REFERENCES ----
 	weapon_sprite = _find_child_of_type(current_weapon_scene, "AnimatedSprite2D")
 	weapon_anim_player = _find_child_of_type(current_weapon_scene, "AnimationPlayer")
@@ -711,7 +740,9 @@ func equip_weapon(packed_or_path) -> void:
 	current_weapon_scene.position = Vector2.ZERO
 	current_weapon_scene.rotation = 0
 
-	has_weapon = true
+	# --- Now print debug info reflecting final state (safe) ---
+	print("[player][DBG] equip_weapon: current_weapon_scene =", current_weapon_scene, "visible? ->", (current_weapon_scene.visible if current_weapon_scene else "NULL"))
+	print("[player][DBG] equip_weapon: has_weapon flag ->", has_weapon)
 
 	# ---- ALIGN WEAPON TO GRIP ----
 	weapon_grip_node = _find_child_named(current_weapon_scene, "Grip")
@@ -743,6 +774,7 @@ func equip_weapon(packed_or_path) -> void:
 
 	if weapon_anim_player and weapon_anim_player.has_animation("idle"):
 		weapon_anim_player.play("idle")
+	print("[player][DBG] equip_weapon finished -> current_weapon_scene:", current_weapon_scene, "has_weapon:", has_weapon, "parent:", (current_weapon_scene.get_parent() if current_weapon_scene and is_instance_valid(current_weapon_scene) else "NULL"))
 
 	print("[player] ✅ Equipped weapon:", current_weapon_scene.name)
 	update_layers()
@@ -1062,34 +1094,61 @@ func _last_leaf_sequence() -> void:
 	await get_tree().create_timer(0.12).timeout
 
 func refresh_equipped_weapon_from_inventory():
-	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
-	if not player_inv:
+	# Avoid racing with UI flows that temporarily clear visuals
+	if has_meta("suppress_unequip") and get_meta("suppress_unequip") == true:
+		print("[player][DBG refresh] suppressed by meta -> skipping refresh_equipped_weapon_from_inventory")
 		return
 
-	var weapon_slot: InvUISlot = player_inv.get_slot_by_type("weapon")
-	var secondary_slot: InvUISlot = player_inv.get_slot_by_type("secondary")
+	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
+	if not player_inv:
+		print("[player][DBG refresh] PlayerInv not found -> skipping")
+		return
 
-	var weapon_item = weapon_slot.item_stack.slot.item if weapon_slot and weapon_slot.item_stack else null
-	var secondary_item = secondary_slot.item_stack.slot.item if secondary_slot and secondary_slot.item_stack else null
+	# Find the UI slots (InvUISlot nodes)
+	var weapon_slot_ui: InvUISlot = player_inv.get_slot_by_type("weapon")
+	var secondary_slot_ui: InvUISlot = player_inv.get_slot_by_type("secondary")
 
+	# Try to read the underlying Inv resource (authoritative) first
+	var weapon_item = null
+	var secondary_item = null
+
+	# If player_inv.inv exists, try to locate corresponding resource slots by index
+	if player_inv.inv:
+		# locate indices of UI slots in the player_inv.slots array
+		if weapon_slot_ui:
+			var widx = player_inv.slots.find(weapon_slot_ui)
+			if widx != -1 and player_inv.inv.slots.size() > widx:
+				weapon_item = player_inv.inv.slots[widx].item
+		if secondary_slot_ui:
+			var sidx = player_inv.slots.find(secondary_slot_ui)
+			if sidx != -1 and player_inv.inv.slots.size() > sidx:
+				secondary_item = player_inv.inv.slots[sidx].item
+
+	# Fallback: if resource read failed, try UI visual chain (older behaviour)
+	if weapon_item == null and weapon_slot_ui and weapon_slot_ui.item_stack and weapon_slot_ui.item_stack.slot:
+		weapon_item = weapon_slot_ui.item_stack.slot.item
+	if secondary_item == null and secondary_slot_ui and secondary_slot_ui.item_stack and secondary_slot_ui.item_stack.slot:
+		secondary_item = secondary_slot_ui.item_stack.slot.item
+
+	print("[player][DBG refresh] using_secondary:", using_secondary,
+		" weapon_item:", (weapon_item if weapon_item else "NULL"),
+		" secondary_item:", (secondary_item if secondary_item else "NULL"))
+
+	# Apply logic (same as before)
 	if using_secondary:
 		if secondary_item:
 			equip_weapon(secondary_item.scene_path)
 		elif weapon_item:
-			# fallback to main if secondary removed
 			using_secondary = false
 			equip_weapon(weapon_item.scene_path)
 		else:
-			# nothing left
 			using_secondary = false
 			unequip_weapon()
 	else:
 		if weapon_item:
 			equip_weapon(weapon_item.scene_path)
 		elif secondary_item:
-			# main removed, fallback to secondary
 			using_secondary = true
 			equip_weapon(secondary_item.scene_path)
 		else:
-			# nothing left
 			unequip_weapon()

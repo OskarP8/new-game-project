@@ -17,21 +17,25 @@ func _ready():
 func _on_start_pressed() -> void:
 	print("NEW GAME pressed")
 
-	# Clear runtime + saved data (overwrite the old save with a fresh start).
-	# This will make "Continue" disappear next time unless the player saves later.
+	# Ensure GameState exists and delete on-disk save so we start clean
 	if has_node("/root/GameState"):
-		GameState.checkpoint_scene = ""
-		GameState.saved_scene = ""
-		GameState.saved_position = Vector2.ZERO
-		# Persist this cleared state: save the world start scene as the saved scene
-		# so pressing resume later doesn't resurrect the old save.
-		# If you prefer to fully delete the file, you can implement removal in GameState.
-		var start_scene := "res://scenes/world.tscn" # change if your gameplay scene path differs
-		GameState.save_game(start_scene, Vector2.ZERO)
+		var gs = get_node("/root/GameState")
+		if gs.has_method("delete_save_file"):
+			gs.delete_save_file()
+		# clear runtime state too
+		gs.checkpoint_scene = ""
+		gs.saved_scene = ""
+		gs.saved_position = Vector2.ZERO
+		gs.opened_chests = []
+		gs.saved_inventory = []
 
+	# Now go to gameplay scene (your existing flow)
 	var dd := get_tree().get_first_node_in_group("DeathDirector")
 	if dd:
 		dd.fade_to_scene("res://scenes/world.tscn")
+	else:
+		# fallback
+		get_tree().change_scene_to_file("res://scenes/world.tscn")
 
 func _on_quit_pressed() -> void:
 	get_tree().quit()

@@ -78,6 +78,14 @@ func update_slots() -> void:
 			inv.slots[i] = InvSlot.new()
 
 		var inv_slot: InvSlot = inv.slots[i]
+		# If we're currently dragging from this slot, hide the UI visual but do NOT
+		# remove the underlying InvSlot resource (we left it intact in _on_item_clicked()).
+		if picked_slot != null and inv_slot == picked_slot and ghost_item and is_instance_valid(ghost_item):
+			# Ensure the slot looks empty while dragging
+			if ui_slot.item_stack:
+				ui_slot.item_stack.visible = false
+			# nothing else to create for this visual slot while dragging
+			continue
 
 		# Clean up invalid references
 		if ui_slot.item_stack and not is_instance_valid(ui_slot.item_stack):
@@ -110,6 +118,26 @@ func update_slots() -> void:
 
 		item_stack.slot = inv_slot
 		item_stack.update()
+
+# Helper: place a world item under the world's Resources/YSort node and set z_index
+func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
+	# prefer explicit world/layers/Resources node
+	var resources_node = get_tree().root.get_node_or_null("world/layers/Resources")
+	if resources_node == null:
+		# try current scene fallback path
+		if get_tree().current_scene and get_tree().current_scene.has_node("layers/Resources"):
+			resources_node = get_tree().current_scene.get_node("layers/Resources")
+	# final fallback to current scene root or global root
+	if resources_node == null:
+		resources_node = get_tree().current_scene if get_tree().current_scene else get_tree().root
+
+	# set position and z_index (Y-sort by Y)
+	world_item.global_position = spawn_pos
+	if "z_index" in world_item:
+		world_item.z_index = int(spawn_pos.y)
+
+	# add under resources node so it's in the visible world layer
+	resources_node.add_child(world_item)
 
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	# Basic guard
@@ -175,9 +203,11 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	ghost_item.scale = Vector2.ONE
 
 	# Immediately clear the origin slot so UI shows empty while dragging
-	picked_slot.item = null
-	picked_slot.amount = 0
-	print("[player_inv][_on_item_clicked] origin slot cleared -> now item:", picked_slot.item, " amount:", picked_slot.amount)
+	# NOTE: do NOT clear the underlying InvSlot resource here — keep the concrete
+	# InvSlot data so inventory-refreshes don't treat the item as removed (which
+	# causes equip/unequip races). We still want the visual to appear empty while
+	# dragging, so hide the UI visual below in update_slots() when needed.
+	print("[player_inv][_on_item_clicked] keeping origin InvSlot intact while dragging (picked_slot preserved)")
 
 	# Refresh visuals so the original slot immediately appears empty
 	update_slots()
@@ -228,7 +258,12 @@ func _update_ghost_position():
 	ghost_item.global_position = mouse_pos - offset
 # --- Drop handling ---
 func _unhandled_input(event: InputEvent) -> void:
-	var player_node: Node = get_tree().get_root().find_child("Player", true, false)
+	# prefer group lookup (more robust across scenes)
+	var player_node: Node = get_tree().get_first_node_in_group("Player")
+	if player_node == null:
+		player_node = get_tree().root.find_child("Player", true, false)
+	print("[player_inv][DBG] resolved player_node ->", player_node, " groups(if node):", (player_node.get_groups() if player_node else "NULL"))
+
 	if ghost_item == null or picked_slot == null:
 		return
 
@@ -240,47 +275,115 @@ func _unhandled_input(event: InputEvent) -> void:
 		var inv_ui := get_tree().root.find_child("Inv_UI", true, false)
 		var player := get_tree().root.find_child("Player", true, false)
 
-		# Clear picked slot temporarily
-		picked_slot.item = null
-		picked_slot.amount = 0
-
 		# --- 1️⃣ Drop inside player equipment (PlayerInv) ---
 		for idx in range(slots.size()):
 			var slot_node = slots[idx]
-			if slot_node.get_global_rect().has_point(mouse_pos):
-				var slot_type = slot_node.slot_type
-				print("[player_inv] Hovered slot:", slot_type, "→ item type:", moving_item.type)
+			if not slot_node.get_global_rect().has_point(mouse_pos):
+				continue
 
-				if not _can_accept_item(slot_type, moving_item.type):
-					print("[player_inv] ❌ Can't place", moving_item.type, "into", slot_type)
-					continue
+			var slot_type = slot_node.slot_type
+			print("[player_inv][DBG] Hovered slot idx:", idx, "type:", slot_type, "→ moving_item:", moving_item, "moving_type:", moving_item.type if moving_item else "NULL")
 
-				var target_slot: InvSlot = inv.slots[idx]
-				if target_slot == null:
-					target_slot = InvSlot.new()
-					inv.slots[idx] = target_slot
+			# guard: moving_item must exist
+			if moving_item == null:
+				print("[player_inv][ERR] moving_item is null, cancelling drop here")
+				continue
 
-				if target_slot.item == null:
-					print("[player_inv] ✅ Placed", moving_item.name, "in", slot_type)
-					target_slot.item = moving_item
-					target_slot.amount = moving_amount
+			if not _can_accept_item(slot_type, moving_item.type):
+				print("[player_inv] ❌ Can't place", moving_item.type, "into", slot_type)
+				continue
 
-					if player_node:
-						if moving_item.type == "weapon" and moving_item.scene_path != "" and player_node.has_method("equip_weapon"):
-							player_node.equip_weapon(moving_item.scene_path)
-						elif moving_item.type == "armor" and moving_item.scene_path != "" and player_node.has_method("equip_armor"):
-							player_node.equip_armor(moving_item.scene_path)
-				else:
-					print("[player_inv] 🔄 Swapped", moving_item.name, "with existing item")
-					var tmp_item = target_slot.item
-					var tmp_amt = target_slot.amount
-					target_slot.item = moving_item
-					target_slot.amount = moving_amount
-					picked_slot.item = tmp_item
-					picked_slot.amount = tmp_amt
+			var target_slot: InvSlot = null
+			if inv.slots.size() > idx:
+				target_slot = inv.slots[idx]
+			if target_slot == null:
+				target_slot = InvSlot.new()
+				inv.slots[idx] = target_slot
 
-				dropped = true
-				break
+			# DEBUG helper print of player state before equip
+			if player_node:
+				_debug_player_state(player_node, "before equip")
+
+			# helper to pick equip arg (PackedScene or resource)
+			var equip_arg = null
+			if moving_item and moving_item.scene_path != "" and ResourceLoader.exists(moving_item.scene_path):
+				print("[player_inv][DBG] moving_item.scene_path exists:", moving_item.scene_path)
+				equip_arg = ResourceLoader.load(moving_item.scene_path)
+			else:
+				print("[player_inv][DBG] no valid scene_path; using InvItem resource as equip_arg")
+				equip_arg = moving_item
+
+			# Place or swap
+			if target_slot.item == null:
+				print("[player_inv] ✅ Placed", moving_item.name, "in", slot_type)
+				target_slot.item = moving_item
+				target_slot.amount = moving_amount
+
+				# ensure target_slot.item = moving_item (already set above)
+				if player_node and slot_type.to_lower() == "weapon":
+					if moving_item and moving_item.scene_path != "" and ResourceLoader.exists(moving_item.scene_path):
+						var scene_path = moving_item.scene_path
+						# set suppression immediately so refresh won't unequip
+						player_node.set_meta("suppress_unequip", true)
+						# deferred equip with the same call style as swap path
+						player_node.call_deferred("equip_weapon", scene_path)
+						# clear suppression next frame
+						player_node.call_deferred("set_meta", "suppress_unequip", false)
+						# immediate UI refresh deferred
+						player_node.call_deferred("refresh_equipped_weapon_from_inventory")
+						if ghost_item and is_instance_valid(ghost_item):
+							if moving_item.icon and "item_visual" in ghost_item:
+								ghost_item.item_visual.texture = moving_item.icon
+							elif moving_item.texture and "item_visual" in ghost_item:
+								ghost_item.item_visual.texture = moving_item.texture
+							ghost_item.call_deferred("update")
+							_update_item_in_hand()
+						print("[player_inv][DBG] scheduled deferred equip_weapon with scene_path:", scene_path)
+
+			elif target_slot.item:
+				# swap: put moving_item into target; return existing item to picked_slot
+				print("[player_inv] 🔄 Swapped", moving_item.name, "with existing item")
+				var tmp_item = target_slot.item
+				var tmp_amt = target_slot.amount
+				target_slot.item = moving_item
+				target_slot.amount = moving_amount
+				picked_slot.item = tmp_item
+				picked_slot.amount = tmp_amt
+
+				# equip new item if weapon
+				# ensure target_slot.item = moving_item (already set above)
+				if player_node and slot_type.to_lower() == "weapon":
+					if moving_item and moving_item.scene_path != "" and ResourceLoader.exists(moving_item.scene_path):
+						var scene_path = moving_item.scene_path
+						# set suppression immediately so refresh won't unequip
+						player_node.set_meta("suppress_unequip", true)
+						# deferred equip with the same call style as swap path
+						player_node.call_deferred("equip_weapon", scene_path)
+						# clear suppression next frame
+						player_node.call_deferred("set_meta", "suppress_unequip", false)
+						# immediate UI refresh deferred
+						player_node.call_deferred("refresh_equipped_weapon_from_inventory")
+						if ghost_item and is_instance_valid(ghost_item):
+							if moving_item.icon and "item_visual" in ghost_item:
+								ghost_item.item_visual.texture = moving_item.icon
+							elif moving_item.texture and "item_visual" in ghost_item:
+								ghost_item.item_visual.texture = moving_item.texture
+							ghost_item.call_deferred("update")
+							_update_item_in_hand()
+						print("[player_inv][DBG] scheduled deferred equip_weapon with scene_path:", scene_path)
+
+			# AFTER equip: more debugging to catch race/overwrite
+			if player_node:
+				_debug_player_state(player_node, "after equip")
+				# print the player's current_weapon_scene if present
+				if "current_weapon_scene" in player_node:
+					print("[player_inv][DBG] player.current_weapon_scene:", player_node.current_weapon_scene, "parent:", (player_node.current_weapon_scene.get_parent() if player_node.current_weapon_scene and is_instance_valid(player_node.current_weapon_scene) else "NULL"))
+				elif player_node.has_method("get_current_weapon_scene"):
+					# optional method name
+					print("[player_inv][DBG] player.get_current_weapon_scene() ->", player_node.get_current_weapon_scene())
+
+			dropped = true
+			break
 
 		# --- 2️⃣ Drop into main inventory (Inv_UI) ---
 		if not dropped and inv_ui and inv_ui.visible:
@@ -355,9 +458,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			picked_slot.amount = moving_amount
 
 		# --- 5️⃣ Refresh equipped items ---
+		# --- 5️⃣ Refresh equipped items (deferred to avoid race) ---
 		if player_node:
-			player_node.refresh_equipped_weapon_from_inventory()
-			# optionally: player_node.refresh_equipped_armor_from_inventory() if you have armor logic
+			if player_node.has_method("refresh_equipped_weapon_from_inventory"):
+				player_node.call_deferred("refresh_equipped_weapon_from_inventory")
+			# optionally deferred armor refresh
+			# if player_node.has_method("refresh_equipped_armor_from_inventory"):
+			#     player_node.call_deferred("refresh_equipped_armor_from_inventory")
 
 		# --- Cleanup ---
 		dragging = false
@@ -372,6 +479,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				slot.update_visual()
 		if inv_ui:
 			inv_ui.update_slots()
+
+		# --- Force a deferred re-apply of equipped visuals on the player ---
+		var _dbg_player := get_tree().root.find_child("Player", true, false)
+		if _dbg_player:
+			print("[player_inv][DBG] scheduling deferred player refresh (to avoid UI race)")
+			# call_deferred ensures the player's refresh runs after the UI node tree changes complete
+			if _dbg_player.has_method("refresh_equipped_weapon_from_inventory"):
+				_dbg_player.call_deferred("refresh_equipped_weapon_from_inventory")
+			else:
+				print("[player_inv][DBG] player has no refresh_equipped_weapon_from_inventory() method")
+
+			if _dbg_player.has_method("update_weapon_visuals"):
+				_dbg_player.call_deferred("update_weapon_visuals")
 
 func _can_accept_item(slot_type: String, item_type: String) -> bool:
 	if slot_type == null or item_type == null:
@@ -431,7 +551,15 @@ func _on_item_dropped_from_slot(slot: InvUISlot, item: InvItem, amount: int) -> 
 	else:
 		match slot.slot_type:
 			"weapon":
-				player.equip_weapon(null)
+				# skip unequip if UI flow set suppression meta
+				if player.has_meta("suppress_unequip") and player.get_meta("suppress_unequip") == true:
+					print("[player_inv] suppress_unequip active — skipping unequip()")
+				else:
+					if player.has_method("unequip_weapon"):
+						player.unequip_weapon()
+					else:
+						player.equip_weapon(null)
+
 			"armor":
 				if player.has_method("equip_armor"):
 					player.equip_armor(null)
@@ -462,3 +590,45 @@ func get_slot_by_type(slot_type: String) -> InvUISlot:
 				return slot
 	push_warning("[PlayerInv] ❌ No slot of type %s found" % slot_type)
 	return null
+
+func _debug_player_state(player_node: Node, tag: String) -> void:
+	# Defensive prints of available properties/methods on player
+	var has_equip = player_node.has_method("equip_weapon")
+	var has_unequip = player_node.has_method("unequip_weapon")
+	var has_refresh = player_node.has_method("refresh_equipped_weapon_from_inventory")
+	var has_update_visuals = player_node.has_method("update_weapon_visuals")
+	var has_has_weapon = "has_weapon" in player_node
+	var has_current_weapon = "current_weapon_scene" in player_node
+
+	print("[player_inv][PLAYER_DBG - %s] node=%s has_equip=%s has_unequip=%s has_refresh=%s has_update_visuals=%s has_has_weapon=%s has_current_weapon=%s" % [tag, player_node, has_equip, has_unequip, has_refresh, has_update_visuals, has_has_weapon, has_current_weapon])
+
+	if has_has_weapon:
+		print("[player_inv][PLAYER_DBG - %s] has_weapon flag=%s" % [tag, player_node.has_weapon])
+
+func _update_item_in_hand():
+	# Ensures compatibility with older calls to _update_item_in_hand()
+	# and centralizes ghost updates. Handles texture, visibility and position.
+	if ghost_item == null or not is_instance_valid(ghost_item):
+		return
+
+	# Ensure ghost has the expected fields
+	if ghost_item.item_visual and ghost_item.origin_item:
+		# prefer icon then texture
+		if ghost_item.origin_item.icon:
+			ghost_item.item_visual.texture = ghost_item.origin_item.icon
+		elif ghost_item.origin_item.texture:
+			ghost_item.item_visual.texture = ghost_item.origin_item.texture
+		ghost_item.item_visual.visible = true
+
+	# keep ghost non-interactive
+	ghost_item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# ensure it's rendered on top
+	if ghost_item is Control:
+		ghost_item.z_index = 9999
+		ghost_item.set_anchors_preset(Control.PRESET_TOP_LEFT)
+
+	# position
+	_update_ghost_position()
+
+	# force visual update just in case (avoids frame ordering issues)
+	ghost_item.call_deferred("update")

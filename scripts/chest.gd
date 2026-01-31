@@ -7,8 +7,42 @@ class_name Chest
 @onready var item_end_pos: Marker2D = $ItemEndPos
 @onready var prompt_scene = preload("res://scenes/interact_prompt.tscn")
 var prompt: Node2D = null
+@export var chest_id: String = ""  # set in inspector for stable identity
 
 var is_open: bool = false
+
+func _ready() -> void:
+	# make prompt lazy (don't instantiate until needed)
+	prompt = null
+
+	# If GameState reports this chest was opened, mark and disable visuals/collision.
+	var cid := _make_chest_id()
+	if cid == "":
+		# can't form an id right now; skip persistence logic (defensive)
+		return
+
+	if has_node("/root/GameState"):
+		var gs = get_node("/root/GameState")
+		if gs.is_chest_opened(cid):
+			is_open = true
+			# disable collision shape so player can't re-open
+			if has_node("CollisionShape2D"):
+				$CollisionShape2D.disabled = true
+			# set animation to 'open' or 'opened' state (don't re-trigger interaction)
+			if has_node("AnimationPlayer"):
+				var ap: AnimationPlayer = $AnimationPlayer
+				if ap.has_animation("open"):
+					# jump to final frame to avoid playing the open anim on load
+					ap.play("open")
+					ap.seek(ap.current_animation_length, true)
+				elif ap.has_animation("opened"):
+					ap.play("opened")
+			# ensure prompt won't appear
+			if prompt:
+				if prompt.has_method("hide_prompt"):
+					prompt.hide_prompt()
+				else:
+					prompt.visible = false
 
 func interact(player: Node2D) -> void:
 	print("[Chest] Attempting interaction with:", player, ":", player.name if "name" in player else "")
@@ -116,6 +150,10 @@ func interact(player: Node2D) -> void:
 	slots.clear()
 	if has_node("CollisionShape2D"):
 		$CollisionShape2D.disabled = true
+	# Register opened chest with GameState so it persists
+	var cid := _make_chest_id()
+	if has_node("/root/GameState"):
+		get_node("/root/GameState").register_opened_chest(cid)
 
 	print("[Chest] 🧹 Chest cleared and disabled after successful open")
 
@@ -214,3 +252,9 @@ func _show_inventory_full_message():
 		ui.show_notification("Inventory Full")
 	else:
 		print("[UI] ⚠️ Inventory Full (UI handler missing)")
+
+func _make_chest_id() -> String:
+	if chest_id != "":
+		return chest_id
+	var scene_path := get_tree().current_scene.scene_file_path if get_tree().current_scene else ""
+	return "%s::%s" % [scene_path, str(global_position)]

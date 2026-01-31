@@ -58,24 +58,72 @@ func can_drop_data(_pos, data) -> bool:
 	return false
 
 
+# InvUISlot.gd — replace existing drop_data(...) with this
 func drop_data(_pos, data) -> void:
 	if not can_drop_data(_pos, data):
 		return
-	var inv_item: InvItem = data.slot.item if data.slot else data.origin_item
-	insert(data)
-	update_visual()
 
-	var player := get_tree().get_first_node_in_group("Player")
-	if player == null:
-		push_warning("[InvUISlot] Player not found!")
+	# Resolve item + amount from either ItemStackUI or a plain dict
+	var inv_item: InvItem = null
+	var amount: int = 1
+	if data is ItemStackUI:
+		inv_item = data.slot.item if data.slot else data.origin_item
+		amount = data.slot.amount if data.slot else data.origin_amount
+	elif typeof(data) == TYPE_DICTIONARY:
+		inv_item = data.get("item", null)
+		amount = int(data.get("amount", 1))
+
+	if inv_item == null:
 		return
 
-	if slot_type == "weapon" and inv_item.scene_path != "":
-		player.equip_weapon(inv_item.scene_path)
-	elif slot_type == "armor" and inv_item.scene_path != "":
-		if player.has_method("equip_armor"):
-			player.equip_armor(inv_item.scene_path)
+	# Insert visual node (existing behaviour)
+	if data is ItemStackUI:
+		insert(data)
+	else:
+		# create a visual when we only got plain dict data
+		var isg = preload("res://scenes/item_stack_ui.tscn")
+		var visual = isg.instantiate()
+		visual.origin_item = inv_item
+		visual.origin_amount = amount
+		insert(visual)
 
+	update_visual()
+
+	# --- NEW: Sync to underlying Inv resource ---
+	# Walk upward to find the UI owner that has 'inv' (Inv_UI or PlayerInv)
+	var owner := get_parent()
+	while owner and not ("inv" in owner):
+		owner = owner.get_parent()
+	if owner and ("inv" in owner):
+		var owner_inv = owner.inv
+		# locate our UI slot index among owner's slots
+		var idx := -1
+		if "slots" in owner:
+			idx = owner.slots.find(self)
+		if idx != -1:
+			# ensure resource slots array is large enough
+			while owner_inv.slots.size() <= idx:
+				owner_inv.slots.append(InvSlot.new())
+			if owner_inv.slots[idx] == null:
+				owner_inv.slots[idx] = InvSlot.new()
+			owner_inv.slots[idx].item = inv_item
+			owner_inv.slots[idx].amount = amount
+		else:
+			# fallback append
+			var s := InvSlot.new()
+			s.item = inv_item
+			s.amount = amount
+			owner_inv.slots.append(s)
+
+	# --- NEW: Trigger equip if appropriate ---
+	var player := get_tree().root.find_child("Player", true, false)
+	if player:
+		if slot_type == "weapon" and inv_item and inv_item.scene_path != "":
+			if player.has_method("equip_weapon"):
+				player.equip_weapon(inv_item.scene_path)
+		elif slot_type == "armor" and inv_item and inv_item.scene_path != "":
+			if player.has_method("equip_armor"):
+				player.equip_armor(inv_item.scene_path)
 
 # ----------------------------------------------------------------
 # Begin drag from this slot
