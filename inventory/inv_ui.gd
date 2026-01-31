@@ -159,23 +159,31 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 
 # Helper: place a world item under the world's Resources/YSort node and set z_index
 func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
-	# prefer explicit world/layers/Resources node
-	var resources_node = get_tree().root.get_node_or_null("world/layers/Resources")
-	if resources_node == null:
-		# try current scene fallback path
-		if get_tree().current_scene and get_tree().current_scene.has_node("layers/Resources"):
-			resources_node = get_tree().current_scene.get_node("layers/Resources")
-	# final fallback to current scene root or global root
-	if resources_node == null:
-		resources_node = get_tree().current_scene if get_tree().current_scene else get_tree().root
-
-	# set position and z_index (Y-sort by Y)
+	# set global position first (so Y calculations use world coords)
 	world_item.global_position = spawn_pos
-	if "z_index" in world_item:
-		world_item.z_index = int(spawn_pos.y)
 
-	# add under resources node so it's in the visible world layer
-	resources_node.add_child(world_item)
+	# choose parent using helper
+	var parent := _get_world_ysort_parent()
+	if parent == null:
+		parent = get_tree().current_scene if get_tree().current_scene else get_tree().root
+
+	# Robust YSort detection: check class name, heuristic method, or node name
+	var parent_is_ysort := false
+	if parent != null:
+		var cls := ""
+		if parent.has_method("get_class"):
+			cls = parent.get_class()
+		# check common indicators
+		parent_is_ysort = (cls == "YSort") or parent.has_method("sort_children") or (str(parent.name).to_lower().find("y-sort") != -1)
+
+	# If parent is NOT a YSort, set z_index so manual ordering still works.
+	if not parent_is_ysort:
+		# prefer a z_index near the y to keep visual ordering; +1 to avoid being behind ground
+		if "z_index" in world_item:
+			world_item.z_index = int(spawn_pos.y) + 1
+
+	# add to chosen parent (YSort will sort automatically by global y)
+	parent.add_child(world_item)
 
 # ---------------------------
 # Drag & drop handling
@@ -628,3 +636,26 @@ func _show_message_deferred(text: String) -> void:
 		if is_instance_valid(message_label):
 			message_label.hide()
 			print("[Inv_UI] message_label hidden after animation"))
+
+# Preferred parent for world drops: prefer current_scene/Y-Sort -> root/world/Y-Sort -> world/layers/Resources -> current_scene -> root
+func _get_world_ysort_parent() -> Node:
+	var world_scene := get_tree().current_scene
+	if world_scene:
+		var ysort := world_scene.get_node_or_null("Y-Sort")
+		if ysort:
+			return ysort
+
+	# fallback to root path "world/Y-Sort"
+	var root_ysort := get_tree().root.get_node_or_null("world/Y-Sort")
+	if root_ysort:
+		return root_ysort
+
+	# older project layout fallback
+	var resources_node := get_tree().root.get_node_or_null("world/layers/Resources")
+	if resources_node:
+		return resources_node
+
+	# last resorts
+	if world_scene:
+		return world_scene
+	return get_tree().root
