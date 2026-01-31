@@ -30,7 +30,6 @@ func _ready():
 		print("[WorldItem] ⚠ item is null")
 
 	name = item.name if item else name
-	z_index = int(position.y)
 
 	# Check that signal connections exist
 	if not is_connected("body_entered", Callable(self, "_on_body_entered")):

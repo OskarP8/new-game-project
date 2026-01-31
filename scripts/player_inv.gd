@@ -120,32 +120,6 @@ func update_slots() -> void:
 		item_stack.update()
 
 # Helper: place a world item under the world's Resources/YSort node and set z_index
-func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
-	# set global position first (so Y calculations use world coords)
-	world_item.global_position = spawn_pos
-
-	# choose parent using helper
-	var parent := _get_world_ysort_parent()
-	if parent == null:
-		parent = get_tree().current_scene if get_tree().current_scene else get_tree().root
-
-	# Robust YSort detection: check class name, heuristic method, or node name
-	var parent_is_ysort := false
-	if parent != null:
-		var cls := ""
-		if parent.has_method("get_class"):
-			cls = parent.get_class()
-		# check common indicators
-		parent_is_ysort = (cls == "YSort") or parent.has_method("sort_children") or (str(parent.name).to_lower().find("y-sort") != -1)
-
-	# If parent is NOT a YSort, set z_index so manual ordering still works.
-	if not parent_is_ysort:
-		# prefer a z_index near the y to keep visual ordering; +1 to avoid being behind ground
-		if "z_index" in world_item:
-			world_item.z_index = int(spawn_pos.y) + 1
-
-	# add to chosen parent (YSort will sort automatically by global y)
-	parent.add_child(world_item)
 
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	# Basic guard
@@ -679,25 +653,76 @@ func _update_item_in_hand():
 	# force visual update just in case (avoids frame ordering issues)
 	ghost_item.call_deferred("update")
 
-# Preferred parent for world drops: prefer current_scene/Y-Sort -> root/world/Y-Sort -> world/layers/Resources -> current_scene -> root
+# --- replace your _spawn_world_item with this ---
+func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
+	# set global position first (so YSort/global-y logic works)
+	world_item.global_position = spawn_pos
+
+	# choose parent using helper (prefer a real YSort node)
+	var parent := _get_world_ysort_parent()
+	if parent == null:
+		parent = get_tree().current_scene if get_tree().current_scene else get_tree().root
+
+	# add to chosen parent (we do NOT touch z_index at all)
+	parent.add_child(world_item)
+
+	# DEBUG: print what we parented under and any z_index present
+	var parent_desc := "%s (class=%s)" % [parent.name if parent and parent.has_method("get_name") else str(parent), (parent.get_class() if parent and parent.has_method("get_class") else "Unknown")]
+	print("[spawn_world_item] parent ->", parent_desc)
+	if "z_index" in world_item:
+		print("[spawn_world_item] world_item.z_index =", world_item.z_index, " — NOTE: spawn helper does not change this.")
+	else:
+		print("[spawn_world_item] world_item has no z_index property")
+
+# --- replace your _get_world_ysort_parent with this ---
 func _get_world_ysort_parent() -> Node:
 	var world_scene := get_tree().current_scene
+
+	# 1) try common names on current scene (exact)
 	if world_scene:
-		var ysort := world_scene.get_node_or_null("Y-Sort")
-		if ysort:
-			return ysort
+		var named := ["YSort", "Y-Sort", "y_sort", "y-sort", "ySort"]
+		for n in named:
+			var candidate := world_scene.get_node_or_null(n)
+			if candidate:
+				# ensure candidate really is a YSort (class check)
+				if candidate.has_method("get_class") and candidate.get_class() == "YSort":
+					return candidate
+				# if it's named that but not a YSort, still return it (project layouts vary)
+				return candidate
 
-	# fallback to root path "world/Y-Sort"
-	var root_ysort := get_tree().root.get_node_or_null("world/Y-Sort")
-	if root_ysort:
-		return root_ysort
+	# 2) try to find any descendant whose class is YSort (recursive)
+	if world_scene:
+		var found := _find_first_ysort_recursive(world_scene)
+		if found:
+			return found
 
-	# older project layout fallback
+	# 3) fallback to common root paths
+	var root_paths := [
+		"world/Y-Sort", "world/YSort", "world/layers/Y-Sort", "world/layers/YSort", "world/layers/Resources"
+	]
+	for p in root_paths:
+		var node := get_tree().root.get_node_or_null(p)
+		if node:
+			return node
+
+	# 4) older layout fallback
 	var resources_node := get_tree().root.get_node_or_null("world/layers/Resources")
 	if resources_node:
 		return resources_node
 
-	# last resorts
+	# 5) last resorts
 	if world_scene:
 		return world_scene
 	return get_tree().root
+
+
+func _find_first_ysort_recursive(node: Node) -> Node:
+	for child in node.get_children():
+		if child == null:
+			continue
+		if child.has_method("get_class") and child.get_class() == "Y-Sort":
+			return child
+		var deeper := _find_first_ysort_recursive(child)
+		if deeper:
+			return deeper
+	return null

@@ -157,34 +157,6 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 
 	_update_item_in_hand()
 
-# Helper: place a world item under the world's Resources/YSort node and set z_index
-func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
-	# set global position first (so Y calculations use world coords)
-	world_item.global_position = spawn_pos
-
-	# choose parent using helper
-	var parent := _get_world_ysort_parent()
-	if parent == null:
-		parent = get_tree().current_scene if get_tree().current_scene else get_tree().root
-
-	# Robust YSort detection: check class name, heuristic method, or node name
-	var parent_is_ysort := false
-	if parent != null:
-		var cls := ""
-		if parent.has_method("get_class"):
-			cls = parent.get_class()
-		# check common indicators
-		parent_is_ysort = (cls == "YSort") or parent.has_method("sort_children") or (str(parent.name).to_lower().find("y-sort") != -1)
-
-	# If parent is NOT a YSort, set z_index so manual ordering still works.
-	if not parent_is_ysort:
-		# prefer a z_index near the y to keep visual ordering; +1 to avoid being behind ground
-		if "z_index" in world_item:
-			world_item.z_index = int(spawn_pos.y) + 1
-
-	# add to chosen parent (YSort will sort automatically by global y)
-	parent.add_child(world_item)
-
 # ---------------------------
 # Drag & drop handling
 # ---------------------------
@@ -341,7 +313,7 @@ func _unhandled_input(event: InputEvent) -> void:
 						player_inv.update_slots()
 					break
 
-		# 3️⃣ Drop outside → spawn world drop
+		# 3️⃣ Drop outside → spawn world drop (REPLACEMENT)
 		if not dropped and moving_item:
 			# detect whether mouse is over UI background; if so restore
 			var ui_under_mouse := false
@@ -368,18 +340,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				# Set texture safely (prefer 'texture' over 'icon')
 				if moving_item.texture and world_item.has_node("Sprite2D"):
 					world_item.get_node("Sprite2D").texture = moving_item.texture
-					world_item.world_texture = moving_item.texture if "world_texture" in world_item else null
+					if "world_texture" in world_item:
+						world_item.world_texture = moving_item.texture
 				elif moving_item.icon and world_item.has_node("Sprite2D"):
 					world_item.get_node("Sprite2D").texture = moving_item.icon
-					world_item.world_texture = moving_item.icon if "world_texture" in world_item else null
-
-				# Choose best parent: prefer world/layers/Resources (common project layout), fallback to current_scene
-				var resources_node := get_tree().root.get_node_or_null("world/layers/Resources")
-				if resources_node == null:
-					# try other common paths
-					resources_node = get_tree().current_scene
-				# Add to the world layer so it is not under the UI/background
-				resources_node.add_child(world_item)
+					if "world_texture" in world_item:
+						world_item.world_texture = moving_item.icon
 
 				# Place near player (global coords) or mouse as fallback
 				var spawn_pos: Vector2
@@ -389,16 +355,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					spawn_pos = mouse_pos
 
-				world_item.global_position = spawn_pos
-
-				# IMPORTANT: set z_index (helps YSort or manual z ordering)
-				# Force dropped items to appear above background (-1). Always use z_index 0.
-				if world_item is Node2D:
-					world_item.z_index = 0
-				elif "z_index" in world_item:
-					world_item.z_index = 0
+				# Use your YSort-aware helper to parent the world item (DO NOT set z_index here)
+				_spawn_world_item(world_item, spawn_pos)
 
 				print("[inv_ui] 🌍 Dropped item near player at:", world_item.global_position)
+				print("[inv_ui] 🌍 Dropped item near player:", moving_item.name)
 				dropped = true
 
 				print("[inv_ui] 🌍 Dropped item near player:", moving_item.name)
@@ -637,25 +598,63 @@ func _show_message_deferred(text: String) -> void:
 			message_label.hide()
 			print("[Inv_UI] message_label hidden after animation"))
 
-# Preferred parent for world drops: prefer current_scene/Y-Sort -> root/world/Y-Sort -> world/layers/Resources -> current_scene -> root
+func _spawn_world_item(world_item: Node2D, spawn_pos: Vector2) -> void:
+	# set global position first (so any YSort/global-y logic works)
+	world_item.global_position = spawn_pos
+
+	# choose parent using helper (prefer a YSort node)
+	var parent := _get_world_ysort_parent()
+	if parent == null:
+		parent = get_tree().current_scene if get_tree().current_scene else get_tree().root
+
+	# add to chosen parent (if it's a YSort it will sort automatically)
+	parent.add_child(world_item)
+
+	# debug hint
+	print("[spawn_world_item] parent:", parent, " class:", (parent.get_class() if parent and parent.has_method("get_class") else "Unknown"))
+
 func _get_world_ysort_parent() -> Node:
 	var world_scene := get_tree().current_scene
+
+	# 1) Try obvious names on the current scene (exact)
 	if world_scene:
-		var ysort := world_scene.get_node_or_null("Y-Sort")
-		if ysort:
-			return ysort
+		var named := ["YSort", "Y-Sort", "y_sort", "y-sort", "ySort"]
+		for n in named:
+			var candidate := world_scene.get_node_or_null(n)
+			if candidate:
+				# prefer a true YSort node
+				if candidate.has_method("get_class") and candidate.get_class() == "YSort":
+					return candidate
+				# if the node is present and named that way, return it as fallback
+				return candidate
 
-	# fallback to root path "world/Y-Sort"
-	var root_ysort := get_tree().root.get_node_or_null("world/Y-Sort")
-	if root_ysort:
-		return root_ysort
+		# 2) recursive search for actual YSort class
+		var found := _find_first_ysort_recursive(world_scene)
+		if found:
+			return found
 
-	# older project layout fallback
-	var resources_node := get_tree().root.get_node_or_null("world/layers/Resources")
-	if resources_node:
-		return resources_node
+	# 3) fallback to root paths commonly used
+	var root_paths := ["world/Y-Sort", "world/YSort", "world/layers/Y-Sort", "world/layers/YSort", "world/layers/Resources"]
+	for p in root_paths:
+		var node := get_tree().root.get_node_or_null(p)
+		if node:
+			# prefer true YSort if it is one
+			if node.has_method("get_class") and node.get_class() == "YSort":
+				return node
+			return node
 
 	# last resorts
 	if world_scene:
 		return world_scene
 	return get_tree().root
+
+func _find_first_ysort_recursive(node: Node) -> Node:
+	for child in node.get_children():
+		if child == null:
+			continue
+		if child.has_method("get_class") and child.get_class() == "YSort":
+			return child
+		var deeper := _find_first_ysort_recursive(child)
+		if deeper:
+			return deeper
+	return null
