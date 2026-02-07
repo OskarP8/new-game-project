@@ -57,6 +57,10 @@ func _ready() -> void:
 	# now load existing save (with registry ready)
 	load_save()
 	print("[GAMESTATE] saved_main_inventory len:", saved_main_inventory.size())
+	# after load_save() inside _ready()
+	if saved_main_inventory != null and saved_main_inventory.size() > 0:
+		print("[GameState] saved_main_inventory present -> scheduling deferred restore to Inv_UI")
+		_deferred_restore_main_inventory_wait()  # async runner will await frames and call restore_main_inventory_to_ui()
 
 	# Connect to about_to_quit so clicking X triggers a save (defensive)
 	var t = get_tree()
@@ -75,7 +79,7 @@ func _save_err_str(code: int) -> String:
 		_:
 			return str(code)
 
-# safer auto-register that prints what script a .tres references
+# ---------- REPLACE _auto_register_items_from_folder ----------
 func _auto_register_items_from_folder(folder_path: String = "res://resources") -> void:
 	var dir := DirAccess.open(folder_path)
 	if dir == null:
@@ -93,27 +97,38 @@ func _auto_register_items_from_folder(folder_path: String = "res://resources") -
 			if not full.ends_with("/"):
 				full += "/"
 			full += fname
+			if not ResourceLoader.exists(full):
+				fname = dir.get_next()
+				continue
 			var r := ResourceLoader.load(full)
 			if r == null:
 				print("[GameState] _auto_register: failed load:", full)
 			else:
-				# print diagnostics
+				# Quick diagnostics
 				var script_path := "NONE"
 				if r.has_method("get_script") and r.get_script() != null:
 					var sr = r.get_script()
 					script_path = sr.resource_path if "resource_path" in sr else str(sr)
-				print("[GameState] _auto_register: loaded_as:", r.get_class(), "script:", script_path)
-				# register if resource looks like our InvItem
+				print("[GameState] _auto_register: loaded_as:", r.get_class(), "script:", script_path, "path:", full)
+
+				# Only register if it looks like an inventory item
 				if _is_invitem_like(r):
-					# register by full resource path
+					# store resource object under its resource path (preferred)
 					item_registry[full] = r
 					registered += 1
-					# also register by scene_path if present
-					if ("scene_path" in r) and str(r.scene_path) != "":
+
+					# if item exposes scene_path, map that too
+					if "scene_path" in r and str(r.scene_path) != "":
 						item_registry[str(r.scene_path)] = r
-					# *** NEW: register by id if resource exposes it (prefer id lookups) ***
+
+					# if item exposes id, map id -> resource for fast id lookups
 					if "id" in r and str(r.id) != "":
 						item_registry[str(r.id)] = r
+
+					# also map simple basename keys for looser matching
+					if "resource_path" in r and str(r.resource_path) != "":
+						var bn := str(r.resource_path).get_file()
+						item_registry[bn] = r
 		fname = dir.get_next()
 	dir.list_dir_end()
 	print("[GameState] _auto_register_items_from_folder: registered", registered, "items from", folder_path)
@@ -135,7 +150,15 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 	var inv_ui = root.find_child("Inv_UI", true, false) if root else null
 	# Prefer synchronous flush for deterministic snapshot (avoid call_deferred race)
 	var inv_ui_for_save = null
-	
+		# If we have an in-memory canonical saved_main_inventory (from load_save),
+	# prefer not to overwrite it with an empty snapshot during scene transitions.
+	if not force and saved_main_inventory != null and saved_main_inventory.size() > 0:
+		# if inv_ui exists but its slots size is zero (still initializing), skip using it now
+		if inv_ui and inv_ui.inv and "slots" in inv_ui.inv and inv_ui.inv.slots.size() == 0:
+			print("[GameState] save_game: Inv_UI.inv slots==0 during save — using saved_main_inventory fallback to avoid clobber")
+			# copy saved arrays into the save_res later by setting inventory_array/main_array appropriately
+			# (the remainder of save_game already supports using saved_inventory/saved_main_inventory as fallbacks)
+
 	print("[GameState] save_game() snapshot start — GameState id:", self.get_instance_id())
 	print_debug("[GameState] found inv_ui node:", inv_ui, " player_node:", player_node)
 	if player_node and player_node.has_method("get_inventory"):
@@ -191,24 +214,17 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 	save_res.position = pos if pos != null else Vector2.ZERO
 	save_res.saved_at_unix = Time.get_unix_time_from_system()
 
+	# ---------- REPLACE START ----------
 	var inventory_array: Array = []
 
-	if player_snapshot and player_snapshot.size() > 0:
-		inventory_array = player_snapshot.duplicate(true)
-		print_debug("[GameState] using player snapshot for save; len:", inventory_array.size())
-
-	if inventory_array.size() == 0 and inv_ui_for_save and inv_ui_for_save.inv and "slots" in inv_ui_for_save.inv and inv_ui_for_save.inv.slots.size() > 0:
-		print_debug("[GameState] building inventory_array from Inv_UI.inv.slots (authoritative)")
+	# Prefer Inv_UI.inv (authoritative) if present: clone early to avoid races
+	if inv_ui_for_save and inv_ui_for_save.inv and "slots" in inv_ui_for_save.inv and inv_ui_for_save.inv.slots.size() > 0:
+		print_debug("[GameState] using Inv_UI.inv (authoritative) for inventory snapshot; cloning slots early")
+		# clone into a plain array of dicts now (so changing runtime resources won't affect this snapshot)
 		for slot in inv_ui_for_save.inv.slots:
 			if slot == null or slot.item == null:
 				inventory_array.append({"scene_path":"", "amount":0})
 				continue
-			# debug: show if slot.item present and its type/path
-			if slot.item == null:
-				print_debug("[GameState] save: slot.item == NULL (empty slot)")
-			else:
-				var _it = slot.item
-				print_debug("[GameState] save: slot.item present -> class:", (_it.get_class() if _it else "NULL"), "id:", (_it.id if "id" in _it else "NO_ID"), "resource_path:", (_it.resource_path if "resource_path" in _it else "NO_RP"), "scene_path:", (_it.scene_path if "scene_path" in _it else "NO_SCENE"))
 
 			var item_obj = slot.item
 			var item_path := ""
@@ -224,6 +240,12 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 				item_path = "unknown"
 			inventory_array.append({"scene_path": item_path, "amount": int(slot.amount if "amount" in slot else 1)})
 
+	# If no UI present, try player snapshot (legacy/fallback)
+	elif player_snapshot and player_snapshot.size() > 0:
+		print_debug("[GameState] using player snapshot for save; len:", player_snapshot.size())
+		inventory_array = player_snapshot.duplicate(true)
+
+	# Final fallbacks (use last-known saved in-memory or on-disk to avoid clobbering)
 	if inventory_array.size() == 0:
 		if saved_inventory != null and saved_inventory.size() > 0:
 			inventory_array = saved_inventory.duplicate(true)
@@ -235,7 +257,7 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 				print("[GameState] save_game: fallback -> using on-disk inventory to avoid clobbering.")
 			else:
 				print("[GameState] save_game: WARNING - no inventory data available; will write empties.")
-
+	# clamp to player_slot_count as before
 	if player_slot_count > 0 and inventory_array.size() != player_slot_count:
 		var new_arr: Array = []
 		for i in range(player_slot_count):
@@ -247,6 +269,7 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 		print_debug("[GameState] clamped inventory_array to player_slot_count:", player_slot_count)
 
 	save_res.inventory = inventory_array.duplicate(true)
+	# ---------- REPLACE END ----------
 
 	var main_array: Array = []
 	if inv_ui_for_save and inv_ui_for_save.inv and "slots" in inv_ui_for_save.inv and inv_ui_for_save.inv.slots.size() > 0:
@@ -522,8 +545,32 @@ func restore_main_inventory_to_ui() -> void:
 		var item_path := str(e.get("scene_path", ""))
 		var amount := int(e.get("amount", 0))
 		var item_res: Resource = null
-		# (resolve item_res same as before...)
-		# [keep your lookup code]
+		# --- resolve item_res robustly (id:, name:, scene:, resource path) ---
+		if item_path.begins_with("id:"):
+			item_res = _lookup_item_by_id(item_path.substr(3, item_path.length()))
+		elif item_path.begins_with("name:"):
+			item_res = _lookup_item_by_name(item_path.substr(5, item_path.length()))
+		elif item_path.begins_with("scene:"):
+			var scene_p := item_path.substr(6, item_path.length())
+			item_res = _find_invitem_for_scene(scene_p)
+			# second attempt: maybe the registry contains a mapping for the scene path
+			if item_res == null and item_registry.has(scene_p):
+				var reg_entry = item_registry[scene_p]    # renamed to avoid shadowing
+				if typeof(reg_entry) == TYPE_OBJECT:
+					item_res = reg_entry
+				elif typeof(reg_entry) == TYPE_STRING and ResourceLoader.exists(str(reg_entry)):
+					item_res = ResourceLoader.load(str(reg_entry))
+		elif item_path != "" and ResourceLoader.exists(item_path):
+			var loaded = ResourceLoader.load(item_path)
+			# prefer .tres or resource; if it's a PackedScene try to map to an InvItem resource
+			if loaded is PackedScene:
+				item_res = _find_invitem_for_scene(item_path)
+			else:
+				item_res = loaded
+		else:
+			# last resort: lookup by registered name
+			item_res = _lookup_item_by_name(item_path)
+
 		var slot = inv_res.slots[i]
 		if item_res != null and _is_invitem_like(item_res):
 			slot.item = item_res
@@ -540,31 +587,63 @@ func restore_main_inventory_to_ui() -> void:
 	# emit inventory_changed so any listeners (autosave) respond
 	if inv_ui.has_signal("inventory_changed"):
 		inv_ui.emit_signal("inventory_changed")
+
+	# --- ENSURE PLAYER REFERENCES SAME RESOURCE (important to avoid race/clobber) ---
+	var player_node = root.find_child("Player", true, false)
+	if player_node != null:
+		# If Player stores the inventory as a property named `inventory`, overwrite so both point to same resource.
+		# This is safe: we've already populated inv_res.slots exactly as desired.
+		if "inventory" in player_node:
+			player_node.inventory = inv_res
+			print("[GameState] restore_main_inventory_to_ui: assigned Inv_UI.inv to Player.inventory (shared resource)")
+		# If player provides a setter method, use it (defensive)
+		elif player_node.has_method("set_inventory_from_snapshot"):
+			# convert saved_main_inventory into player's snapshot API to set cleanly
+			player_node.set_inventory_from_snapshot(saved_main_inventory)
+			print("[GameState] restore_main_inventory_to_ui: applied saved_main_inventory via player.set_inventory_from_snapshot()")
+
 	print("[GameState] restore_main_inventory_to_ui: applied", saved_main_inventory.size(), "items")
 
 # Register an item so lookups work (call from _ready or editor initialization)
+# ---------- REPLACE register_item ----------
 func register_item(id: String, item_res_or_path) -> void:
+	if id == "" or item_res_or_path == null:
+		return
+	# If caller passed a path string and it exists, load and store the Resource
 	if typeof(item_res_or_path) == TYPE_STRING:
+		var p = str(item_res_or_path).strip_edges()
+		if ResourceLoader.exists(p):
+			var loaded = ResourceLoader.load(p)
+			if loaded != null:
+				item_registry[id] = loaded
+				# also map by resource_path and scene_path if available
+				item_registry[p] = loaded
+				if "scene_path" in loaded and str(loaded.scene_path) != "":
+					item_registry[str(loaded.scene_path)] = loaded
+				if "id" in loaded and str(loaded.id) != "":
+					item_registry[str(loaded.id)] = loaded
+				return
+		# fallback: store the raw string (useful for non-existent paths or editor registrations)
 		item_registry[id] = str(item_res_or_path)
-	else:
-		item_registry[id] = item_res_or_path
+		return
+
+	# If a Resource/object was passed, store it
+	item_registry[id] = item_res_or_path
+	# map by a few useful keys as well
+	if "resource_path" in item_res_or_path and str(item_res_or_path.resource_path) != "":
+		item_registry[str(item_res_or_path.resource_path)] = item_res_or_path
+	if "scene_path" in item_res_or_path and str(item_res_or_path.scene_path) != "":
+		item_registry[str(item_res_or_path.scene_path)] = item_res_or_path
+	if "id" in item_res_or_path and str(item_res_or_path.id) != "":
+		item_registry[str(item_res_or_path.id)] = item_res_or_path
 
 # Lookup by id (returns Resource or null)
+# ---------- REPLACE _lookup_item_by_id ----------
 func _lookup_item_by_id(id_str: String) -> Resource:
-	if id_str == "":
+	if id_str == "" or id_str == null:
 		return null
-	if not item_registry.has(id_str):
-		return null
-	var entry = item_registry[id_str]
-	# if it's a path, try loading; if already Resource, return it
-	if typeof(entry) == TYPE_STRING:
-		var p = str(entry)
-		if ResourceLoader.exists(p):
-			return ResourceLoader.load(p)
-		else:
-			return null
-	else:
-		return entry
+	# prefer new robust finder
+	return find_invitem_by_id(id_str)
 
 # Lookup by name (tries to find a registered item whose resource has a name property or matches)
 func _lookup_item_by_name(name_str: String) -> Resource:
@@ -642,6 +721,7 @@ func is_chest_opened(chest_id: String) -> bool:
 	return opened_chests.has(chest_id)
 
 # Restore saved inventory array (call from Player._ready when player exists)
+# Replace restore_inventory_to_player with this robust version
 func restore_inventory_to_player(player: Node) -> void:
 	if player == null:
 		return
@@ -649,11 +729,18 @@ func restore_inventory_to_player(player: Node) -> void:
 		print("[GameState] no saved_inventory to restore")
 		return
 
+	# Try to obtain the player's inventory resource (may not be ready yet)
 	var inv_res = null
 	if player.has_method("get_inventory"):
 		inv_res = player.get_inventory()
 	elif "inventory" in player:
 		inv_res = player.inventory
+
+	# If inv_res is null or has zero slots, defer & retry a few frames (common during scene change)
+	if inv_res == null or not ("slots" in inv_res) or inv_res.slots.size() == 0:
+		# schedule an async retry that waits up to a few frames
+		_deferred_restore_inventory_wait(player)
+		return
 
 	# Prefer player's public API if available
 	if player.has_method("add_to_inventory"):
@@ -662,63 +749,41 @@ func restore_inventory_to_player(player: Node) -> void:
 				continue
 			var amount_val := int(e.get("amount", 0))
 			var item_path := str(e.get("scene_path", ""))
-			# resolve item_path robustly (drop into restore_inventory_to_player and restore_main_inventory_to_ui)
 			var item_res: Resource = null
+
+			# resolve item_path robustly
 			if item_path.begins_with("id:"):
 				item_res = _lookup_item_by_id(item_path.substr(3, item_path.length()))
 			elif item_path.begins_with("name:"):
 				item_res = _lookup_item_by_name(item_path.substr(5, item_path.length()))
 			elif item_path.begins_with("scene:"):
-				# saved explicit scene path, try to map to an InvItem resource
 				var scene_p := item_path.substr(6, item_path.length())
 				item_res = _find_invitem_for_scene(scene_p)
-				if item_res == null:
-					# maybe there is an actual .tres next to the scene with a known naming pattern
-					item_res = _find_invitem_for_scene(scene_p) # second attempt (keeps behavior consistent)
 			elif item_path != "" and ResourceLoader.exists(item_path):
 				var loaded = ResourceLoader.load(item_path)
 				if loaded is PackedScene:
-					# saved a scene file by accident - try to map to a .tres InvItem
 					item_res = _find_invitem_for_scene(item_path)
-					if item_res == null:
-						print("[GameState.restore] WARNING: saved item was a PackedScene and no matching InvItem resource found for:", item_path)
 				else:
 					item_res = loaded
 			else:
-				# as last resort try name lookup
 				item_res = _lookup_item_by_name(item_path)
 
-			# --- Robust restore: safe-call player.add_to_inventory only with proper InvItem resource ---
-			if item_res != null:
-				# If we accidentally loaded a PackedScene (scene file), avoid passing it to add_to_inventory().
-				# Prefer to call a fallback API on the player if available that accepts a path/scene.
-				if item_res is PackedScene:
-					# Prefer a player API that accepts a path/identifier if present
-					if player.has_method("add_to_inventory_by_path"):
-						player.add_to_inventory_by_path(item_path, amount_val)
-						continue
-					else:
-						print("[GameState.restore] WARNING: item_path resolved to PackedScene, skipping direct add_to_inventory():", item_path)
-						# optionally try to find an InvItem inside the scene? Skip for now.
-						continue
-
-				# Otherwise it's a resource that should be compatible (InvItem)
-				# Defensive type-check: if it's not the expected resource type, try fallback
-				# (you can replace "InvItem" with your actual class name if different)
-				if typeof(item_res) == TYPE_OBJECT and _is_invitem_like(item_res):
-					player.add_to_inventory(item_res, amount_val)
+			# Only call add_to_inventory if we actually have an InvItem-like Resource
+			if item_res != null and _is_invitem_like(item_res) and not (item_res is PackedScene):
+				player.add_to_inventory(item_res, amount_val)
+			else:
+				# If player accepts add_by_path, try fallback string-based add
+				if player.has_method("add_to_inventory_by_path") and item_path != "":
+					player.add_to_inventory_by_path(item_path, amount_val)
+				elif item_res != null and item_res is PackedScene and player.has_method("add_to_inventory_by_path"):
+					# packed scene persisted accidentally; pass path fallback
+					player.add_to_inventory_by_path(item_path, amount_val)
 				else:
-					# fallback...
-
-					# If player's API accepts an identifier string, try that
-					if player.has_method("add_to_inventory_by_path"):
-						player.add_to_inventory_by_path(item_path, amount_val)
-					else:
-						# Final fallback: try to pass resource but warn if it fails at runtime
-						print("[GameState.restore] WARNING: item_res not an InvItem and no add_to_inventory_by_path available:", item_path)
+					if item_res != null:
+						print("[GameState.restore] WARNING: could not add item (not inv-like) path:", item_path)
 
 	else:
-		# direct population fallback: replace inv.slots contents
+		# direct population fallback: mutate inv.slots only when ready
 		if inv_res != null and "slots" in inv_res:
 			inv_res.slots.clear()
 			for e in saved_inventory:
@@ -726,7 +791,6 @@ func restore_inventory_to_player(player: Node) -> void:
 					continue
 				var item_path := str(e.get("scene_path", ""))
 				var item_res = null
-				# Try to resolve to an InvItem resource (resource path .tres) OR use registry lookup by id/name
 				if item_path.begins_with("id:"):
 					item_res = _lookup_item_by_id(item_path.substr(3, item_path.length()))
 				elif item_path.begins_with("name:"):
@@ -734,10 +798,7 @@ func restore_inventory_to_player(player: Node) -> void:
 				elif item_path != "" and ResourceLoader.exists(item_path):
 					var loaded = ResourceLoader.load(item_path)
 					if loaded is PackedScene:
-						# saved a scene path — try to find InvItem resource mapped to that scene
 						item_res = _find_invitem_for_scene(item_path)
-						if item_res == null:
-							print("[GameState.restore] WARNING: saved item was a PackedScene and no matching InvItem resource found for:", item_path)
 					else:
 						item_res = loaded
 
@@ -749,13 +810,37 @@ func restore_inventory_to_player(player: Node) -> void:
 					slot.item = null
 					slot.amount = int(e.get("amount", 0)) if item_res != null else 0
 				inv_res.slots.append(slot)
-	# after restoring, update the player's UI & equipment
+
+	# after restoring, update player's visuals safely
 	if player.has_method("refresh_equipped_weapon_from_inventory"):
 		player.call_deferred("refresh_equipped_weapon_from_inventory")
 	if player.has_method("update_weapon_visuals"):
 		player.call_deferred("update_weapon_visuals")
-	# If you have an inventory UI instance, call its update_slots() too (or rely on its signal)
 	print("[GameState] restore_inventory_to_player: applied", saved_inventory.size(), "items")
+
+# Helper: wait a few frames then attempt restore again (non-blocking)
+func _deferred_restore_inventory_wait(player: Node, attempts: int = 6) -> void:
+	# This is a small async runner that yields a frame per attempt and retries
+	# It will return early if player disappears or inventory becomes valid.
+	# (Use 'async' style via await)
+	for i in range(attempts):
+		# if player was freed, abort
+		if not is_instance_valid(player):
+			print("[GameState] _deferred_restore_inventory_wait: player invalid, aborting")
+			return
+		await get_tree().process_frame
+		# try again to get inventory
+		var inv_res = null
+		if player.has_method("get_inventory"):
+			inv_res = player.get_inventory()
+		elif "inventory" in player:
+			inv_res = player.inventory
+		if inv_res != null and "slots" in inv_res and inv_res.slots.size() > 0:
+			# Found a valid inventory — call this same function synchronously to apply saved state
+			restore_inventory_to_player(player)
+			return
+	# final attempt failed
+	print("[GameState] _deferred_restore_inventory_wait: inventory not ready after", attempts, "frames; skipping restore to avoid clobbering.")
 
 # Overwrite save with an empty SaveData resource (safer than attempting to delete file)
 func delete_save_file() -> void:
@@ -1025,3 +1110,79 @@ func _dbg_print_save_contents(save_res):
 	print("[GameState DEBUG] save_res.main_inventory size:", save_res.main_inventory.size())
 	for j in range(M):
 		print("  [main][%d] %s" % [j, str(save_res.main_inventory[j])])
+
+# ---------- NEW: find_invitem_by_id (robust id -> Resource finder) ----------
+func find_invitem_by_id(id_str: String) -> Resource:
+	if id_str == "" or id_str == null:
+		return null
+
+	# 1) direct registry lookup (value may already be Resource)
+	if item_registry.has(id_str):
+		var entry = item_registry[id_str]
+		if typeof(entry) == TYPE_OBJECT and entry != null:
+			return entry
+		elif typeof(entry) == TYPE_STRING:
+			var p := str(entry)
+			if p != "" and ResourceLoader.exists(p):
+				var loaded = ResourceLoader.load(p)
+				if loaded != null and _is_invitem_like(loaded):
+					# cache the loaded resource for future
+					item_registry[id_str] = loaded
+					return loaded
+
+	# 2) try keys that equal id (some registry keys may be stored differently)
+	for k in item_registry.keys():
+		if str(k) == id_str:
+			var e = item_registry[k]
+			if typeof(e) == TYPE_OBJECT:
+				return e
+			elif typeof(e) == TYPE_STRING and ResourceLoader.exists(str(e)):
+				var ld = ResourceLoader.load(str(e))
+				if ld != null and _is_invitem_like(ld):
+					item_registry[id_str] = ld
+					return ld
+
+	# 3) fallback: scan cached resources for matching `id` property
+	for k in item_registry.keys():
+		var entry = item_registry[k]
+		var cand = null
+		if typeof(entry) == TYPE_OBJECT and entry != null:
+			cand = entry
+		elif typeof(entry) == TYPE_STRING and ResourceLoader.exists(str(entry)):
+			cand = ResourceLoader.load(str(entry))
+		if cand != null and "id" in cand and str(cand.id) == id_str:
+			# cache with id key for faster future lookup
+			item_registry[id_str] = cand
+			return cand
+
+	# 4) brute force guess common resource name patterns (expensive but last resort)
+	var candidates := [
+		"res://resources/%s_res.tres" % id_str,
+		"res://resources/%s.tres" % id_str,
+		"res://resources/item_%s.tres" % id_str,
+		"res://resources/inv_%s.tres" % id_str
+	]
+	for p in candidates:
+		if ResourceLoader.exists(p):
+			var r = ResourceLoader.load(p)
+			if r != null and _is_invitem_like(r):
+				item_registry[id_str] = r
+				return r
+
+	return null
+
+# Add this to GameState.gd (near _deferred_restore_inventory_wait or other helpers)
+
+func _deferred_restore_main_inventory_wait(attempts: int = 18) -> void:
+	for i in range(attempts):
+		await get_tree().process_frame
+		var root = _get_root()
+		if root == null:
+			continue
+		var inv_ui = root.find_child("Inv_UI", true, false)
+		if inv_ui and inv_ui.inv and "slots" in inv_ui.inv:
+			# If inv has been created but is empty, still call restore (it will populate)
+			restore_main_inventory_to_ui()
+			return
+	# final attempt: call restore anyway (idempotent)
+	restore_main_inventory_to_ui()

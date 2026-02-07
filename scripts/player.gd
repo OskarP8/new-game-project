@@ -778,6 +778,9 @@ func get_inventory_slot_count() -> int:
 
 # Accepts plain snapshot array of dicts and writes into player's authoritative Inv resource
 func set_inventory_from_snapshot(arr: Array) -> void:
+	# Defensive verbose version to help debug why items become null during restore.
+	print("[player] set_inventory_from_snapshot: start; entries:", arr.size())
+
 	# Ensure inventory resource exists
 	if not inventory:
 		print("[player] set_inventory_from_snapshot: inventory resource missing; creating new Inv resource")
@@ -786,29 +789,98 @@ func set_inventory_from_snapshot(arr: Array) -> void:
 	# Resize inventory.slots and populate
 	if "slots" in inventory:
 		inventory.slots.clear()
-		for entry in arr:
+		for i in range(arr.size()):
+			var entry = arr[i]
 			var new_slot := InvSlot.new()
 			new_slot.amount = int(entry.get("amount", 0))
 			new_slot.item = null
-			var sp := str(entry.get("scene_path", "")).strip_edges()
-			# resolve "id:XXX"
+
+			var raw_sp := str(entry.get("scene_path", "")).strip_edges()
+			var sp := raw_sp
+			if sp == "":
+				print("\t[slot %d] scene_path empty -> leaving item null, amount=%d" % [i, new_slot.amount])
+				inventory.slots.append(new_slot)
+				continue
+
+			# If starts with "id:", extract id safely
 			if sp.begins_with("id:"):
-				var id_str = sp.substr(3, sp.length())
-				var found = _find_invitem_by_id(id_str) if has_method("_find_invitem_by_id") else null
+				var id_str := ""
+				# extract substring after "id:" cleanly
+				if sp.length() > 3:
+					id_str = sp.substr(3, sp.length() - 3)
+				else:
+					id_str = ""
+				print("\t[slot %d] resolving id -> '%s' (raw='%s')" % [i, id_str, sp])
+
+				# 1) Player-local finder (method on player)
+				var found = null
+				if has_method("_find_invitem_by_id"):
+					found = _find_invitem_by_id(id_str)
+					if found:
+						print("\t\tresolved via player._find_invitem_by_id ->", found)
+				# 2) GameState helper finder
+				if not found and has_node("/root/GameState"):
+					var gs = get_node("/root/GameState")
+					if gs and gs.has_method("find_invitem_by_id"):
+						found = gs.find_invitem_by_id(id_str)
+						if found:
+							print("\t\tresolved via GameState.find_invitem_by_id ->", found)
+				# 3) Try scanning GameState.registry as fallback
+				if not found and has_node("/root/GameState"):
+					var gs2 = get_node("/root/GameState")
+					if gs2 and "registry" in gs2 and gs2.registry:
+						for reg in gs2.registry:
+							if typeof(reg) == TYPE_OBJECT and reg != null and "id" in reg and str(reg.id) == id_str:
+								found = reg
+								print("\t\tresolved via GameState.registry resource ->", found)
+								break
+							elif typeof(reg) == TYPE_STRING:
+								if ResourceLoader.exists(reg):
+									var rtest = ResourceLoader.load(reg)
+									if rtest and "id" in rtest and str(rtest.id) == id_str:
+										found = rtest
+										print("\t\tresolved via GameState.registry path ->", reg)
+										break
+
 				if found:
 					new_slot.item = found
-			# try loading resource path
-			elif sp != "":
+					inventory.slots.append(new_slot)
+					continue
+
+				# Nothing found for id:
+				print("\t\t[slot %d] WARNING: could not resolve id '%s' -> leaving null" % [i, id_str])
+				inventory.slots.append(new_slot)
+				continue
+
+			# If not id: try loading as resource path
+			if sp != "":
+				print("\t[slot %d] trying resource path -> '%s'" % [i, sp])
+				# ResourceLoader expects a path like "res://...." — guard and attempt load
 				if ResourceLoader.exists(sp):
 					var loaded := ResourceLoader.load(sp)
 					if loaded:
 						new_slot.item = loaded
+						print("\t\tloaded resource ->", sp)
+					else:
+						print("\t\tResourceLoader.load returned null for", sp)
+				else:
+					print("\t\tResourceLoader.exists false for", sp, "- not a path I can load")
+				inventory.slots.append(new_slot)
+				continue
+
+			# fallback: unrecognized scene_path string
+			print("\t[slot %d] Unrecognized scene_path format: '%s' -> leaving null" % [i, raw_sp])
 			inventory.slots.append(new_slot)
 	else:
 		print("[player] set_inventory_from_snapshot: inventory resource does not have slots member")
+		return
 
 	# apply refresh locally (use our helper)
 	_refresh_after_inventory_change()
+	print("[player] set_inventory_from_snapshot: finished; inventory.slots:", inventory.slots.size())
+	for j in range(min(16, inventory.slots.size())):
+		var cs = inventory.slots[j]
+		print("\t[post %d] item:%s amount:%s" % [j, (cs.item if cs else "NULL"), (cs.amount if cs and 'amount' in cs else "NULL")])
 
 # -------------------------------------------------------------------------
 # EQUIP / UNEQUIP WEAPON
@@ -1336,31 +1408,47 @@ func refresh_equipped_weapon_from_inventory():
 # Uses GameState registry if present, then falls back to scanning any registry array found on GameState,
 # then tries to load a resource path matching common patterns.
 func _find_invitem_by_id(id_str: String) -> Resource:
-	# 1) Ask GameState if it exposes a finder
+	# 1) ask GameState if it has a finder
 	if has_node("/root/GameState"):
 		var gs = get_node("/root/GameState")
 		if gs and gs.has_method("find_invitem_by_id"):
-			var found = gs.find_invitem_by_id(id_str)
-			if found:
-				return found
+			var f = gs.find_invitem_by_id(id_str)
+			if f:
+				return f
 
-		# 2) Try to inspect a registry on GameState (best-effort)
+		# 2) inspect GameState.registry (accept resources OR strings)
 		if gs and "registry" in gs and gs.registry:
 			for entry in gs.registry:
-				# entry might be a Resource, a path string or a dictionary
+				# resource/object: check id property
 				if typeof(entry) == TYPE_OBJECT and entry != null:
-					# resource: check id property
 					if "id" in entry and str(entry.id) == id_str:
 						return entry
+				# string: either a path or bare id
 				elif typeof(entry) == TYPE_STRING:
-					# a path, try load and check
-					if ResourceLoader.exists(entry):
-						var r = ResourceLoader.load(entry)
+					var s = str(entry).strip_edges()
+					# if it's a path that exists -> load & check id
+					if ResourceLoader.exists(s):
+						var r = ResourceLoader.load(s)
 						if r and "id" in r and str(r.id) == id_str:
 							return r
+					# if the registry entry is exactly the id (e.g., "001"), try candidate paths
+					elif s == id_str:
+						var cand = [
+							"res://resources/%s_res.tres" % id_str,
+							"res://resources/%s.tres" % id_str,
+							"res://resources/item_%s.tres" % id_str,
+							"res://resources/inv_%s.tres" % id_str
+						]
+						for p in cand:
+							if ResourceLoader.exists(p):
+								var r2 = ResourceLoader.load(p)
+								if r2:
+									if "id" in r2 and str(r2.id) == id_str:
+										return r2
+									else:
+										return r2
 
-	# 3) Last resort: try common resource path patterns used in this project
-	#    e.g., res://resources/<name>_res.tres or res://resources/item_<id>.tres (adjust to your pattern)
+	# 3) last resort: brute-force candidate paths
 	var candidates := [
 		"res://resources/%s_res.tres" % id_str,
 		"res://resources/%s.tres" % id_str,
@@ -1369,14 +1457,12 @@ func _find_invitem_by_id(id_str: String) -> Resource:
 	]
 	for p in candidates:
 		if ResourceLoader.exists(p):
-			var r = ResourceLoader.load(p)
-			if r:
-				# If the resource itself has an id property, check it; otherwise return first loadable
-				if "id" in r:
-					if str(r.id) == id_str:
-						return r
+			var r3 = ResourceLoader.load(p)
+			if r3:
+				if "id" in r3 and str(r3.id) == id_str:
+					return r3
 				else:
-					return r
+					return r3
 
 	return null
 
