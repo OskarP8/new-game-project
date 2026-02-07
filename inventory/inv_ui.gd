@@ -19,10 +19,6 @@ signal slot_swapped(from_slot, to_slot)
 # ---------------------------
 func _ready():
 	print("[inv_ui][DBG READY] _ready() running; root children:", get_tree().root.get_child_count(), " groups Player->", get_tree().get_first_node_in_group("Player"))
-
-	# ensure slots array is fresh (avoid stale onready copy issues)
-	slots = $NinePatchRect/GridContainer.get_children()
-
 	drag_layer = CanvasLayer.new()
 	get_tree().root.call_deferred("add_child", drag_layer)
 
@@ -44,31 +40,20 @@ func _ready():
 		if gs and gs.has_method("restore_main_inventory_to_ui"):
 			gs.restore_main_inventory_to_ui()
 
-	# Connect GUI slots -> central handler (use slots array, not get_children())
-	for slot in slots:
+	for slot in get_children():
 		if slot is InvUISlot:
-			if not slot.is_connected("gui_input", Callable(self, "_on_slot_gui_input")):
-				slot.connect("gui_input", Callable(self, "_on_slot_gui_input"))
+			slot.connect("gui_input", Callable(self, "_on_slot_gui_input"))
 
 	connect("slot_swapped", Callable(self, "_on_slot_swapped"))
 
 	for i in range(slots.size()):
 		slots[i].index = i
 
-	# connect to inv resource signal and perform initial update (ensure inv.slots length matches UI)
+	# connect to inv resource signal and perform initial update
 	if inv:
-		# ensure inv.slots exists and matches UI size
-		if not "slots" in inv:
-			inv.slots = []
-		while inv.slots.size() < slots.size():
-			inv.slots.append(InvSlot.new())
-		while inv.slots.size() > slots.size():
-			inv.slots.pop_back()
-
 		if not inv.is_connected("inventory_changed", Callable(self, "update_slots")):
 			inv.connect("inventory_changed", Callable(self, "update_slots"))
 	update_slots()
-
 	# after binding inv in _ready()
 	print("[Inv_UI DEBUG] Inv_UI.inv:", inv, " resource_path:", (inv.resource_path if inv else "NULL"), " slots:", (inv.slots.size() if inv and 'slots' in inv else "NO_SLOTS"))
 	if inv and 'slots' in inv:
@@ -86,6 +71,7 @@ func _ready():
 		if slot and slot.has_method("update_visual"):
 			slot.update_visual()
 	close()
+
 
 func _process(_delta):
 	if Input.is_action_just_pressed("i"):
@@ -186,9 +172,6 @@ func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	if picked_slot:
 		picked_slot.item = null
 		picked_slot.amount = 0
-
-	# IMPORTANT: keep model in sync immediately after mutating inv
-	flush_to_model()
 
 	update_slots()
 	for slot in slots:
@@ -420,9 +403,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		ghost_item = null
 		picked_slot = null
 
-		# Ensure model is written to any player resource / setters before updating visuals
-		flush_to_model()
-
 		# Refresh visuals
 		update_slots()
 		for slot in slots:
@@ -430,9 +410,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				slot.update_visual()
 		if player_inv:
 			player_inv.update_slots()
-
-		# emit inventory_changed for listeners
-		emit_signal("inventory_changed")
+	emit_signal("inventory_changed")
 
 func _update_item_in_hand():
 	if ghost_item == null:
@@ -714,127 +692,69 @@ func _find_first_ysort_recursive(node: Node) -> Node:
 			return deeper
 	return null
 
+# Force UI -> player authoritative model sync (synchronous)
 func flush_to_model() -> void:
-	# Ensure inv resource exists and matches UI slots
+	# Build plain snapshot from inv.slots (the UI-bound resource)
 	if inv == null:
 		print("[Inv_UI] flush_to_model: inv resource null; nothing to flush")
 		return
 
-	# Defensive: make inv.slots exactly the UI length
-	while inv.slots.size() < slots.size():
-		inv.slots.append(InvSlot.new())
-	while inv.slots.size() > slots.size():
-		inv.slots.pop_back()
-
-	# Build a small debug snapshot and also ensure inv.slots are mutated in-place
 	var snapshot := []
 	for i in range(slots.size()):
+		# Ensure inv.slots array long enough
+		if inv.slots.size() <= i:
+			inv.slots.append(InvSlot.new())
 		var s := inv.slots[i]
-		# If UI slot visual exists, prefer its item (keeps visual ↔ model consistent)
-		var ui_slot = slots[i]
-		var ui_item = null
-		var ui_amount = 0
-
-		if ui_slot and ui_slot.item_stack and is_instance_valid(ui_slot.item_stack):
-			# Prefer the visual's *origin* data first — this is stable during drags.
-			# Many ItemStackUI instances store origin_item/origin_amount when a drag starts.
-			if "origin_item" in ui_slot.item_stack and ui_slot.item_stack.origin_item != null:
-				ui_item = ui_slot.item_stack.origin_item
-				ui_amount = int(ui_slot.item_stack.origin_amount if "origin_amount" in ui_slot.item_stack else 0)
-			else:
-				# If no origin saved, cautiously try reading the visual's slot reference,
-				# but guard against the case where that slot was cleared by drag code.
-				if "slot" in ui_slot.item_stack and ui_slot.item_stack.slot:
-					var islot = ui_slot.item_stack.slot
-					# ensure slot still has a non-null item before trusting it
-					if islot.item != null:
-						ui_item = islot.item
-						ui_amount = int(islot.amount if ("amount" in islot) else 0)
-					else:
-						# visual's slot was cleared (likely because a drag is happening);
-						# try to fall back to stored properties on the visual (if any)
-						ui_item = ui_slot.item_stack.origin_item if "origin_item" in ui_slot.item_stack else null
-						ui_amount = int(ui_slot.item_stack.origin_amount if "origin_amount" in ui_slot.item_stack else 0)
-				else:
-					# final fallback to any properties the visual may have stored
-					ui_item = ui_slot.item_stack.origin_item if "origin_item" in ui_slot.item_stack else null
-					ui_amount = int(ui_slot.item_stack.origin_amount if "origin_amount" in ui_slot.item_stack else 0)
-
-		else:
-			# Prefer model slot if UI doesn't have explicit visual
-			if s != null:
-				ui_item = s.item
-				ui_amount = int(s.amount if ("amount" in s) else 0)
-			else:
-				ui_item = null
-				ui_amount = 0
-
-		# Mutate model slot in-place
-		if s == null:
-			s = InvSlot.new()
-			inv.slots[i] = s
-		s.item = ui_item
-		s.amount = ui_amount
-
-		# snapshot entry (for GameState expectations)
-		if s.item == null:
+		if s == null or s.item == null:
 			snapshot.append({"scene_path":"", "amount":0})
+			continue
+		var item_obj = s.item
+		var item_path := ""
+		if "id" in item_obj and str(item_obj.id) != "":
+			item_path = "id:" + str(item_obj.id)
+		elif "resource_path" in item_obj and str(item_obj.resource_path) != "":
+			item_path = str(item_obj.resource_path)
+		elif "scene_path" in item_obj and str(item_obj.scene_path) != "":
+			item_path = str(item_obj.scene_path)
+		elif "name" in item_obj:
+			item_path = "name:" + str(item_obj.name)
 		else:
-			var item_obj = s.item
-			var item_path := ""
-			if "id" in item_obj and str(item_obj.id) != "":
-				item_path = "id:" + str(item_obj.id)
-			elif "resource_path" in item_obj and str(item_obj.resource_path) != "":
-				item_path = str(item_obj.resource_path)
-			elif "scene_path" in item_obj and str(item_obj.scene_path) != "":
-				item_path = str(item_obj.scene_path)
-			elif "name" in item_obj:
-				item_path = "name:" + str(item_obj.name)
-			else:
-				item_path = "unknown"
-			snapshot.append({"scene_path": item_path, "amount": int(s.amount if ("amount" in s) else 1)})
+			item_path = "unknown"
+		snapshot.append({"scene_path": item_path, "amount": int(s.amount if "amount" in s else 1)})
 
-	# Write into Player if they provide a setter or expose a resource
+	# Write snapshot to Player authoritative model
 	var player = get_tree().root.find_child("Player", true, false)
-	if player:
-		if player.has_method("set_inventory_from_snapshot"):
-			player.set_inventory_from_snapshot(snapshot)
-			print("[Inv_UI] flush_to_model: used player.set_inventory_from_snapshot() writer")
-		elif player.has_method("get_inventory") and player.get_inventory() != null:
-			# mutate player's inv resource in-place rather than replacing array
-			var p_inv = player.get_inventory()
-			# ensure p_inv.slots exists and matches snapshot
-			while p_inv.slots.size() < snapshot.size():
-				p_inv.slots.append(InvSlot.new())
-			while p_inv.slots.size() > snapshot.size():
-				p_inv.slots.pop_back()
+	if player and player.has_method("set_inventory_from_snapshot"):
+		player.set_inventory_from_snapshot(snapshot)
+		print("[Inv_UI] flush_to_model: wrote", str(snapshot.size()), "entries to player")
+	else:
+		# If no player setter, fallback to writing the player's inventory resource directly if we can find it
+		if player and "inventory" in player:
+			player.inventory.slots.clear()
 			for i in range(snapshot.size()):
-				var e = snapshot[i]
-				var pslot = p_inv.slots[i]
-				if pslot == null:
-					pslot = InvSlot.new()
-					p_inv.slots[i] = pslot
-				pslot.amount = int(e.get("amount", 0))
-				var sp := str(e.get("scene_path", ""))
-				if sp.begins_with("id:"):
-					# try GameState registry lookup if available
-					if has_node("/root/GameState"):
+				var entry = snapshot[i]
+				var new_slot := InvSlot.new()
+				new_slot.amount = int(entry.get("amount", 0))
+				var sp := str(entry.get("scene_path", ""))
+				if sp.begins_with("id:") and has_method("_find_invitem_by_id"):
+					var id_str = sp.substr(3, sp.length())
+					var found = null
+					# Prefer player helper
+					if player and player.has_method("_find_invitem_by_id"):
+						found = player._find_invitem_by_id(id_str)
+					elif has_node("/root/GameState"):
 						var gs = get_node("/root/GameState")
-						if gs and gs.has_method("_lookup_item_by_id"):
-							var found = gs._lookup_item_by_id(sp.substr(3, sp.length()))
-							if found:
-								pslot.item = found
+						if gs and gs.has_method("find_invitem_by_id"):
+							found = gs.find_invitem_by_id(id_str)
+					# if still null, leave it as null (we'll try ResourceLoader fallback elsewhere)
+
+					if found:
+						new_slot.item = found
 				elif sp != "":
 					if ResourceLoader.exists(sp):
-						pslot.item = ResourceLoader.load(sp)
-			print("[Inv_UI] flush_to_model: wrote into player.inventory resource in-place")
+						new_slot.item = ResourceLoader.load(sp)
+				player.inventory.slots.append(new_slot)
+			print("[Inv_UI] flush_to_model: wrote directly into player.inventory.slots fallback")
 		else:
-			print("[Inv_UI] flush_to_model: player found but no setter/get_inventory; skipping player write")
-	else:
-		print("[Inv_UI] flush_to_model: no player found; model updated only")
-
-	# emit change so autosave / GameState pick this up
-	emit_signal("inventory_changed")
-
-	# debug
+			print("[Inv_UI] flush_to_model: no player found or player lacks setter; nothing flushed")
 	print("[Inv_UI DEBUG] flush_to_model -> snapshot len:", snapshot.size(), " sample:", snapshot.slice(0, min(16, snapshot.size())))
