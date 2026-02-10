@@ -12,10 +12,6 @@ var origin_slot: InvSlot = null
 # Store actual item & amount when dragging so we don't depend on InvSlot existing
 var origin_item: InvItem = null
 var origin_amount: int = 0
-var ui_index: int = -1
-var ui_slot = null
-# allow holding a reference to the original UI visual
-var origin_ui: Control = null
 
 func _ready() -> void:
 	print("[ItemStackUI] Ready — initialized for slot:", slot)

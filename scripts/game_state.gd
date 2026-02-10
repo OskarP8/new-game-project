@@ -56,7 +56,6 @@ func _ready() -> void:
 
 	# now load existing save (with registry ready)
 	load_save()
-	print("[GAMESTATE] saved_main_inventory len:", saved_main_inventory.size())
 
 	# Connect to about_to_quit so clicking X triggers a save (defensive)
 	var t = get_tree()
