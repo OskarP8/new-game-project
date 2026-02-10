@@ -151,11 +151,6 @@ func _ready():
 						break
 				if not already_connected:
 					player_inv.inventory_changed.connect(save_callable)
-	print("[PLAYER DEBUG] player.inventory resource:", inventory, " resource_path:", (inventory.resource_path if inventory else "NULL"), "slots:", (inventory.slots.size() if inventory and 'slots' in inventory else "NO_SLOTS"))
-	if inventory and "slots" in inventory:
-		for i in range(min(32, inventory.slots.size())):
-			var s = inventory.slots[i]
-			print("  [player.inv.slot %d] item=%s amount=%s" % [i, (s.item if s else "NULL"), (s.amount if s and 'amount' in s else "NULL")])
 
 	has_weapon = false
 
@@ -748,20 +743,6 @@ func get_inventory_snapshot() -> Array:
 				else:
 					item_path = "unknown"
 				out.append({"scene_path": item_path, "amount": int(s.amount if "amount" in s else 1)})
-
-	print("[PLAYER DEBUG] returning snapshot from player.inventory (len):", (inventory.slots.size() if inventory and 'slots' in inventory else 0))
-	var tmp = []
-	if inventory and 'slots' in inventory:
-		for i in range(inventory.slots.size()):
-			var s = inventory.slots[i]
-			tmp.append({
-				"i": i,
-				"item": (s.item if s and 'item' in s else null),
-				"amount": (s.amount if s and 'amount' in s else 0)
-			})
-	print("[PLAYER DEBUG] snapshot detail (first 32):")
-	for i in range(min(32, tmp.size())):
-		print("  ", tmp[i])
 	return out
 
 # returns the authoritative number of player inventory slots (e.g., 4)

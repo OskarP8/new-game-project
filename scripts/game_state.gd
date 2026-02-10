@@ -126,32 +126,21 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 
 	var root = _get_root()
 	print_debug("[GameState] save_game() start; looking for inv_ui and player_node")
-
+	var inv_ui_node = null
+	if has_node("/root/SceneRoot/Inv_UI"):
+		inv_ui_node = get_node("/root/SceneRoot/Inv_UI")
+	print_debug("[GameState] inv_ui_node:", str(inv_ui_node))
 	var player_node = root.find_child("Player", true, false) if root else null
 	print_debug("[GameState] player_node:", str(player_node))
 	print_debug("[GameState] current runtime inventory arrays len:", str(saved_inventory.size()), " main:", str(saved_main_inventory.size()))
 
 	var inv_ui = root.find_child("Inv_UI", true, false) if root else null
-	# Prefer synchronous flush for deterministic snapshot (avoid call_deferred race)
-	var inv_ui_for_save = null
-	
-	print("[GameState] save_game() snapshot start — GameState id:", self.get_instance_id())
-	print_debug("[GameState] found inv_ui node:", inv_ui, " player_node:", player_node)
-	if player_node and player_node.has_method("get_inventory"):
-		var p_inv = player_node.get_inventory()
-		print("[GameState] player.inventory object:", p_inv, "path:", (p_inv.resource_path if p_inv else "NULL"), "slots:", (p_inv.slots.size() if p_inv and 'slots' in p_inv else 0))
+	if inv_ui and inv_ui.has_method("flush_to_model"):
+		# ask UI to flush, but give it one frame to finish UI ops
+		inv_ui.call_deferred("flush_to_model")
+		# wait one frame before snapshotting
+		await get_tree().process_frame
 
-	if inv_ui != null:
-		# If flush_to_model exists, call it synchronously so data is written to model now.
-		if inv_ui.has_method("flush_to_model"):
-			inv_ui.flush_to_model()
-			# allow a single frame to complete any UI side-effects that flush_to_model may trigger
-			await get_tree().process_frame
-		inv_ui_for_save = inv_ui
-	# debug the authoritative inv resource we will use for saving (after assignment)
-	if inv_ui_for_save and inv_ui_for_save.inv:
-		var ui_inv = inv_ui_for_save.inv
-		print("[GameState] Inv_UI.inv object (authoritative):", ui_inv, "path:", (ui_inv.resource_path if ui_inv else "NULL"), "slots:", (ui_inv.slots.size() if ui_inv and 'slots' in ui_inv else 0))
 
 	var player_snapshot: Array = []
 	var player_slot_count: int = 0
@@ -196,19 +185,12 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 		inventory_array = player_snapshot.duplicate(true)
 		print_debug("[GameState] using player snapshot for save; len:", inventory_array.size())
 
-	if inventory_array.size() == 0 and inv_ui_for_save and inv_ui_for_save.inv and "slots" in inv_ui_for_save.inv and inv_ui_for_save.inv.slots.size() > 0:
-		print_debug("[GameState] building inventory_array from Inv_UI.inv.slots (authoritative)")
-		for slot in inv_ui_for_save.inv.slots:
+	if inventory_array.size() == 0 and inv_ui and inv_ui.inv and "slots" in inv_ui.inv and inv_ui.inv.slots.size() > 0:
+		print_debug("[GameState] building inventory_array from inv_ui.inv.slots")
+		for slot in inv_ui.inv.slots:
 			if slot == null or slot.item == null:
 				inventory_array.append({"scene_path":"", "amount":0})
 				continue
-			# debug: show if slot.item present and its type/path
-			if slot.item == null:
-				print_debug("[GameState] save: slot.item == NULL (empty slot)")
-			else:
-				var _it = slot.item
-				print_debug("[GameState] save: slot.item present -> class:", (_it.get_class() if _it else "NULL"), "id:", (_it.id if "id" in _it else "NO_ID"), "resource_path:", (_it.resource_path if "resource_path" in _it else "NO_RP"), "scene_path:", (_it.scene_path if "scene_path" in _it else "NO_SCENE"))
-
 			var item_obj = slot.item
 			var item_path := ""
 			if "id" in item_obj and str(item_obj.id) != "":
@@ -248,19 +230,11 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 	save_res.inventory = inventory_array.duplicate(true)
 
 	var main_array: Array = []
-	if inv_ui_for_save and inv_ui_for_save.inv and "slots" in inv_ui_for_save.inv and inv_ui_for_save.inv.slots.size() > 0:
-		print_debug("[GameState] building main_array from Inv_UI.inv.slots (authoritative)")
-		for slot in inv_ui_for_save.inv.slots:
+	if inv_ui and inv_ui.inv and "slots" in inv_ui.inv and inv_ui.inv.slots.size() > 0:
+		for slot in inv_ui.inv.slots:
 			if slot == null or slot.item == null:
 				main_array.append({"scene_path":"", "amount":0})
 				continue
-			# debug: show if slot.item present and its type/path
-			if slot.item == null:
-				print_debug("[GameState] save: slot.item == NULL (empty slot)")
-			else:
-				var _it = slot.item
-				print_debug("[GameState] save: slot.item present -> class:", (_it.get_class() if _it else "NULL"), "id:", (_it.id if "id" in _it else "NO_ID"), "resource_path:", (_it.resource_path if "resource_path" in _it else "NO_RP"), "scene_path:", (_it.scene_path if "scene_path" in _it else "NO_SCENE"))
-
 			var item_obj = slot.item
 			var item_path := ""
 			if "id" in item_obj and str(item_obj.id) != "":
@@ -284,7 +258,6 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 				item_path = "name:" + str(item_obj.name if "name" in item_obj else "unknown")
 
 			main_array.append({"scene_path": item_path, "amount": int(slot.amount if "amount" in slot else 1)})
-
 	else:
 		if saved_main_inventory != null and saved_main_inventory.size() > 0:
 			main_array = saved_main_inventory.duplicate(true)
@@ -300,8 +273,8 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO, force: bool
 	save_res.main_inventory = main_array.duplicate(true)
 	save_res.opened_chests = opened_chests.duplicate(true)
 
-	# call it right before ResourceSaver.save(...)
-	_dbg_print_save_contents(save_res)
+	print("[GameState] SAVE DEBUG - inventory sample (first 8):", JSON.stringify(save_res.inventory.slice(0, min(8, save_res.inventory.size()))))
+	print("[GameState] SAVE DEBUG - main_inventory sample (first 8):", JSON.stringify(save_res.main_inventory.slice(0, min(8, save_res.main_inventory.size()))))
 
 	var bak_path := SAVE_PATH + ".bak"
 	var bak_err := ResourceSaver.save(save_res, bak_path)
@@ -374,14 +347,6 @@ func load_save() -> bool:
 		saved_inventory = res.inventory.duplicate(true) if res.inventory != null else []
 		saved_main_inventory = res.main_inventory.duplicate(true) if res.main_inventory != null else []
 		print("[GameState] ✅ Save loaded: %s %s (player_items=%d main_items=%d)" % [saved_scene, str(saved_position), saved_inventory.size(), saved_main_inventory.size()])
-		# inside load_save() after copying saved_inventory & saved_main_inventory:
-		print("[GameState DEBUG] loaded saved_inventory len:", saved_inventory.size())
-		for i in range(min(32, saved_inventory.size())):
-			print("  [loaded inv][%d] %s" % [i, str(saved_inventory[i])])
-		print("[GameState DEBUG] loaded saved_main_inventory len:", saved_main_inventory.size())
-		for i in range(min(32, saved_main_inventory.size())):
-			print("  [loaded main][%d] %s" % [i, str(saved_main_inventory[i])])
-
 		return true
 	if res is SaveData:
 		print("[GameState] DEBUG loaded SaveData fields -> scene_path:", res.scene_path, "position:", res.position,
@@ -501,30 +466,44 @@ func restore_main_inventory_to_ui() -> void:
 		print("[GameState] restore_main_inventory_to_ui: Inv_UI.inv missing")
 		return
 
-	# Ensure inv resource exists and we mutate its slots in-place (preserve resource identity)
-	var inv_res = inv_ui.inv
-	if inv_res == null:
-		print("[GameState] restore_main_inventory_to_ui: inv_ui.inv missing")
-		return
-
-	# Prepare slots array to exact target length (preserve instance, set empty slots as needed)
-	var target_len := saved_main_inventory.size()
-	while inv_res.slots.size() < target_len:
-		inv_res.slots.append(InvSlot.new())
-	while inv_res.slots.size() > target_len:
-		inv_res.slots.pop_back()
-
-	for i in range(target_len):
-		var e = saved_main_inventory[i]
+	inv_ui.inv.slots.clear()
+	for e in saved_main_inventory:
 		if typeof(e) != TYPE_DICTIONARY:
 			continue
 		var item_path := str(e.get("scene_path", ""))
 		var amount := int(e.get("amount", 0))
 		var item_res: Resource = null
-		# (resolve item_res same as before...)
-		# [keep your lookup code]
-		var slot = inv_res.slots[i]
+
+		# Try id -> registry
+		if item_path.begins_with("id:"):
+			item_res = _lookup_item_by_id(item_path.substr(3, item_path.length()))
+		elif item_path.begins_with("name:"):
+			item_res = _lookup_item_by_name(item_path.substr(5, item_path.length()))
+		else:
+			# handle explicit "scene:" markers we may have saved earlier
+			if item_path.begins_with("scene:"):
+				var scene_p := item_path.substr(6, item_path.length())
+				item_res = _find_invitem_for_scene(scene_p)
+				if item_res == null:
+					# as last fallback, keep null (slot empty)
+					print("[GameState] restore_main_inventory_to_ui: saved path was explicit scene and no .tres found for:", scene_p)
+			# If path points to a resource file (e.g. .tres) - load
+			elif item_path != "" and ResourceLoader.exists(item_path):
+				var loaded = ResourceLoader.load(item_path)
+				# If this resolved to a PackedScene (tscn), try to find corresponding InvItem resource
+				if loaded is PackedScene:
+					item_res = _find_invitem_for_scene(item_path)
+					if item_res == null:
+						print("[GameState] restore_main_inventory_to_ui: saved path was a PackedScene and no InvItem found for:", item_path)
+				else:
+					item_res = loaded
+			else:
+				item_res = _lookup_item_by_name(item_path) if item_path.begins_with("name:") else null
+
+		var slot = InvSlot.new()
+		# Accept both true InvItem instances and any resource that "looks like" one
 		if item_res != null and _is_invitem_like(item_res):
+			# if resource is not literally typed as InvItem but has the expected props, assign it anyway
 			slot.item = item_res
 			slot.amount = amount
 		else:
@@ -532,6 +511,8 @@ func restore_main_inventory_to_ui() -> void:
 			slot.amount = 0
 			if item_res != null:
 				print("[GameState] restore_main_inventory_to_ui: item_res found but not inv-like for path:", item_path, "loaded_as:", (item_res.get_class() if item_res else "NULL"))
+
+		inv_ui.inv.slots.append(slot)
 
 	# refresh UI
 	if inv_ui.has_method("update_slots"):
@@ -601,11 +582,6 @@ func get_respawn_data() -> Dictionary:
 
 # Simplified save() — do not set the _saving guard here.
 func save() -> void:
-	# avoid kicking off another save while one is in progress
-	if _saving:
-		print("[GameState] save(): save already in progress — skipping new save request")
-		return
-
 	# choose scene/pos now (no heavy work on this stack)
 	var scene_path := ""
 	var pos := Vector2.ZERO
@@ -1012,15 +988,3 @@ func _is_invitem_like(res: Resource) -> bool:
 	if ("name" in res and str(res.name) != ""):
 		return true
 	return false
-
-# near the end of save_game(), after save_res prepared but before writing:
-func _dbg_print_save_contents(save_res):
-	# pretty small helper to print first N entries
-	var N = min(16, save_res.inventory.size())
-	print("[GameState DEBUG] save_res.inventory size:", save_res.inventory.size())
-	for i in range(N):
-		print("  [inv][%d] %s" % [i, str(save_res.inventory[i])])
-	var M = min(16, save_res.main_inventory.size())
-	print("[GameState DEBUG] save_res.main_inventory size:", save_res.main_inventory.size())
-	for j in range(M):
-		print("  [main][%d] %s" % [j, str(save_res.main_inventory[j])])

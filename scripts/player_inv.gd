@@ -33,13 +33,6 @@ func _ready():
 	for slot in slots:
 		if slot and slot.has_method("update_visual"):
 			slot.update_visual()
-	# in _ready()
-	print("[PlayerInv DEBUG] PlayerInv.inv:", inv, " resource_path:", (inv.resource_path if inv else "NULL"), " slots:", (inv.slots.size() if inv and 'slots' in inv else "NO_SLOTS"))
-	if inv and 'slots' in inv:
-		for i in range(min(32, inv.slots.size())):
-			var s = inv.slots[i]
-			print("  [PlayerInv.inv.slot %d] item=%s amount=%s" % [i, (s.item if s else "NULL"), (s.amount if s and 'amount' in s else "NULL")])
-
 	close()
 func _process(_delta):
 	if Input.is_action_just_pressed("i"):
@@ -97,7 +90,7 @@ func update_slots() -> void:
 			inv.disconnect("inventory_changed", cb)
 			we_disconnected = true
 
-	print("[PlayerInv DEBUG] update_slots() - inv.slots.size()=", (inv.slots.size() if inv and 'slots' in inv else "NULL"), " ui slots:", slots.size())
+	print("[player_inv] 🔄 Updating slots — total:", slots.size())
 
 	for i in range(slots.size()):
 		var ui_slot: InvUISlot = slots[i]
