@@ -9,8 +9,6 @@ var picked_slot: InvSlot = null
 var drag_layer: CanvasLayer
 var dragging := false
 var ghost_item: ItemStackUI = null
-# re-entrancy guard to prevent update_slots -> Inv signal -> update_slots recursion
-var _updating_slots: bool = false
 
 func _ready():
 	if inv:
@@ -61,42 +59,18 @@ func close():
 	visible = false
 	is_open = false
 
+# --- Update UI ---
 func update_slots() -> void:
-	# quick null check before we touch the guard
 	if inv == null:
 		print("[player_inv] ⚠ No inventory resource assigned!")
 		return
-
-	# re-entrancy guard: if already updating, skip to avoid infinite recursion
-	if _updating_slots:
-		print("[player_inv] 🔁 update_slots re-entry detected — skipping")
-		return
-	_updating_slots = true
-
-	# Prepare callable reference for connect/disconnect checks
-	var cb := Callable(self, "update_slots")
-	var we_disconnected := false
-
-	# If inv exposes the signal, check & temporarily disconnect our handler
-	if inv and inv.has_signal("inventory_changed"):
-		# is_connected expects (signal_name, callable)
-		# Disconnect only if it is currently connected to our callable
-		var already_conn := false
-		# Defensive: some custom resource implementations might not implement is_connected
-		if inv.has_method("is_connected"):
-			already_conn = inv.is_connected("inventory_changed", cb)
-		if already_conn:
-			# disconnect using the same Callable
-			inv.disconnect("inventory_changed", cb)
-			we_disconnected = true
 
 	print("[player_inv] 🔄 Updating slots — total:", slots.size())
 
 	for i in range(slots.size()):
 		var ui_slot: InvUISlot = slots[i]
 
-		# Ensure resource slot exists (mutating inv.slots may emit inventory_changed;
-		# we disconnected above to prevent handling that re-entry)
+		# Ensure resource slot exists
 		while inv.slots.size() <= i:
 			inv.slots.append(InvSlot.new())
 
@@ -143,21 +117,9 @@ func update_slots() -> void:
 			print("[player_inv] (already connected) slot", i)
 
 		item_stack.slot = inv_slot
-		# defer the heavy visual update to avoid synchronous recursion
-		item_stack.call_deferred("update")
+		item_stack.update()
 
-
-	# Restore our signal connection if we removed it
-	if we_disconnected:
-		# Avoid double-connecting (defensive)
-		var still_conn := false
-		if inv.has_method("is_connected"):
-			still_conn = inv.is_connected("inventory_changed", cb)
-		if not still_conn:
-			inv.connect("inventory_changed", cb)
-
-	# finished updating
-	_updating_slots = false
+# Helper: place a world item under the world's Resources/YSort node and set z_index
 
 func _on_item_clicked(item_stack: ItemStackUI) -> void:
 	# Basic guard

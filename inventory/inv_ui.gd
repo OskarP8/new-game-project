@@ -66,18 +66,6 @@ func _ready():
 			slot.update_visual()
 	close()
 
-# Autosave wrapper: schedule GameState.save deferred after UI changes finish
-func _on_inventory_changed_autosave() -> void:
-	var gs = null
-	if has_node("/root/GameState"):
-		gs = get_node("/root/GameState")
-	# fallback: search the tree
-	if gs == null:
-		gs = get_tree().get_first_node_in_group("GameState")
-	if gs:
-		# defer the save so UI/slots finish their frame of updates first
-		gs.call_deferred("save")
-
 func _process(_delta):
 	if Input.is_action_just_pressed("i"):
 		if is_open:
@@ -696,69 +684,3 @@ func _find_first_ysort_recursive(node: Node) -> Node:
 		if deeper:
 			return deeper
 	return null
-
-# Force UI -> player authoritative model sync (synchronous)
-func flush_to_model() -> void:
-	# Build plain snapshot from inv.slots (the UI-bound resource)
-	if inv == null:
-		print("[Inv_UI] flush_to_model: inv resource null; nothing to flush")
-		return
-
-	var snapshot := []
-	for i in range(slots.size()):
-		# Ensure inv.slots array long enough
-		if inv.slots.size() <= i:
-			inv.slots.append(InvSlot.new())
-		var s := inv.slots[i]
-		if s == null or s.item == null:
-			snapshot.append({"scene_path":"", "amount":0})
-			continue
-		var item_obj = s.item
-		var item_path := ""
-		if "id" in item_obj and str(item_obj.id) != "":
-			item_path = "id:" + str(item_obj.id)
-		elif "resource_path" in item_obj and str(item_obj.resource_path) != "":
-			item_path = str(item_obj.resource_path)
-		elif "scene_path" in item_obj and str(item_obj.scene_path) != "":
-			item_path = str(item_obj.scene_path)
-		elif "name" in item_obj:
-			item_path = "name:" + str(item_obj.name)
-		else:
-			item_path = "unknown"
-		snapshot.append({"scene_path": item_path, "amount": int(s.amount if "amount" in s else 1)})
-
-	# Write snapshot to Player authoritative model
-	var player = get_tree().root.find_child("Player", true, false)
-	if player and player.has_method("set_inventory_from_snapshot"):
-		player.set_inventory_from_snapshot(snapshot)
-		print("[Inv_UI] flush_to_model: wrote", str(snapshot.size()), "entries to player")
-	else:
-		# If no player setter, fallback to writing the player's inventory resource directly if we can find it
-		if player and "inventory" in player:
-			player.inventory.slots.clear()
-			for i in range(snapshot.size()):
-				var entry = snapshot[i]
-				var new_slot := InvSlot.new()
-				new_slot.amount = int(entry.get("amount", 0))
-				var sp := str(entry.get("scene_path", ""))
-				if sp.begins_with("id:") and has_method("_find_invitem_by_id"):
-					var id_str = sp.substr(3, sp.length())
-					var found = null
-					# Prefer player helper
-					if player and player.has_method("_find_invitem_by_id"):
-						found = player._find_invitem_by_id(id_str)
-					elif has_node("/root/GameState"):
-						var gs = get_node("/root/GameState")
-						if gs and gs.has_method("find_invitem_by_id"):
-							found = gs.find_invitem_by_id(id_str)
-					# if still null, leave it as null (we'll try ResourceLoader fallback elsewhere)
-
-					if found:
-						new_slot.item = found
-				elif sp != "":
-					if ResourceLoader.exists(sp):
-						new_slot.item = ResourceLoader.load(sp)
-				player.inventory.slots.append(new_slot)
-			print("[Inv_UI] flush_to_model: wrote directly into player.inventory.slots fallback")
-		else:
-			print("[Inv_UI] flush_to_model: no player found or player lacks setter; nothing flushed")

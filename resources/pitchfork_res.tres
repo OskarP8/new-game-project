@@ -10,7 +10,7 @@ region = Rect2(8, 16, 7, 15)
 
 [resource]
 script = ExtResource("1_bi3nf")
-id = "001"
+id = ""
 texture = SubResource("AtlasTexture_v1y4p")
 name = "Pitchfork"
 icon = ExtResource("1_7sl5a")
