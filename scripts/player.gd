@@ -82,31 +82,10 @@ var weapon_pivot: Node2D
 
 func _dummy_set(v): pass
 
-# Safe root/node lookup helpers ------------------------------------------------
-func _get_root() -> Node:
-	var t = get_tree()
-	if t == null:
-		return null
-	# in some shutdown orders tree.root can be null
-	return t.root if t.root != null else null
-
-func _find_root_child(name: String, recursive: bool=true, owned: bool=false) -> Node:
-	var root = _get_root()
-	if root == null:
-		return null
-	return root.find_child(name, recursive, owned)
-
 # ----------------------
 # READY
 # ----------------------
 func _ready():
-	# your existing initialization...
-	if has_node("/root/GameState"):
-		var gs = get_node("/root/GameState")
-		# call restore to populate player inventory from last save
-		if gs.has_method("restore_inventory_to_player"):
-			gs.restore_inventory_to_player(self)
-
 	# --- RESPAWN POSITION ---
 	# (replace your existing checkpoint/save block with the following)
 	if GameState.has_checkpoint():
@@ -131,24 +110,8 @@ func _ready():
 	if cam:
 		cam.reset_smoothing()
 	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
-
 	if player_inv and player_inv.has_signal("inventory_changed"):
-		player_inv.inventory_changed.connect(Callable(self, "refresh_equipped_weapon_from_inventory"))
-		# autosave on inventory change:
-		if has_node("/root/GameState"):
-			var gs := get_node("/root/GameState")
-			if gs and gs.has_method("save"):
-				# connect an autosave callable on the UI (avoid double connections)
-				var save_callable := Callable(gs, "save")
-				# Godot's is_connected requires a target object + method name; using Callable for checking is cleaner:
-				var already_connected := false
-				for conn in player_inv.get_signal_connection_list("inventory_changed"):
-					# each conn is a dictionary with "target" and "method"
-					if conn.target == gs and conn.method == "save":
-						already_connected = true
-						break
-				if not already_connected:
-					player_inv.inventory_changed.connect(save_callable)
+		player_inv.inventory_changed.connect(refresh_equipped_weapon_from_inventory)
 
 	has_weapon = false
 
@@ -654,19 +617,7 @@ func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 		if slot and slot.item == item and item.stackable:
 			slot.amount += quantity
 			inv_ui.update_slots()
-
-			# 🔁 MIRROR UI INVENTORY → PLAYER INVENTORY
-			if inventory and "slots" in inventory:
-				inventory.slots.clear()
-				for ui_slot in inv_ui.inv.slots:
-					var new_slot := InvSlot.new()
-					new_slot.item = ui_slot.item
-					new_slot.amount = ui_slot.amount
-					inventory.slots.append(new_slot)
-
 			print("[player] ➕ Stacked", quantity, "x", item.name, "(now", slot.amount, ")")
-			if has_node("/root/GameState"):
-				get_node("/root/GameState").save()
 			return true
 
 	# --- Fill empty slot ---
@@ -675,19 +626,7 @@ func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 			slot.item = item
 			slot.amount = quantity
 			inv_ui.update_slots()
-
-			# 🔁 MIRROR UI INVENTORY → PLAYER INVENTORY
-			if inventory and "slots" in inventory:
-				inventory.slots.clear()
-				for ui_slot in inv_ui.inv.slots:
-					var new_slot := InvSlot.new()
-					new_slot.item = ui_slot.item
-					new_slot.amount = ui_slot.amount
-					inventory.slots.append(new_slot)
-
 			print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
-			if has_node("/root/GameState"):
-				get_node("/root/GameState").save()
 			return true
 
 	# --- Inventory full ---
@@ -1021,12 +960,6 @@ func collect_world_item(world_item) -> void:
 			inv_ui.show_message("Inventory Full")
 		else:
 			print("[UI] ⚠️ Inventory Full (UI handler missing)")
-	if is_instance_valid(world_item):
-		world_item.queue_free()
-
-	# NEW: autosave immediately after successful pickup
-	if has_node("/root/GameState"):
-		get_node("/root/GameState").save()
 
 func external_knockback(source_pos: Vector2, strength: float, damage: int = 1, duration: float = 0.25) -> void:
 	print("PLAYER external_knockback CALLED", strength)
@@ -1166,7 +1099,7 @@ func refresh_equipped_weapon_from_inventory():
 		print("[player][DBG refresh] suppressed by meta -> skipping refresh_equipped_weapon_from_inventory")
 		return
 
-	var player_inv = _find_root_child("PlayerInv", true, false)
+	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
 	if not player_inv:
 		print("[player][DBG refresh] PlayerInv not found -> skipping")
 		return
