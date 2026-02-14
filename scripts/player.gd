@@ -153,6 +153,26 @@ func _ready():
 	# initial state: no weapon
 	has_weapon = false
 	refresh_equipped_weapon_from_inventory()
+	# at end of Player._ready():
+	call_deferred("_deferred_restore_from_gamestate")
+
+func _deferred_restore_from_gamestate():
+	# ensure GameState exists and has saved_inventory
+	if Engine.has_singleton("GameState") == false and typeof(GameState) == TYPE_OBJECT:
+		# fallback: use global GameState variable (you already use GameState directly)
+		pass
+	# call restore
+	GameState.restore_inventory_to_player(self)
+	# also refresh UI and equipped state after restore
+	var inv_ui = get_tree().root.find_child("Inv_UI", true, false)
+	if inv_ui and inv_ui.has_method("update_slots"):
+		inv_ui.update_slots()
+	var player_inv = get_tree().root.find_child("PlayerInv", true, false)
+	if player_inv and player_inv.has_method("update_slots"):
+		player_inv.update_slots()
+	# refresh equips so player picks up correct weapon if any
+	if has_method("refresh_equipped_weapon_from_inventory"):
+		call_deferred("refresh_equipped_weapon_from_inventory")
 
 # ----------------------
 # MAIN LOOP

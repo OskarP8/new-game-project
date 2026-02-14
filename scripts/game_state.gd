@@ -65,24 +65,34 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> void:
 
 	# --- Collect player's inventory into a simple serializable array ---
 	var inventory_array: Array = []
-	var player := get_tree().root.find_child("Player", true, false)
-	if player:
-		var inv_res = null
-		if player.has_method("get_inventory"):
-			inv_res = player.get_inventory()
-		elif "inventory" in player:
-			inv_res = player.inventory
 
-		if inv_res and "slots" in inv_res:
-			for slot in inv_res.slots:
-				if slot != null and "item" in slot and slot.item != null:
-					var item_path := ""
-					# prefer scene_path or resource_path depending on how your InvItem is saved
-					if "scene_path" in slot.item:
-						item_path = str(slot.item.scene_path)
-					elif "resource_path" in slot.item:
-						item_path = str(slot.item.resource_path)
-					inventory_array.append({"scene_path": item_path, "amount": int(slot.amount if "amount" in slot else 1)})
+	# Prefer the runtime UI inventory (PlayerInv) if present — that is the 4-slot one you manipulate.
+	var player_inv_ui := get_tree().root.find_child("PlayerInv", true, false)
+	var inv_res = null
+	if player_inv_ui and "inv" in player_inv_ui and player_inv_ui.inv != null:
+		inv_res = player_inv_ui.inv
+		print("[GameState] Using PlayerInv.inv for save (runtime UI inventory) slots:", inv_res.slots.size())
+	else:
+		# fallback to reading player's inventory resource (legacy / inspector-held)
+		var player := get_tree().root.find_child("Player", true, false)
+		if player:
+			if player.has_method("get_inventory"):
+				inv_res = player.get_inventory()
+			elif "inventory" in player:
+				inv_res = player.inventory
+		print("[GameState] Using Player.inventory (fallback) for save:", inv_res)
+
+	if inv_res and "slots" in inv_res:
+		for slot in inv_res.slots:
+			if slot != null and "item" in slot and slot.item != null:
+				var item_path := ""
+				if "scene_path" in slot.item:
+					item_path = str(slot.item.scene_path)
+				elif "resource_path" in slot.item:
+					item_path = str(slot.item.resource_path)
+				inventory_array.append({"scene_path": item_path, "amount": int(slot.amount if "amount" in slot else 1)})
+	else:
+		print("[GameState] WARNING: no valid inventory resource found to snapshot.")
 
 	save_res.inventory = inventory_array
 	# --- Save opened chests list ---
@@ -143,43 +153,118 @@ func restore_inventory_to_player(player: Node) -> void:
 	if saved_inventory == null or saved_inventory.size() == 0:
 		return
 
+	# Try to find the runtime PlayerInv UI (prefer this — it's the 4-slot runtime inv)
+	var player_inv_ui := get_tree().root.find_child("PlayerInv", true, false)
+	var target_inv_res = null
+
+	if player_inv_ui and "inv" in player_inv_ui and player_inv_ui.inv != null:
+		target_inv_res = player_inv_ui.inv
+		print("[GameState] Restoring saved inventory -> PlayerInv.inv (slots:", target_inv_res.slots.size(), ")")
+		# Clear existing and re-populate
+		# inside the PlayerInv.inv restore branch (replace the existing loop)
+		target_inv_res.slots.clear()
+		for e in saved_inventory:
+			var scene_path := str(e.get("scene_path", "")).strip_edges()
+			var amount := int(e.get("amount", 0))
+
+			var item_res: Resource = null
+			var base := ""   # ensure defined for later use
+
+			# try load directly (may return InvItem resource or PackedScene)
+			if scene_path != "" and ResourceLoader.exists(scene_path):
+				item_res = ResourceLoader.load(scene_path)
+
+			# if we loaded a PackedScene, try to map to a likely InvItem resource
+			if item_res != null and item_res.get_class() == "PackedScene":
+				# derive basename for guess attempts
+				base = scene_path.get_file().get_basename() # e.g. "pitchfork"
+				var guessed := "res://resources/%s_res.tres" % base
+				if ResourceLoader.exists(guessed):
+					var alt := ResourceLoader.load(guessed)
+					if alt != null:
+						item_res = alt
+						print("[GameState] Found InvItem resource via guessed path:", guessed)
+				else:
+					var guessed2 := "res://resources/%s.tres" % base
+					if ResourceLoader.exists(guessed2):
+						var alt2 := ResourceLoader.load(guessed2)
+						if alt2 != null:
+							item_res = alt2
+							print("[GameState] Found InvItem resource via guessed path:", guessed2)
+
+			# never keep a PackedScene as the item_res
+			if item_res != null and item_res.get_class() == "PackedScene":
+				item_res = null
+
+			# If we still don't have an InvItem resource, create a lightweight placeholder (if class exists)
+			if item_res == null:
+				if ClassDB.class_exists("InvItem"):
+					var placeholder = InvItem.new()
+					# try to set useful fields so UI/logic can use it
+					if "scene_path" in placeholder:
+						placeholder.scene_path = scene_path
+					# ensure base is available for name fallback
+					if base == "" and scene_path != "":
+						base = scene_path.get_file().get_basename()
+					if "name" in placeholder:
+						placeholder.name = base if base != "" else "unknown_item"
+					item_res = placeholder
+					print("[GameState] Created placeholder InvItem for scene_path:", scene_path)
+				else:
+					print("[GameState] WARNING: No InvItem class available; saved item skipped:", scene_path)
+
+			# Append slot (either populated or empty to keep inventory size)
+			var slot := InvSlot.new()
+			if item_res != null:
+				slot.item = item_res
+				slot.amount = amount
+			else:
+				slot.item = null
+				slot.amount = 0
+			target_inv_res.slots.append(slot)
+
+		# Notify UI
+		if player_inv_ui.has_method("update_slots"):
+			player_inv_ui.update_slots()
+		return
+
+	# Fallback: try player's public API (add_to_inventory) — this is safer for player-side logic
+	if player.has_method("add_to_inventory"):
+		print("[GameState] Restoring saved inventory -> player.add_to_inventory()")
+		for e in saved_inventory:
+			var item_path := str(e.get("scene_path", ""))
+			var amount := int(e.get("amount", 0))
+			var item_res: Resource = null
+			if item_path != "" and ResourceLoader.exists(item_path):
+				item_res = ResourceLoader.load(item_path)
+			if item_res != null:
+				player.add_to_inventory(item_res, amount)
+			else:
+				# if not able to load, try passing path as fallback
+				player.add_to_inventory(item_path, amount)
+		return
+
+	# Last resort: populate the player's inventory resource directly
 	var inv_res = null
 	if player.has_method("get_inventory"):
 		inv_res = player.get_inventory()
 	elif "inventory" in player:
 		inv_res = player.inventory
 
-	# Prefer player's public API if available
-	if player.has_method("add_to_inventory"):
+	if inv_res != null and "slots" in inv_res:
+		inv_res.slots.clear()
 		for e in saved_inventory:
-			if ("scene_path" in e) and ("amount" in e):
-				var amount_val := int(e["amount"])
-				var item_path := str(e["scene_path"])
-				var item_res: Resource = null
-				if item_path != "" and ResourceLoader.exists(item_path):
-					item_res = ResourceLoader.load(item_path)
-				if item_res != null:
-					# expects an InvItem resource (or whatever your add_to_inventory accepts)
-					player.add_to_inventory(item_res, amount_val)
-				else:
-					# fallback: try passing the path itself if your API accepts an identifier
-					player.add_to_inventory(item_path, amount_val)
-	else:
-		# fallback: try to populate inv resource slots directly (less preferred)
-		if inv_res != null and "slots" in inv_res:
-			inv_res.slots.clear()
-			for e in saved_inventory:
-				if ("scene_path" in e) and ("amount" in e):
-					var item_path := str(e["scene_path"])
-					var item_res = null
-					if item_path != "" and ResourceLoader.exists(item_path):
-						item_res = ResourceLoader.load(item_path)
-					# create InvSlot only if class exists
-					if ClassDB.class_exists("InvSlot"):
-						var slot = InvSlot.new()
-						slot.item = item_res
-						slot.amount = int(e["amount"])
-						inv_res.slots.append(slot)
+			var item_path := str(e.get("scene_path", ""))
+			var amount := int(e.get("amount", 0))
+			var item_res = null
+			if item_path != "" and ResourceLoader.exists(item_path):
+				item_res = ResourceLoader.load(item_path)
+			if ClassDB.class_exists("InvSlot"):
+				var slot = InvSlot.new()
+				slot.item = item_res
+				slot.amount = amount
+				inv_res.slots.append(slot)
+		print("[GameState] Restored saved inventory into fallback player.inv")
 
 # Overwrite save with an empty SaveData resource (safer than attempting to delete file)
 func delete_save_file() -> void:
