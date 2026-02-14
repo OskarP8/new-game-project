@@ -301,6 +301,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				target_slot.item = moving_item
 				target_slot.amount = moving_amount
 
+				# CLEAR the original InvSlot now that we've moved the item (non-swap)
+				if picked_slot:
+					picked_slot.item = null
+					picked_slot.amount = 0
+
 				# ensure target_slot.item = moving_item (already set above)
 				if player_node and slot_type.to_lower() == "weapon":
 					if moving_item and moving_item.scene_path != "" and ResourceLoader.exists(moving_item.scene_path):
@@ -383,6 +388,11 @@ func _unhandled_input(event: InputEvent) -> void:
 						print("[player_inv] ✅ Moved", moving_item.name, "to inventory")
 						target_slot.item = moving_item
 						target_slot.amount = moving_amount
+
+						# CLEAR the origin InvSlot because the item was moved
+						if picked_slot:
+							picked_slot.item = null
+							picked_slot.amount = 0
 					else:
 						print("[player_inv] 🔄 Swapped", moving_item.name, "with inventory item")
 						var tmp_item = target_slot.item

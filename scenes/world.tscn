@@ -308,6 +308,7 @@ texture = ExtResource("1_08we5")
 0:0/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_hlbwx")
 0:0/0/custom_data_0 = "obstacle"
 14:1/0 = 0
+14:1/0/y_sort_origin = 5
 14:1/0/physics_layer_0/polygon_0/points = PackedVector2Array(-5, -8, 8, -8, 8, 7, -5, 7)
 14:2/0 = 0
 14:2/0/y_sort_origin = -10
@@ -316,16 +317,20 @@ texture = ExtResource("1_08we5")
 16:2/0 = 0
 16:2/0/y_sort_origin = -10
 15:1/0 = 0
+15:1/0/y_sort_origin = 5
 15:1/0/physics_layer_0/polygon_0/points = PackedVector2Array(-8, -8, 8, -8, 8, 7, -8, 7)
 16:1/0 = 0
+16:1/0/y_sort_origin = 5
 16:1/0/physics_layer_0/polygon_0/points = PackedVector2Array(-8, -8, 8, -8, 8, 7, -8, 7)
 17:1/0 = 0
+17:1/0/y_sort_origin = 5
 17:1/0/physics_layer_0/polygon_0/points = PackedVector2Array(-8, -8, 8, -8, 8, 7, -8, 7)
 17:2/0 = 0
 17:2/0/y_sort_origin = -10
 18:2/0 = 0
 18:2/0/y_sort_origin = -10
 18:1/0 = 0
+18:1/0/y_sort_origin = 5
 18:1/0/physics_layer_0/polygon_0/points = PackedVector2Array(-8, -8, 5, -8, 5, 7, -8, 7)
 
 [sub_resource type="TileSet" id="TileSet_4mp1b"]
@@ -388,7 +393,6 @@ tile_set = SubResource("TileSet_ejlfg")
 script = ExtResource("14_27xw6")
 
 [node name="Inventory" type="CanvasLayer" parent="."]
-visible = false
 
 [node name="Inv_UI" parent="Inventory" instance=ExtResource("4_uat3m")]
 offset_left = -76.0
@@ -457,7 +461,6 @@ enabled = false
 [node name="DeathDirector" parent="." instance=ExtResource("13_dldt2")]
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
-visible = false
 
 [node name="PauseMenu" parent="CanvasLayer" instance=ExtResource("16_4u6q3")]
 
