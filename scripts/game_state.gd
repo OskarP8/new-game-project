@@ -18,6 +18,11 @@ var opened_chests: Array = []
 
 func _ready() -> void:
 	load_save()
+	if get_tree().has_signal("about_to_quit"):
+		get_tree().connect("about_to_quit", Callable(self, "_on_about_to_quit"))
+
+func _on_about_to_quit() -> void:
+	save()
 
 func set_checkpoint(scene_path: String, pos: Vector2) -> void:
 	checkpoint_scene = scene_path

@@ -1,0 +1,173 @@
+[gd_scene load_steps=12 format=3 uid="uid://uo5vack7jfe7"]
+
+[ext_resource type="Script" path="res://scripts/weapon.gd" id="1_1rdmu"]
+[ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="2_pfi2w"]
+
+[sub_resource type="Animation" id="Animation_kign3"]
+resource_name = "attack"
+length = 0.50001
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("AnimatedSprite2D:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0.2, 0.3, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [1, 2, 3]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("AnimatedSprite2D:animation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"attack"]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Hitbox/CollisionPolygon2D:disabled")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.1, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 1,
+"values": [true, false, true]
+}
+
+[sub_resource type="Animation" id="Animation_8oby4"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("AnimatedSprite2D:animation")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [&"attack"]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("AnimatedSprite2D:frame")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [0]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Hitbox/CollisionPolygon2D:disabled")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [false]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_pbtpd"]
+_data = {
+"RESET": SubResource("Animation_8oby4"),
+"attack": SubResource("Animation_kign3")
+}
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_0xqiw"]
+atlas = ExtResource("2_pfi2w")
+region = Rect2(96, 96, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_p5rjw"]
+atlas = ExtResource("2_pfi2w")
+region = Rect2(0, 96, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_bi7kh"]
+atlas = ExtResource("2_pfi2w")
+region = Rect2(32, 96, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_c5wwm"]
+atlas = ExtResource("2_pfi2w")
+region = Rect2(128, 96, 32, 32)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_i32mg"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_0xqiw")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_p5rjw")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_bi7kh")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_c5wwm")
+}],
+"loop": false,
+"name": &"attack",
+"speed": 10.0
+}]
+
+[sub_resource type="GDScript" id="GDScript_bvxne"]
+script/source = "extends Area2D
+
+@export var damage: int = 5
+@export var knockback_mult: float = 1.0
+
+func _ready():
+	# Make sure signal is connected
+	if not body_entered.is_connected(_on_body_entered):
+		body_entered.connect(_on_body_entered)
+
+func _on_body_entered(body: Node) -> void:
+	if not body:
+		return
+
+	if body.is_in_group(\"Enemy\"):
+		if body.has_method(\"take_damage\"):
+			body.take_damage(
+				damage,
+				get_parent().global_position,
+				knockback_mult
+			)
+"
+
+[node name="bite" type="Node2D"]
+script = ExtResource("1_1rdmu")
+knockback_strength = 30.0
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+"": SubResource("AnimationLibrary_pbtpd")
+}
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+sprite_frames = SubResource("SpriteFrames_i32mg")
+animation = &"attack"
+
+[node name="Hitbox" type="Area2D" parent="."]
+collision_layer = 4
+collision_mask = 64
+script = SubResource("GDScript_bvxne")
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Hitbox"]
+polygon = PackedVector2Array(0, -7, 5, -6, 7, -1, 7, 4, 4, 7, -1, 8, -4, 5, 0, 0, -4, -2, -3, -5)
+
+[node name="Grip" type="Node2D" parent="."]

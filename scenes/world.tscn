@@ -1,4 +1,4 @@
-[gd_scene load_steps=40 format=4 uid="uid://ncgeslw4eukd"]
+[gd_scene load_steps=41 format=4 uid="uid://ncgeslw4eukd"]
 
 [ext_resource type="PackedScene" uid="uid://bbv8wq1p3smc6" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://btfv2cckmual" path="res://sprites/tilesets/objects.kra" id="1_08we5"]
@@ -13,6 +13,7 @@
 [ext_resource type="Texture2D" uid="uid://bfnsiv5upcrj5" path="res://sprites/tilesets/forest.kra" id="8_rgkyd"]
 [ext_resource type="PackedScene" uid="uid://dhp5srs4m8eeq" path="res://scenes/Enemies/knight.tscn" id="9_wbwfa"]
 [ext_resource type="PackedScene" uid="uid://urm2igwsgbe4" path="res://scenes/Enemies/navigation_region_2d.tscn" id="10_h2n55"]
+[ext_resource type="PackedScene" uid="uid://ddvnn3b24x85o" path="res://scenes/Enemies/fairy.tscn" id="11_m4js1"]
 [ext_resource type="PackedScene" uid="uid://cc7waq14h7pof" path="res://scenes/death_director.tscn" id="13_dldt2"]
 [ext_resource type="Script" path="res://scenes/nav.gd" id="14_27xw6"]
 [ext_resource type="PackedScene" uid="uid://dvpfw8fjdjk55" path="res://scenes/checkpoint.tscn" id="14_o8fc1"]
@@ -436,6 +437,11 @@ position = Vector2(48, 0)
 enemy_scenes = Array[PackedScene]([ExtResource("9_wbwfa")])
 enemy_weights = Array[int]([10])
 max_active = 1
+
+[node name="SpawnPoint" parent="Y-Sort/SpawnPoints" instance=ExtResource("8_067sx")]
+position = Vector2(231, -133)
+enemy_scenes = Array[PackedScene]([ExtResource("11_m4js1")])
+respawn_delay = 6.0
 
 [node name="Chests" type="Node2D" parent="Y-Sort"]
 
