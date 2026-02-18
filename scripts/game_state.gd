@@ -103,8 +103,17 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> void:
 	# --- Save opened chests list ---
 	save_res.opened_chests = opened_chests.duplicate(true)
 
+	# --- Save quests (if QuestManager autoload is present and implements get_save_data) ---
+	if Engine.has_singleton("QuestManager") and QuestManager.has_method("get_save_data"):
+		# QuestManager.get_save_data() should return a Dictionary suitable for serialization
+		save_res.saved_quests = QuestManager.get_save_data()
+	else:
+		# ensure field exists even if no quest manager (keeps resource shape stable)
+		save_res.saved_quests = {}
+
 	# Persist resource to disk (correct order: path, resource)
 	var err := ResourceSaver.save(save_res, SAVE_PATH)
+
 	if err != OK:
 		push_error("[GameState] Save failed: %s" % str(err))
 	else:
@@ -126,6 +135,12 @@ func load_save() -> bool:
 		opened_chests = res.opened_chests.duplicate(true) if res.opened_chests != null else []
 		# store raw inventory array so player can restore it later
 		saved_inventory = res.inventory.duplicate(true) if res.inventory != null else []
+
+		# --- Restore quests into QuestManager if data present ---
+		# This expects QuestManager.autoload to implement load_from_save(Dictionary)
+		if Engine.has_singleton("QuestManager") and res.saved_quests != null:
+			QuestManager.load_from_save(res.saved_quests)
+
 		print("[GameState] ✅ Save loaded: %s %s" % [saved_scene, str(saved_position)])
 		return true
 

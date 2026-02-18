@@ -13,6 +13,8 @@ class_name Enemy
 @export var detection_interval: float = 0.12
 @export var corpse_lifetime: float = 20.0
 @export var fade_duration: float = 2.0
+@export var enemy_type: String = ""
+
 var _loot_dropped: bool = false
 
 var is_dead: bool = false
@@ -826,7 +828,13 @@ func _die() -> void:
 	if anim_player and anim_player.has_animation("death"):
 		anim_player.play("death")
 
+	# notify listeners (game systems) that this enemy died
 	emit_signal("enemy_died", self)
+
+	# notify QuestManager (if present) so kill-type quests progress
+	if Engine.has_singleton("QuestManager") and QuestManager.has_method("notify_enemy_killed"):
+		QuestManager.notify_enemy_killed(enemy_type)
+
 	call_deferred("_handle_corpse_lifecycle")
 
 func _spawn_loot_with_arc() -> void:

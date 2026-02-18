@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3 uid="uid://nooovmras5t7"]
+
+[ext_resource type="Script" path="res://dialog_box.gd" id="1_nuugy"]
+
+[node name="dialog_box" type="CanvasLayer"]
+script = ExtResource("1_nuugy")
+
+[node name="Panel" type="Panel" parent="."]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="RichTextLabel" type="RichTextLabel" parent="Panel"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Label" type="Label" parent="Panel"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0

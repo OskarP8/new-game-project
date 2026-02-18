@@ -1,4 +1,4 @@
-[gd_scene load_steps=41 format=4 uid="uid://ncgeslw4eukd"]
+[gd_scene load_steps=42 format=4 uid="uid://ncgeslw4eukd"]
 
 [ext_resource type="PackedScene" uid="uid://bbv8wq1p3smc6" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://btfv2cckmual" path="res://sprites/tilesets/objects.kra" id="1_08we5"]
@@ -17,6 +17,7 @@
 [ext_resource type="PackedScene" uid="uid://cc7waq14h7pof" path="res://scenes/death_director.tscn" id="13_dldt2"]
 [ext_resource type="Script" path="res://scenes/nav.gd" id="14_27xw6"]
 [ext_resource type="PackedScene" uid="uid://dvpfw8fjdjk55" path="res://scenes/checkpoint.tscn" id="14_o8fc1"]
+[ext_resource type="PackedScene" uid="uid://d3da7x6w7suaa" path="res://scenes/tharapita.tscn" id="16_1sa4l"]
 [ext_resource type="PackedScene" uid="uid://cjengv43kwgx4" path="res://scenes/pause_menu.tscn" id="16_4u6q3"]
 [ext_resource type="Texture2D" uid="uid://cngaw8j588pnr" path="res://sprites/tilesets/roofs.kra" id="18_gskih"]
 
@@ -473,3 +474,6 @@ enabled = false
 [node name="TileMapLayer" type="TileMapLayer" parent="."]
 tile_map_data = PackedByteArray("AAAAAPf/AAAAAAAAAAAAAPj/AAAAAAEAAAAAAPn/AAAAAAIAAAABAPf/AAABAAAAAAABAPj/AAABAAEAAAABAPn/AAABAAIAAAACAPf/AAACAAAAAAACAPj/AAACAAEAAAACAPn/AAACAAIAAAADAPf/AAADAAAAAAADAPj/AAADAAEAAAADAPn/AAADAAIAAAAEAPf/AAAEAAAAAAAEAPj/AAAEAAEAAAAEAPn/AAAEAAIAAAAFAPf/AAAFAAAAAAAFAPj/AAAFAAEAAAAFAPn/AAAFAAIAAAAGAPf/AAAGAAAAAAAGAPj/AAAGAAEAAAAGAPn/AAAGAAIAAAA=")
 tile_set = SubResource("TileSet_gbpm1")
+
+[node name="Tharapita" parent="." instance=ExtResource("16_1sa4l")]
+position = Vector2(-59, -73)

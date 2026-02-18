@@ -290,9 +290,10 @@ motion_mode = 1
 wall_min_slide_angle = 0.0
 script = ExtResource("1_3hyev")
 max_hp = 25
-speed = 55.0
+speed = 50.0
 attack_range = 23.0
 enemy_damage = 2
+enemy_type = "knight"
 loot_table = Array[ExtResource("2_1bo31")]([SubResource("Resource_pmakn")])
 weapon_scene = ExtResource("2_kepdu")
 

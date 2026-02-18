@@ -120,6 +120,7 @@ max_hp = 45
 attack_range = 10.0
 enemy_damage = 1
 attack_cooldown = 1.0
+enemy_type = "fairy"
 weapon_scene = ExtResource("2_ogw6c")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
