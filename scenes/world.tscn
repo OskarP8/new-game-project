@@ -1,4 +1,4 @@
-[gd_scene load_steps=42 format=4 uid="uid://ncgeslw4eukd"]
+[gd_scene load_steps=43 format=4 uid="uid://ncgeslw4eukd"]
 
 [ext_resource type="PackedScene" uid="uid://bbv8wq1p3smc6" path="res://scenes/player.tscn" id="1_5c8af"]
 [ext_resource type="Texture2D" uid="uid://btfv2cckmual" path="res://sprites/tilesets/objects.kra" id="1_08we5"]
@@ -20,6 +20,7 @@
 [ext_resource type="PackedScene" uid="uid://d3da7x6w7suaa" path="res://scenes/tharapita.tscn" id="16_1sa4l"]
 [ext_resource type="PackedScene" uid="uid://cjengv43kwgx4" path="res://scenes/pause_menu.tscn" id="16_4u6q3"]
 [ext_resource type="Texture2D" uid="uid://cngaw8j588pnr" path="res://sprites/tilesets/roofs.kra" id="18_gskih"]
+[ext_resource type="PackedScene" uid="uid://nooovmras5t7" path="res://scenes/dialog_box.tscn" id="21_7kuim"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3xxoc"]
 texture = ExtResource("1_08we5")
@@ -477,3 +478,5 @@ tile_set = SubResource("TileSet_gbpm1")
 
 [node name="Tharapita" parent="." instance=ExtResource("16_1sa4l")]
 position = Vector2(-59, -73)
+
+[node name="DialogBox" parent="." instance=ExtResource("21_7kuim")]

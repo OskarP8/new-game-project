@@ -1,20 +1,39 @@
-[gd_scene load_steps=2 format=3 uid="uid://nooovmras5t7"]
+[gd_scene load_steps=3 format=3 uid="uid://nooovmras5t7"]
 
 [ext_resource type="Script" path="res://dialog_box.gd" id="1_nuugy"]
 
-[node name="dialog_box" type="CanvasLayer"]
+[sub_resource type="LabelSettings" id="LabelSettings_r506l"]
+font_size = 40
+
+[node name="DialogBox" type="CanvasLayer"]
 script = ExtResource("1_nuugy")
 
 [node name="Panel" type="Panel" parent="."]
-offset_right = 40.0
-offset_bottom = 40.0
+anchors_preset = -1
+anchor_left = 0.076
+anchor_top = 0.747
+anchor_right = 0.924
+anchor_bottom = 0.937
+offset_left = 0.448006
+offset_top = -0.0559998
+offset_right = 0.447998
+offset_bottom = -0.0559692
+grow_horizontal = 2
+grow_vertical = 0
 
-[node name="RichTextLabel" type="RichTextLabel" parent="Panel"]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
+[node name="Text" type="Label" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="Label" type="Label" parent="Panel"]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 23.0
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = -30.0
+offset_bottom = -7.0
+grow_horizontal = 2
+label_settings = SubResource("LabelSettings_r506l")

@@ -1,32 +1,27 @@
 extends CanvasLayer
 
-signal line_finished()        # emitted when a line fully typed and not skipped
-signal dialog_complete()      # emitted when whole dialog sequence is done
-signal skipped()              # emitted when user skipped typing
+signal line_finished()
+signal dialog_complete()
+signal skipped()
 
-@export var char_delay := 0.02    # seconds per character (smaller => faster)
-@export var sound_on_char: AudioStream = null   # optional sfx for each char
+@export var char_delay := 0.02
+@export var sound_on_char: AudioStream = null
 
-# entrance: "slide_up", "slide_down", "pop", "none"
 func show_dialog(lines: Array, speaker: String = "", entrance: String = "pop") -> void:
-	# lines = array of strings
-	# store and start
 	_lines = lines.duplicate(true)
 	_line_index = 0
 	_is_showing = true
-	$Window.visible = true
+	$Panel.visible = true
 	_current_speaker = speaker
-	$Speaker.text = speaker
-	# play entrance
+	$Panel/Label.text = speaker
 	_play_entrance(entrance)
-	# start first line
 	_play_next_line()
 
 func hide_dialog() -> void:
 	_is_showing = false
 	_lines = []
 	_line_index = 0
-	$Window.visible = false
+	$Panel.visible = false
 
 # internals
 var _lines: Array = []
@@ -36,67 +31,73 @@ var _skip: bool = false
 var _is_showing: bool = false
 var _current_speaker: String = ""
 
-@onready var _text_ctrl: RichTextLabel = $Window/Text
-@onready var _speaker_label: Label = $Window/Speaker
+# Use Label type (so label_settings works)
+@onready var _text_ctrl: Label = $Panel/Text
+@onready var _speaker_label: Label = $Panel/Label
 
 func _ready() -> void:
-	$Window.visible = false
-	_text_ctrl.bbcode_enabled = false
-	_text_ctrl.clear()
-	# input processing enabled so _unhandled_input catches keys
+	$Panel.visible = false
+
+	# --- Outline + color via LabelSettings ---
+	var settings := LabelSettings.new()
+	settings.font_color = Color(1,1,1)         # white text
+	settings.outline_size = 4                 # change to taste
+	settings.outline_color = Color(0,0,0)     # black outline
+	_text_ctrl.label_settings = settings
+	_speaker_label.label_settings = settings
+
+	_text_ctrl.text = ""
 	set_process_unhandled_input(true)
 
 func _play_entrance(style: String) -> void:
-	$Window.modulate = Color(1,1,1,0)
-	$Window.rect_scale = Vector2.ONE
+	$Panel.modulate = Color(1,1,1,0)
+	# Panel doesn't have rect_scale property (Control uses rect_scale), use scale via rect_scale on Panel (valid)
+	$Panel.scale = Vector2.ONE
 	match style:
 		"slide_up":
-			$Window.rect_position += Vector2(0, 40)
-			get_tree().create_tween().tween_property($Window, "rect_position", $Window.rect_position - Vector2(0,40), 0.25).tween_property($Window, "modulate:a", 1.0, 0.25)
+			$Panel.position += Vector2(0, 40)
+			var t = get_tree().create_tween()
+			t.tween_property($Panel, "position", $Panel.position - Vector2(0,40), 0.25)
+			t.tween_property($Panel, "modulate:a", 1.0, 0.25)
 		"slide_down":
-			$Window.rect_position -= Vector2(0, 40)
-			get_tree().create_tween().tween_property($Window, "rect_position", $Window.rect_position + Vector2(0,40), 0.25).tween_property($Window, "modulate:a", 1.0, 0.25)
+			$Panel.position -= Vector2(0, 40)
+			var t2 = get_tree().create_tween()
+			t2.tween_property($Panel, "position", $Panel.position + Vector2(0,40), 0.25)
+			t2.tween_property($Panel, "modulate:a", 1.0, 0.25)
 		"pop":
-			$Window.rect_scale = Vector2(0.8, 0.8)
-			get_tree().create_tween().tween_property($Window, "rect_scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).tween_property($Window, "modulate:a", 1.0, 0.12)
+			$Panel.scale = Vector2(0.8, 0.8)
+			var t3 = get_tree().create_tween()
+			t3.tween_property($Panel, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			t3.tween_property($Panel, "modulate:a", 1.0, 0.12)
 		"_":
-			$Window.modulate = Color(1,1,1,1)
+			$Panel.modulate = Color(1,1,1,1)
 
 func _play_next_line() -> void:
 	if _line_index >= _lines.size():
 		emit_signal("dialog_complete")
 		hide_dialog()
 		return
-	_text_ctrl.clear()
+	_text_ctrl.text = ""
 	var txt := str(_lines[_line_index])
-	# speaker label already set in show_dialog; keep it unless you plan to change per-line
 	_typing = true
 	_skip = false
-	# start the typing coroutine-style (uses await)
 	_typing_task(txt)
 
 func _typing_task(full_text: String) -> void:
-	_text_ctrl.clear()
+	_text_ctrl.text = ""
 	var length := full_text.length()
 	for i in range(length):
 		if _skip:
-			# finish instantly
-			_text_ctrl.clear()
-			_text_ctrl.append_text(full_text)
+			_text_ctrl.text = full_text
 			break
-		# append next character
-		_text_ctrl.append_text(full_text.substr(i, 1))
-		# optional per-char sound
+		_text_ctrl.text += full_text.substr(i, 1)
 		if sound_on_char:
 			var ps := AudioStreamPlayer2D.new()
 			add_child(ps)
 			ps.stream = sound_on_char
 			ps.play()
-			# queue free soon (cheap)
 			ps.call_deferred("queue_free")
-		# wait a short time (Godot 4 await)
 		await get_tree().create_timer(char_delay).timeout
-	# finished typing
 	_typing = false
 	emit_signal("line_finished")
 	_line_index += 1
@@ -104,12 +105,9 @@ func _typing_task(full_text: String) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_showing:
 		return
-	# Space or Enter => advance or skip
-	if event.is_action_pressed("ui_accept"):
+	if event.is_action_pressed("ui_accept"):  # default: Enter/Space if mapped
 		if _typing:
-			# skip typing, show full line immediately
 			_skip = true
 			emit_signal("skipped")
 		else:
-			# if not typing, advance to next line
 			_play_next_line()

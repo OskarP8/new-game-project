@@ -25,7 +25,7 @@ var is_done: bool = false
 var _current_player: Node = null
 
 # dialog instance (cached) — expects a DialogBox at /root/DialogBox or similar
-@onready var dlg := get_tree().root.get_node("DialogBox") if get_tree().root.has_node("DialogBox") else null
+@onready var dlg := get_tree().current_scene.get_node("DialogBox")
 
 func _ready() -> void:
 	# connect dialog
@@ -94,7 +94,6 @@ func interact(player: Node2D) -> void:
 
 	# Build dialog
 	var lines: Array = []
-	lines.append("[b]" + npc_name + "[/b]")
 	for l in greeting_lines:
 		lines.append(l)
 
@@ -154,10 +153,17 @@ func _on_area_body_entered(body: Node) -> void:
 	# accept either "player" or "Player"
 	if body is Node and (body.is_in_group("player") or body.is_in_group("Player")):
 		_current_player = body
-		# prefer to use the player's InteractionComponent methods (if present)
+		# attempt to find an InteractionComponent child on the player
 		var interactor = body.find_child("InteractionComponent", true, false)
 		if interactor:
-			# prefer the InteractArea's update method (safe)
+			# if the interactor exposes the can_interact list, add ourselves
+			if "can_interact" in interactor and self not in interactor.can_interact:
+				interactor.can_interact.append(self)
+				# ask it to refresh its prompt
+				if interactor.has_method("_update_prompt"):
+					interactor._update_prompt()
+				return
+			# otherwise prefer InteractionComponent public methods if present
 			if interactor.has_method("_update_prompt"):
 				interactor._update_prompt()
 				return
@@ -167,7 +173,7 @@ func _on_area_body_entered(body: Node) -> void:
 			if interactor.has_method("show_prompt"):
 				interactor.show_prompt(self)
 				return
-		# fallback to our own prompt if no interactor or no matching method
+		# fallback to our own prompt if no interactor or methods
 		_show_prompt(true)
 
 func _on_area_body_exited(body: Node) -> void:
@@ -177,6 +183,13 @@ func _on_area_body_exited(body: Node) -> void:
 	if body is Node and (body.is_in_group("player") or body.is_in_group("Player")):
 		var interactor = body.find_child("InteractionComponent", true, false)
 		if interactor:
+			# remove ourselves from its can_interact list if present
+			if "can_interact" in interactor and self in interactor.can_interact:
+				interactor.can_interact.erase(self)
+				if interactor.has_method("_update_prompt"):
+					interactor._update_prompt()
+				return
+			# otherwise call hide helpers if available
 			if interactor.has_method("_update_prompt"):
 				interactor._update_prompt()
 			elif interactor.has_method("hide_prompt_for"):
@@ -193,68 +206,52 @@ func _on_area_area_entered(a: Area2D) -> void:
 		return
 	print("[Taara] Area area_entered:", a.name if "name" in a else a, "class:", a.get_class())
 	# If the overlapping area *is* the InteractionComponent (or provides the same interface), use it directly
-	if a.has_method("_update_prompt") or a.has_method("show_prompt_for") or a.has_method("show_prompt"):
-		# try to find owning player body by walking up parents
-		var owner_player := _find_owner_player_from_node(a)
-		if owner_player:
-			_current_player = owner_player
-			# call the interactor methods if available (prefer the safe _update_prompt)
+	# Prefer to add ourselves into its can_interact list if available
+	if "can_interact" in a:
+		if self not in a.can_interact:
+			a.can_interact.append(self)
 			if a.has_method("_update_prompt"):
 				a._update_prompt()
 				return
-			if a.has_method("show_prompt_for"):
-				a.show_prompt_for(self)
-				return
-			if a.has_method("show_prompt"):
-				a.show_prompt()
-				return
-			# If area itself doesn't show prompt, try the player's InteractionComponent on player node (fallback)
-			var interactor = owner_player.find_child("InteractionComponent", true, false)
-			if interactor:
-				if interactor.has_method("_update_prompt"):
-					interactor._update_prompt()
-					return
-				if interactor.has_method("show_prompt_for"):
-					interactor.show_prompt_for(self)
-					return
-	# If not recognized as an interactor area, attempt to treat it like a body overlap (search up for player)
-	var p = _find_owner_player_from_node(a)
-	if p:
-		_on_area_body_entered(p)
+	# If area itself has show/update methods, use them
+	if a.has_method("_update_prompt"):
+		a._update_prompt()
+		return
+	if a.has_method("show_prompt_for"):
+		a.show_prompt_for(self)
+		return
+	if a.has_method("show_prompt"):
+		a.show_prompt()
+		return
+
+	# fallback: attempt to find owner player and treat as body_entered
+	var owner_player := _find_owner_player_from_node(a)
+	if owner_player:
+		_on_area_body_entered(owner_player)
 
 func _on_area_area_exited(a: Area2D) -> void:
 	if a == null:
 		return
 	print("[Taara] Area area_exited:", a.name if "name" in a else a, "class:", a.get_class())
-	# if the area was the InteractionComponent, try to hide via its methods or the player's interactor
-	if a.has_method("hide_prompt") or a.has_method("hide_prompt_for") or a.has_method("_update_prompt"):
-		var owner_player := _find_owner_player_from_node(a)
-		if owner_player:
-			var interactor = a
-			# call area hide if it has it
-			if a.has_method("hide_prompt"):
-				a.hide_prompt()
-				_current_player = null
-				return
-			if a.has_method("hide_prompt_for"):
-				a.hide_prompt_for(self)
-				_current_player = null
-				return
-			# fallback to player's InteractionComponent
-			var ip = owner_player.find_child("InteractionComponent", true, false)
-			if ip:
-				if ip.has_method("hide_prompt_for"):
-					ip.hide_prompt_for(self)
-					_current_player = null
-					return
-				if ip.has_method("hide_prompt"):
-					ip.hide_prompt()
-					_current_player = null
-					return
-	# otherwise, try to detect player parent and forward to body_exited
-	var p = _find_owner_player_from_node(a)
-	if p:
-		_on_area_body_exited(p)
+	# If the area had can_interact list, remove ourselves and refresh
+	if "can_interact" in a and self in a.can_interact:
+		a.can_interact.erase(self)
+		if a.has_method("_update_prompt"):
+			a._update_prompt()
+		return
+
+	# call hiding methods if area provides them
+	if a.has_method("hide_prompt_for"):
+		a.hide_prompt_for(self)
+		return
+	if a.has_method("hide_prompt"):
+		a.hide_prompt()
+		return
+
+	# fallback: attempt to find owner player and treat as body_exited
+	var owner_player := _find_owner_player_from_node(a)
+	if owner_player:
+		_on_area_body_exited(owner_player)
 
 # helper: walk up parent chain to find a node in "Player" or "player" group
 func _find_owner_player_from_node(node: Node) -> Node:
@@ -270,16 +267,19 @@ func _find_owner_player_from_node(node: Node) -> Node:
 # show/hide prompt local fallback (same pattern as Chest)
 func _show_prompt(visible: bool) -> void:
 	if visible:
-		# lazy instantiate
 		if prompt == null and prompt_scene:
 			prompt = prompt_scene.instantiate()
 			get_tree().current_scene.add_child(prompt)
-			if prompt.has_method("attach_to_target"):
-				prompt.attach_to_target(self)
+
 		if prompt:
+			var offset := Vector2(10, 6)
+			var target_pos := global_position + offset
+
 			if prompt.has_method("show_prompt"):
-				prompt.show_prompt()
+				# Pass both required arguments
+				prompt.show_prompt("Press E", target_pos)
 			else:
+				prompt.global_position = target_pos
 				prompt.visible = true
 	else:
 		if prompt:
@@ -298,20 +298,17 @@ func _make_npc_id() -> String:
 func _debug_interaction_state() -> void:
 	print("---- Taara DEBUG START ----")
 	print("Taara node:", self.name, "global_pos:", global_position)
-	# area variable (onready) may be null if node path differs
 	print("area (onready) is null?:", area == null)
 	if has_node("InteractionArea"):
 		var a = $InteractionArea
 		print(" InteractionArea node exists (path $InteractionArea). monitoring:", a.monitoring, " monitorable:", a.monitorable)
 		print("  collision_layer:", a.collision_layer, " collision_mask:", a.collision_mask)
-		# list children of area
 		print("  InteractionArea children count:", a.get_child_count())
 		for i in range(a.get_child_count()):
 			var ch = a.get_child(i)
 			print("   child:", i, ch.name, "class:", ch.get_class())
 			if ch is CollisionShape2D:
 				print("    CollisionShape2D disabled?:", ch.disabled, " shape class:", (ch.shape.get_class() if ch.shape else "null"))
-				# if Circle/Rect, print extents/radius where possible
 				if ch.shape is CircleShape2D:
 					print("     Circle radius:", ch.shape.radius)
 				elif ch.shape is RectangleShape2D:
@@ -322,13 +319,8 @@ func _debug_interaction_state() -> void:
 			var c = get_child(i)
 			print("  child:", i, c.name, "class:", c.get_class())
 
-	# check if area variable resolved to something else (maybe named differently)
 	if area != null:
 		print(" onready 'area' resolved to node:", area.name, "path:", area.get_path())
-	# print collision layers of Taara root node (if it has collision nodes)
-	if has_node("CollisionShape2D"):
-		print("Taara has CollisionShape2D as direct child and it's present")
-	# print Player group membership (best-effort)
 	var players := get_tree().get_nodes_in_group("Player") + get_tree().get_nodes_in_group("player")
 	print("Players found by groups: Player count:", get_tree().get_nodes_in_group("Player").size(), " player count:", get_tree().get_nodes_in_group("player").size(), " total detect:", players.size())
 	for p in players:
