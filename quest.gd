@@ -8,7 +8,11 @@ class_name Quest
 @export var description: String = ""
 # possible states: "available", "active", "completed", "failed"
 @export var state: String = "available"
-@export var objective: Dictionary = {}
+@export var objective: Dictionary = {
+	"type": "kill",
+	"target": "",
+	"count": 1
+}
 @export var reward: Dictionary = {}
 
 func is_active() -> bool:

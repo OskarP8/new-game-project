@@ -831,11 +831,39 @@ func _die() -> void:
 	# notify listeners (game systems) that this enemy died
 	emit_signal("enemy_died", self)
 
-	# notify QuestManager (if present) so kill-type quests progress
-	if Engine.has_singleton("QuestManager") and QuestManager.has_method("notify_enemy_killed"):
-		QuestManager.notify_enemy_killed(enemy_type)
+	# notify listeners (game systems) that this enemy died
+	emit_signal("enemy_died", self)
+
+	# Report kill to QuestManager (robust)
+	_report_kill_to_quest_mgr()
 
 	call_deferred("_handle_corpse_lifecycle")
+
+	call_deferred("_handle_corpse_lifecycle")
+
+# Robust reporting of an enemy kill to QuestManager (works with autoload or scene node)
+func _report_kill_to_quest_mgr() -> void:
+	# determine canonical enemy key
+	var key := str(enemy_type).strip_edges()
+	if key == "":
+		key = name  # fallback to the node name (e.g. "Knight")
+	key = key.to_lower()
+
+	# prefer the autoload/global if available
+	if typeof(QuestManager) != TYPE_NIL and QuestManager.has_method("notify_enemy_killed"):
+		print("[Enemy] reporting kill to QuestManager (autoload):", key)
+		QuestManager.notify_enemy_killed(key)
+		return
+
+	# fallback: find a QuestManager node anywhere under root
+	var qm = get_tree().get_root().find_node("QuestManager", true, false)
+	if qm and qm.has_method("notify_enemy_killed"):
+		print("[Enemy] reporting kill to QuestManager (node):", key)
+		qm.notify_enemy_killed(key)
+		return
+
+	# nothing found — log for debugging
+	print("[Enemy] no QuestManager.notify_enemy_killed() found; kill not reported for:", key)
 
 func _spawn_loot_with_arc() -> void:
 	if loot_table.is_empty():

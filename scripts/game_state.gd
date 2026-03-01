@@ -103,12 +103,17 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> void:
 	# --- Save opened chests list ---
 	save_res.opened_chests = opened_chests.duplicate(true)
 
-	# --- Save quests (if QuestManager autoload is present and implements get_save_data) ---
-	if Engine.has_singleton("QuestManager") and QuestManager.has_method("get_save_data"):
-		# QuestManager.get_save_data() should return a Dictionary suitable for serialization
-		save_res.saved_quests = QuestManager.get_save_data()
+	# --- Save quests (if QuestManager autoload is present) ---
+	# prefer a snapshot method name 'get_save_snapshot' (recommended)
+	if Engine.has_singleton("QuestManager"):
+		if QuestManager.has_method("get_save_snapshot"):
+			save_res.saved_quests = QuestManager.get_save_snapshot()
+		# for backward compatibility, fall back to older method name if you have it
+		elif QuestManager.has_method("get_save_data"):
+			save_res.saved_quests = QuestManager.get_save_data()
+		else:
+			save_res.saved_quests = {}
 	else:
-		# ensure field exists even if no quest manager (keeps resource shape stable)
 		save_res.saved_quests = {}
 
 	# Persist resource to disk (correct order: path, resource)
@@ -137,10 +142,15 @@ func load_save() -> bool:
 		saved_inventory = res.inventory.duplicate(true) if res.inventory != null else []
 
 		# --- Restore quests into QuestManager if data present ---
-		# This expects QuestManager.autoload to implement load_from_save(Dictionary)
 		if Engine.has_singleton("QuestManager") and res.saved_quests != null:
-			QuestManager.load_from_save(res.saved_quests)
-
+			# prefer new API name apply_save_snapshot(snapshot)
+			if QuestManager.has_method("apply_save_snapshot"):
+				QuestManager.apply_save_snapshot(res.saved_quests)
+			# backward compatibility: some older code used load_from_save
+			elif QuestManager.has_method("load_from_save"):
+				QuestManager.load_from_save(res.saved_quests)
+			else:
+				print("[GameState] Save contains quest data but QuestManager lacks apply_save_snapshot/load_from_save")
 		print("[GameState] ✅ Save loaded: %s %s" % [saved_scene, str(saved_position)])
 		return true
 

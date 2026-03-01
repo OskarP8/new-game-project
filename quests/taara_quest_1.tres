@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Quest" load_steps=2 format=3 uid="uid://t4nicfg78ljr"]
+
+[ext_resource type="Script" path="res://quest.gd" id="1_qm4s3"]
+
+[resource]
+script = ExtResource("1_qm4s3")
+id = "taara_quest_1"
+title = "Slay the Iron Men"
+description = "A horde of iron men has been terrorising the village...Hunt them down to prove your strength."
+state = "available"
+objective = {
+"count": 1,
+"target": "knight",
+"type": "kill"
+}
+reward = {}

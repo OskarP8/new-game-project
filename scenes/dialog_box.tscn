@@ -1,9 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://nooovmras5t7"]
+[gd_scene load_steps=2 format=3 uid="uid://nooovmras5t7"]
 
 [ext_resource type="Script" path="res://dialog_box.gd" id="1_nuugy"]
-
-[sub_resource type="LabelSettings" id="LabelSettings_r506l"]
-font_size = 40
 
 [node name="DialogBox" type="CanvasLayer"]
 script = ExtResource("1_nuugy")
@@ -36,4 +33,3 @@ anchor_right = 1.0
 offset_top = -30.0
 offset_bottom = -7.0
 grow_horizontal = 2
-label_settings = SubResource("LabelSettings_r506l")

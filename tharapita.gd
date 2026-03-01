@@ -9,7 +9,7 @@ signal wish_granted(player: Node)
 	"Who approaches the oak? Speak, child of the land.",
 	"Prove your strength and I shall consider your wish."
 ]
-@export var quest_ids := ["taara_slay_ironmen", "taara_slay_wraith", "taara_slay_troll"]
+@export var quest_ids := ["taara_quest_1", "taara_quest_2", "taara_quest_3"]
 
 # Interaction / prompt (Chest-style)
 @onready var prompt_scene := preload("res://scenes/interact_prompt.tscn")
@@ -24,24 +24,53 @@ var is_interacting: bool = false
 var is_done: bool = false
 var _current_player: Node = null
 
-# dialog instance (cached) — expects a DialogBox at /root/DialogBox or similar
-@onready var dlg := get_tree().current_scene.get_node("DialogBox")
+# only show base greeting once per game session (prevents repeating the same lines)
+var _greeted_once: bool = false
+
+# dialog instance (cached) — will be resolved at runtime if necessary
+var dlg: Node = null
+# cache if we've subscribed to quest manager registration
+var _connected_to_quest_mgr := false
+
+# Helper: return the best QuestManager instance available, or null.
+func _get_quest_mgr() -> Node:
+	# 1) If the global var exists (autoload registered as global), return it.
+	if typeof(QuestManager) != TYPE_NIL:
+		return QuestManager
+
+	# 2) Look for a direct child under the SceneTree root named "QuestManager"
+	var root := get_tree().get_root()
+	if root.has_node("QuestManager"):
+		return root.get_node("QuestManager")
+
+	# 3) Fallback: lightweight recursive search starting at root (safe: iterates children)
+	var stack: Array = [ root ]
+	while stack.size() > 0:
+		var n = stack.pop_back()
+		if n == null:
+			continue
+		if n.name == "QuestManager":
+			return n
+		for i in range(n.get_child_count()):
+			stack.append(n.get_child(i))
+
+	return null
 
 func _ready() -> void:
-	# connect dialog
-	if dlg:
-		if not dlg.is_connected("line_finished", Callable(self, "_on_line_finished")):
-			dlg.connect("line_finished", Callable(self, "_on_line_finished"))
-		if not dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
-			dlg.connect("dialog_complete", Callable(self, "_on_dialog_complete"))
-
+	# attempt initial resolution & safe connection
+	_resolve_and_connect_dialogbox()
+	# after _resolve_and_connect_dialogbox() in _ready()
+	var QM := _get_quest_mgr()
+	if QM != null and not _connected_to_quest_mgr:
+		if not QM.is_connected("quests_registered", Callable(self, "_on_quests_registered")):
+			QM.connect("quests_registered", Callable(self, "_on_quests_registered"))
+		_connected_to_quest_mgr = true
 	# connect area signals (proximity prompt) — handle both bodies and areas
 	if area:
 		if not area.is_connected("body_entered", Callable(self, "_on_area_body_entered")):
 			area.body_entered.connect(Callable(self, "_on_area_body_entered"))
 		if not area.is_connected("body_exited", Callable(self, "_on_area_body_exited")):
 			area.body_exited.connect(Callable(self, "_on_area_body_exited"))
-
 		# Also listen for other Area2D overlaps (the player's InteractionComponent is an Area2D)
 		if not area.is_connected("area_entered", Callable(self, "_on_area_area_entered")):
 			area.area_entered.connect(Callable(self, "_on_area_area_entered"))
@@ -53,13 +82,36 @@ func _ready() -> void:
 	_update_done_state()
 	_debug_interaction_state()
 
+# Try to find DialogBox and connect signals (safe to call any time)
+func _resolve_and_connect_dialogbox() -> void:
+	# if already have a valid dlg, nothing to do
+	if dlg and is_instance_valid(dlg):
+		return
+
+	# try current scene first
+	dlg = get_tree().current_scene.get_node_or_null("DialogBox")
+	if dlg == null:
+		# fallback: global search
+		dlg = get_tree().root.find_node("DialogBox", true, false)
+
+	if dlg:
+		# connect signals if not already connected
+		if not dlg.is_connected("line_finished", Callable(self, "_on_line_finished")):
+			dlg.connect("line_finished", Callable(self, "_on_line_finished"))
+		if not dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
+			dlg.connect("dialog_complete", Callable(self, "_on_dialog_complete"))
+		print("[Taara] DialogBox resolved and signals connected ->", dlg)
+	else:
+		# don't spam logs, do a single warning
+		print("[Taara] DialogBox not found yet (will retry on interact).")
+
 func _update_done_state() -> void:
-	# set is_done true if all quest_ids are completed
-	if not Engine.has_singleton("QuestManager"):
+	var QM := _get_quest_mgr()
+	if QM == null:
 		is_done = false
 		return
 	for qid in quest_ids:
-		var q := QuestManager.get_quest(qid)
+		var q = QM.get_quest(qid)
 		if q == null:
 			is_done = false
 			return
@@ -70,71 +122,177 @@ func _update_done_state() -> void:
 
 # Called by InteractionComponent / player controller when the player chooses to interact
 func interact(player: Node2D) -> void:
-	print("[Taara] interact requested by:", player.name if player and "name" in player else player)
+	_resolve_and_connect_dialogbox()
+
+	print("[Taara DEBUG] interact() running — resolving QuestManager debug info now")
+
+	# quick QM lookup like before, prefer autoload var
+	var QM = null
+	if typeof(QuestManager) != TYPE_NIL:
+		QM = QuestManager
+	elif get_tree().get_root().has_node("QuestManager"):
+		QM = get_tree().get_root().get_node("QuestManager")
 
 	if player == null:
 		print("[Taara] ⚠ No player supplied to interact()")
 		return
 
-	_update_done_state()
-
-	# if all quests done, run wish flow
-	if is_done:
-		_perform_wish_flow(player)
-		return
-
-	# ignore duplicates
-	if is_interacting:
-		print("[Taara] ⚠ Already interacting; ignoring duplicate")
-		return
-
-	if dlg == null:
-		print("[Taara] ⚠ DialogBox not found in root — cannot show dialog")
-		return
-
-	# Build dialog
+	# Build dialog lines
 	var lines: Array = []
-	for l in greeting_lines:
-		lines.append(l)
 
+	# show base greeting only the first time we talk (prevents repeat on every interaction)
+	if not _greeted_once:
+		for l in greeting_lines:
+			lines.append(l)
+		_greeted_once = true
+
+	print("[Taara] Debug: Gathering quest info for dialog:")
+	var any_quest_lines := false
 	for qid in quest_ids:
 		var q = null
-		if Engine.has_singleton("QuestManager"):
-			q = QuestManager.get_quest(qid)
-		if q and ("state" in q) and q.state == "available":
-			lines.append("I ask you to: " + q.title)
-		elif q and ("state" in q) and q.state == "active":
-			lines.append("You are working on: " + q.title)
+		if QM != null and QM.has_method("get_quest"):
+			q = QM.get_quest(qid)
+		if q == null:
+			print("  -", qid, " -> NULL")
+			continue
+		var state_str := str(q.state) if "state" in q else "(no state)"
+		var title_str = q.title if "title" in q else qid
+		print("  -", qid, "-> state:", state_str, " title:", title_str)
+
+		# inside interact() loop where you handle available quests:
+		if q.state == "available":
+			# use description as the quest intro (split into paragraphs if you put blank lines)
+			if "description" in q and q.description != "":
+				var paragraphs := str(q.description).split("\n\n")
+				for para in paragraphs:
+					if para.strip_edges() != "":
+						lines.append(para.strip_edges())
+			else:
+				lines.append("I ask you to: " + title_str)
+			any_quest_lines = true
+
+		elif q.state == "active":
+			lines.append("You are working on: " + title_str)
+			# optionally include progress if QuestManager exposes progress
+			var prog = QM.get_kill_progress(qid) if QM and QM.has_method("get_kill_progress") else 0
+			if q.objective != null and q.objective.get("type", "") == "kill":
+				lines.append("%s killed %d/%d" % [q.objective.get("target", "").capitalize(), prog, int(q.objective.get("count", 1))])
+			any_quest_lines = true
+
+		elif q.state == "completed":
+			lines.append("Thank you — you completed: " + title_str)
+			any_quest_lines = true
+
+	# fallback
+	if not any_quest_lines:
+		lines.append("...")
+		lines.append("I have no new task for you now.")
 
 	is_interacting = true
-	_show_prompt(false)  # hide prompt while dialog visible
+	_show_prompt(false)
+
+	print("[Taara] Sending lines to DialogBox (count):", lines.size(), " ->", lines)
+
+	if dlg == null:
+		_resolve_and_connect_dialogbox()
+
+	if dlg == null:
+		print("[Taara] ⚠ DialogBox still not found — aborting show_dialog()")
+		return
+
 	dlg.show_dialog(lines, npc_name, "pop")
 
-func _on_line_finished() -> void:
-	# placeholder for sound or per-line effects
-	pass
+# Add this helper to TaaraNPC
+func _claim_completed_quests() -> void:
+	var QM := _get_quest_mgr()
+	if QM == null:
+		print("[Taara] No QuestManager found when trying to claim quests.")
+		return
 
-func _on_dialog_complete() -> void:
-	# after dialog finishes, offer first available quest automatically
+	var claimed_any := false
 	for qid in quest_ids:
 		var q = null
-		if Engine.has_singleton("QuestManager"):
-			q = QuestManager.get_quest(qid)
-		if q and ("state" in q) and q.state == "available":
-			QuestManager.accept_quest(qid)
-			if dlg:
-				dlg.show_dialog(["You accepted: " + q.title], npc_name, "slide_up")
-			is_interacting = false
-			_show_prompt(true)
-			return
+		if QM and QM.has_method("get_quest"):
+			q = QM.get_quest(qid)
+		if q == null:
+			continue
+		# only claim those that are completed
+		if "state" in q and q.state == "completed":
+			# prefer explicit claim_quest API if present
+			if QM.has_method("claim_quest"):
+				print("[Taara] Claiming quest via QuestManager.claim_quest(", qid, ")")
+				QM.claim_quest(qid)
+				claimed_any = true
+			# fallback attempts (defensive): try some common alternate method names
+			elif QM.has_method("set_quest_state"):
+				print("[Taara] Claiming quest via QuestManager.set_quest_state(", qid, ", 'claimed')")
+				QM.set_quest_state(qid, "claimed")
+				claimed_any = true
+			elif QM.has_method("update_quest_state"):
+				print("[Taara] Claiming quest via QuestManager.update_quest_state(", qid, ", 'claimed')")
+				QM.update_quest_state(qid, "claimed")
+				claimed_any = true
+			else:
+				print("[Taara] Warning: QuestManager has no known claim API. You may need to implement QuestManager.claim_quest(qid).")
 
+	# let QuestManager/HUD handle emitting updates. If your QuestManager doesn't emit updates on claim,
+	# you could emit a custom signal here or call a HUD refresh directly (not recommended).
+	if claimed_any:
+		# Refresh our done state after claiming attempt
+		_update_done_state()
+
+# Then modify your existing _on_dialog_complete() — replace the 'if is_done: _perform_wish_flow(null)' block
+# with this safer logic (keep the rest of your function unchanged):
+func _on_dialog_complete() -> void:
+	print("[Taara] _on_dialog_complete() called — checking quests to offer/accept")
+	var QM := _get_quest_mgr()
+	# debug states
+	for qid in quest_ids:
+		var q = null
+		if QM:
+			q = QM.get_quest(qid)
+		if q == null:
+			print("  -", qid, " -> NULL")
+			continue
+		var state_str := str(q.state) if "state" in q else "(no state)"
+		print("  -", qid, "-> state:", state_str)
+
+	# Attempt to auto-offer/accept first available quest
+	for qid in quest_ids:
+		var q = null
+		if QM:
+			q = QM.get_quest(qid)
+		if q and "state" in q and q.state == "available":
+			var title_str = q.title if "title" in q else qid
+			print("[Taara] Offering quest:", qid, "title:", title_str)
+			if QM and QM.has_method("accept_quest"):
+				print("[Taara] Calling QuestManager.accept_quest(", qid, ")")
+				QM.accept_quest(qid)
+				if dlg == null:
+					_resolve_and_connect_dialogbox()
+				if dlg:
+					dlg.show_dialog(["You accepted: " + title_str], npc_name, "slide_up")
+				is_interacting = false
+				_show_prompt(true)
+				return
+			else:
+				print("[Taara] ⚠ QuestManager.accept_quest not available")
 	# none to offer — re-check done
 	_update_done_state()
+
+	# If quests are done (completed), claim them now (player is talking to Taara to claim)
 	if is_done:
-		_perform_wish_flow(null)
+		# Attempt to mark completed quests as claimed via QuestManager API (safe fallback)
+		_claim_completed_quests()
+		# After claiming we do the wish flow for the player
+		_perform_wish_flow(_current_player)
 	else:
 		is_interacting = false
 		_show_prompt(true)
+
+func _on_line_finished() -> void:
+	# optional: sound/effect per-line
+	pass
 
 func _perform_wish_flow(player: Node) -> void:
 	print("[Taara] You proved worthy. Granting wish now.")
@@ -145,25 +303,19 @@ func _perform_wish_flow(player: Node) -> void:
 	_show_prompt(false)
 
 # ----- Area2D handlers (connect these) -----
-# When a PhysicsBody2D (CharacterBody2D) enters
 func _on_area_body_entered(body: Node) -> void:
 	if body == null:
 		return
 	print("[Taara] Area body_entered:", body.name if "name" in body else body)
-	# accept either "player" or "Player"
 	if body is Node and (body.is_in_group("player") or body.is_in_group("Player")):
 		_current_player = body
-		# attempt to find an InteractionComponent child on the player
 		var interactor = body.find_child("InteractionComponent", true, false)
 		if interactor:
-			# if the interactor exposes the can_interact list, add ourselves
 			if "can_interact" in interactor and self not in interactor.can_interact:
 				interactor.can_interact.append(self)
-				# ask it to refresh its prompt
 				if interactor.has_method("_update_prompt"):
 					interactor._update_prompt()
 				return
-			# otherwise prefer InteractionComponent public methods if present
 			if interactor.has_method("_update_prompt"):
 				interactor._update_prompt()
 				return
@@ -171,9 +323,8 @@ func _on_area_body_entered(body: Node) -> void:
 				interactor.show_prompt_for(self)
 				return
 			if interactor.has_method("show_prompt"):
-				interactor.show_prompt(self)
+				interactor.show_prompt("Press E", global_position)
 				return
-		# fallback to our own prompt if no interactor or methods
 		_show_prompt(true)
 
 func _on_area_body_exited(body: Node) -> void:
@@ -183,37 +334,31 @@ func _on_area_body_exited(body: Node) -> void:
 	if body is Node and (body.is_in_group("player") or body.is_in_group("Player")):
 		var interactor = body.find_child("InteractionComponent", true, false)
 		if interactor:
-			# remove ourselves from its can_interact list if present
 			if "can_interact" in interactor and self in interactor.can_interact:
 				interactor.can_interact.erase(self)
 				if interactor.has_method("_update_prompt"):
 					interactor._update_prompt()
 				return
-			# otherwise call hide helpers if available
 			if interactor.has_method("_update_prompt"):
 				interactor._update_prompt()
 			elif interactor.has_method("hide_prompt_for"):
 				interactor.hide_prompt_for(self)
 			elif interactor.has_method("hide_prompt"):
-				interactor.hide_prompt(self)
+				interactor.hide_prompt()
 		else:
 			_show_prompt(false)
 		_current_player = null
 
-# When another Area2D overlaps (this is the player's InteractionComponent case)
 func _on_area_area_entered(a: Area2D) -> void:
 	if a == null:
 		return
 	print("[Taara] Area area_entered:", a.name if "name" in a else a, "class:", a.get_class())
-	# If the overlapping area *is* the InteractionComponent (or provides the same interface), use it directly
-	# Prefer to add ourselves into its can_interact list if available
 	if "can_interact" in a:
 		if self not in a.can_interact:
 			a.can_interact.append(self)
 			if a.has_method("_update_prompt"):
 				a._update_prompt()
 				return
-	# If area itself has show/update methods, use them
 	if a.has_method("_update_prompt"):
 		a._update_prompt()
 		return
@@ -221,10 +366,10 @@ func _on_area_area_entered(a: Area2D) -> void:
 		a.show_prompt_for(self)
 		return
 	if a.has_method("show_prompt"):
-		a.show_prompt()
+		# pass expected args
+		a.show_prompt("Press E", global_position)
 		return
 
-	# fallback: attempt to find owner player and treat as body_entered
 	var owner_player := _find_owner_player_from_node(a)
 	if owner_player:
 		_on_area_body_entered(owner_player)
@@ -233,14 +378,12 @@ func _on_area_area_exited(a: Area2D) -> void:
 	if a == null:
 		return
 	print("[Taara] Area area_exited:", a.name if "name" in a else a, "class:", a.get_class())
-	# If the area had can_interact list, remove ourselves and refresh
 	if "can_interact" in a and self in a.can_interact:
 		a.can_interact.erase(self)
 		if a.has_method("_update_prompt"):
 			a._update_prompt()
 		return
 
-	# call hiding methods if area provides them
 	if a.has_method("hide_prompt_for"):
 		a.hide_prompt_for(self)
 		return
@@ -248,12 +391,10 @@ func _on_area_area_exited(a: Area2D) -> void:
 		a.hide_prompt()
 		return
 
-	# fallback: attempt to find owner player and treat as body_exited
 	var owner_player := _find_owner_player_from_node(a)
 	if owner_player:
 		_on_area_body_exited(owner_player)
 
-# helper: walk up parent chain to find a node in "Player" or "player" group
 func _find_owner_player_from_node(node: Node) -> Node:
 	if node == null:
 		return null
@@ -264,19 +405,15 @@ func _find_owner_player_from_node(node: Node) -> Node:
 		p = p.get_parent()
 	return null
 
-# show/hide prompt local fallback (same pattern as Chest)
 func _show_prompt(visible: bool) -> void:
 	if visible:
 		if prompt == null and prompt_scene:
 			prompt = prompt_scene.instantiate()
 			get_tree().current_scene.add_child(prompt)
-
 		if prompt:
 			var offset := Vector2(10, 6)
 			var target_pos := global_position + offset
-
 			if prompt.has_method("show_prompt"):
-				# Pass both required arguments
 				prompt.show_prompt("Press E", target_pos)
 			else:
 				prompt.global_position = target_pos
@@ -294,7 +431,7 @@ func _make_npc_id() -> String:
 	var scene_path := get_tree().current_scene.scene_file_path if get_tree().current_scene else ""
 	return "%s::%s" % [scene_path, str(global_position)]
 
-# DEBUG helper: prints Area2D / CollisionShape / layer/mask status so we can see why signals don't occur
+# DEBUG helper...
 func _debug_interaction_state() -> void:
 	print("---- Taara DEBUG START ----")
 	print("Taara node:", self.name, "global_pos:", global_position)
@@ -326,3 +463,7 @@ func _debug_interaction_state() -> void:
 	for p in players:
 		print("  - player node:", p.name, "pos:", p.global_position)
 	print("---- Taara DEBUG END ----")
+
+func _on_quests_registered() -> void:
+	print("[Taara] Received quests_registered from QuestManager — re-checking done state")
+	_update_done_state()

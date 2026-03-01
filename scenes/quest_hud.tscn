@@ -1,0 +1,32 @@
+[gd_scene load_steps=2 format=3 uid="uid://chi2dmjd84dpu"]
+
+[ext_resource type="Script" path="res://quest_hud.gd" id="1_5vsht"]
+
+[node name="QuestHUD" type="CanvasLayer"]
+script = ExtResource("1_5vsht")
+max_visible = 3
+
+[node name="Panel" type="Panel" parent="."]
+anchors_preset = -1
+anchor_left = 0.868
+anchor_top = 0.114
+anchor_right = 0.976
+anchor_bottom = 0.254
+offset_left = -40.0
+offset_bottom = 40.0
+grow_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 25.064
+offset_top = -26.872
+offset_right = 65.064
+offset_bottom = -3.872
