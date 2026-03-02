@@ -69,6 +69,7 @@ script = ExtResource("1_14x27")
 position = Vector2(-565, 150)
 sprite_frames = SubResource("SpriteFrames_2o8l8")
 animation = &"leave"
+frame = 2
 offset = Vector2(565, -300)
 
 [node name="InteractionArea" type="Area2D" parent="."]
