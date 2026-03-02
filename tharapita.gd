@@ -18,7 +18,9 @@ var prompt: Node2D = null
 
 # Area2D for proximity (must exist in the scene under this node)
 @onready var area: Area2D = $InteractionArea if has_node("InteractionArea") else null
-
+# --- summon/leave animation hookup ---
+var _summoned: bool = false
+@onready var _taara_anim: AnimatedSprite2D = $AnimatedSprite2D
 # runtime
 var is_interacting: bool = false
 var is_done: bool = false
@@ -325,6 +327,8 @@ func _on_area_body_entered(body: Node) -> void:
 			if interactor.has_method("show_prompt"):
 				interactor.show_prompt("Press E", global_position)
 				return
+				# show prompt and summon visual
+		_play_summon()
 		_show_prompt(true)
 
 func _on_area_body_exited(body: Node) -> void:
@@ -347,11 +351,13 @@ func _on_area_body_exited(body: Node) -> void:
 				interactor.hide_prompt()
 		else:
 			_show_prompt(false)
+		_play_leave()
 		_current_player = null
 
 func _on_area_area_entered(a: Area2D) -> void:
 	if a == null:
 		return
+	_play_summon()
 	print("[Taara] Area area_entered:", a.name if "name" in a else a, "class:", a.get_class())
 	if "can_interact" in a:
 		if self not in a.can_interact:
@@ -377,6 +383,7 @@ func _on_area_area_entered(a: Area2D) -> void:
 func _on_area_area_exited(a: Area2D) -> void:
 	if a == null:
 		return
+	_play_leave()
 	print("[Taara] Area area_exited:", a.name if "name" in a else a, "class:", a.get_class())
 	if "can_interact" in a and self in a.can_interact:
 		a.can_interact.erase(self)
@@ -467,3 +474,23 @@ func _debug_interaction_state() -> void:
 func _on_quests_registered() -> void:
 	print("[Taara] Received quests_registered from QuestManager — re-checking done state")
 	_update_done_state()
+
+func _play_summon() -> void:
+	print("playing summon")
+	if _taara_anim == null:
+		return
+	# only play summon when not already summoned
+	if not _summoned:
+		if _taara_anim.sprite_frames and _taara_anim.sprite_frames.has_animation("summon"):
+			_taara_anim.play("summon")
+		_summoned = true
+
+func _play_leave() -> void:
+	print("playing leave")
+	if _taara_anim == null:
+		return
+	# only play leave if we previously summoned
+	if _summoned:
+		if _taara_anim.sprite_frames and _taara_anim.sprite_frames.has_animation("leave"):
+			_taara_anim.play("leave")
+		_summoned = false

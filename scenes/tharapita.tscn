@@ -1,13 +1,75 @@
-[gd_scene load_steps=3 format=3 uid="uid://d3da7x6w7suaa"]
+[gd_scene load_steps=11 format=3 uid="uid://d3da7x6w7suaa"]
 
 [ext_resource type="Script" path="res://tharapita.gd" id="1_14x27"]
+[ext_resource type="Texture2D" uid="uid://dm2g5x1jk4swa" path="res://sprites/light.kra" id="2_vqxtj"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mglcv"]
+atlas = ExtResource("2_vqxtj")
+region = Rect2(320, 0, 160, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_tdbsc"]
+atlas = ExtResource("2_vqxtj")
+region = Rect2(160, 0, 160, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_4fusd"]
+atlas = ExtResource("2_vqxtj")
+region = Rect2(0, 0, 160, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_dasj7"]
+atlas = ExtResource("2_vqxtj")
+region = Rect2(0, 0, 160, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_3spui"]
+atlas = ExtResource("2_vqxtj")
+region = Rect2(160, 0, 160, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_g0r41"]
+atlas = ExtResource("2_vqxtj")
+region = Rect2(320, 0, 160, 400)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_2o8l8"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mglcv")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_tdbsc")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_4fusd")
+}],
+"loop": false,
+"name": &"leave",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_dasj7")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_3spui")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_g0r41")
+}],
+"loop": false,
+"name": &"summon",
+"speed": 10.0
+}]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_7nd46"]
+radius = 50.0
 
 [node name="Tharapita" type="Node2D"]
+scale = Vector2(0.2, 0.2)
 script = ExtResource("1_14x27")
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+position = Vector2(-565, 150)
+sprite_frames = SubResource("SpriteFrames_2o8l8")
+animation = &"leave"
+offset = Vector2(565, -300)
 
 [node name="InteractionArea" type="Area2D" parent="."]
 collision_layer = 2
