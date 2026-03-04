@@ -139,13 +139,17 @@ func interact(player: Node2D) -> void:
 		print("[Taara] ⚠ No player supplied to interact()")
 		return
 
-	# Build dialog lines
+	# Build dialog lines (dict format)
 	var lines: Array = []
 
 	# show base greeting only the first time we talk (prevents repeat on every interaction)
 	if not _greeted_once:
 		for l in greeting_lines:
-			lines.append(l)
+			lines.append({
+				"text": l,
+				"speaker_name": npc_name,
+				"speaker_role": "god"    # Taara's role => god
+			})
 		_greeted_once = true
 
 	print("[Taara] Debug: Gathering quest info for dialog:")
@@ -161,34 +165,74 @@ func interact(player: Node2D) -> void:
 		var title_str = q.title if "title" in q else qid
 		print("  -", qid, "-> state:", state_str, " title:", title_str)
 
-		# inside interact() loop where you handle available quests:
 		if q.state == "available":
-			# use description as the quest intro (split into paragraphs if you put blank lines)
-			if "description" in q and q.description != "":
-				var paragraphs := str(q.description).split("\n\n")
-				for para in paragraphs:
-					if para.strip_edges() != "":
-						lines.append(para.strip_edges())
+			# description may be a String or an Array (or missing). Handle both safely.
+			if "description" in q and q.description != null:
+				# If Array: each element is a separate line/paragraph
+				if typeof(q.description) == TYPE_ARRAY:
+					for elem in q.description:
+						var text_line := str(elem).strip_edges()
+						if text_line != "":
+							lines.append({
+								"text": text_line,
+								"speaker_name": npc_name,
+								"speaker_role": "god"
+							})
+				# If String: split into paragraphs on blank lines (preserves multi-paragraphs)
+				elif typeof(q.description) == TYPE_STRING:
+					var paragraphs := str(q.description).split("\n\n")
+					for para in paragraphs:
+						var p := para.strip_edges()
+						if p != "":
+							lines.append({
+								"text": p,
+								"speaker_name": npc_name,
+								"speaker_role": "god"
+							})
+				else:
+					# fallback: coerce to string
+					var fallback := str(q.description).strip_edges()
+					if fallback != "":
+						lines.append({
+							"text": fallback,
+							"speaker_name": npc_name,
+							"speaker_role": "god"
+						})
 			else:
-				lines.append("I ask you to: " + title_str)
+				lines.append({
+					"text": "I ask you to: " + title_str,
+					"speaker_name": npc_name,
+					"speaker_role": "god"
+				})
 			any_quest_lines = true
-
 		elif q.state == "active":
-			lines.append("You are working on: " + title_str)
-			# optionally include progress if QuestManager exposes progress
+			lines.append({
+				"text": "You are working on: " + title_str,
+				"speaker_name": npc_name,
+				"speaker_role": "god"
+			})
+			# optionally include progress
 			var prog = QM.get_kill_progress(qid) if QM and QM.has_method("get_kill_progress") else 0
 			if q.objective != null and q.objective.get("type", "") == "kill":
-				lines.append("%s killed %d/%d" % [q.objective.get("target", "").capitalize(), prog, int(q.objective.get("count", 1))])
+				lines.append({
+					"text": "%s killed %d/%d" % [q.objective.get("target", "").capitalize(), prog, int(q.objective.get("count", 1))],
+					"speaker_name": "",                  # villager / player lines can hide name or use "You"
+					"speaker_role": "villager"
+				})
 			any_quest_lines = true
 
 		elif q.state == "completed":
-			lines.append("Thank you — you completed: " + title_str)
+			lines.append({
+				"text": "Thank you — you completed: " + title_str,
+				"speaker_name": npc_name,
+				"speaker_role": "god"
+			})
 			any_quest_lines = true
 
 	# fallback
 	if not any_quest_lines:
-		lines.append("...")
-		lines.append("I have no new task for you now.")
+		lines.append({"text":"...", "speaker_name": npc_name, "speaker_role": "god"})
+		lines.append({"text":"I have no new task for you now.", "speaker_name": npc_name, "speaker_role": "god"})
 
 	is_interacting = true
 	_show_prompt(false)
@@ -202,6 +246,7 @@ func interact(player: Node2D) -> void:
 		print("[Taara] ⚠ DialogBox still not found — aborting show_dialog()")
 		return
 
+	# pass the lines array (dialogbox will read speaker_name from each entry)
 	dlg.show_dialog(lines, npc_name, "pop")
 
 # Add this helper to TaaraNPC

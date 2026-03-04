@@ -64,6 +64,7 @@ radius = 50.0
 [node name="Tharapita" type="Node2D"]
 scale = Vector2(0.2, 0.2)
 script = ExtResource("1_14x27")
+greeting_lines = ["Who approaches the oak?<pause=1.0> Speak, child of the land.", "Prove your strength and I shall consider your wish."]
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 position = Vector2(-565, 150)
