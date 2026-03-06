@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://nooovmras5t7"]
+[gd_scene load_steps=3 format=3 uid="uid://nooovmras5t7"]
 
 [ext_resource type="Script" path="res://dialog_box.gd" id="1_nuugy"]
+[ext_resource type="FontFile" uid="uid://t0pdd5rnm70k" path="res://exepixelperfect.medium.ttf" id="2_sui48"]
 
 [node name="DialogBox" type="CanvasLayer"]
 script = ExtResource("1_nuugy")
@@ -21,17 +22,31 @@ grow_vertical = 0
 [node name="Text" type="Label" parent="Panel"]
 layout_mode = 1
 anchors_preset = -1
-anchor_left = 0.036
+anchor_left = 0.012
 anchor_top = 0.055
 anchor_right = 0.964
 anchor_bottom = 0.946
+offset_left = -0.168259
+offset_top = 0.228394
+offset_right = -0.168274
+offset_bottom = 0.228394
 grow_horizontal = 2
 grow_vertical = 2
+scale = Vector2(2, 2)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_sui48")
+theme_override_font_sizes/font_size = 16
+text = "Text"
 
 [node name="Label" type="Label" parent="Panel"]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_top = -30.0
-offset_bottom = -7.0
+offset_top = -44.0
+offset_bottom = -21.0
 grow_horizontal = 2
+scale = Vector2(3, 3)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_sui48")
+theme_override_font_sizes/font_size = 16
+text = "Taara"

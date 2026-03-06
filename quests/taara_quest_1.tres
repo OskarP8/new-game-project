@@ -6,7 +6,7 @@
 script = ExtResource("1_qm4s3")
 id = "taara_quest_1"
 title = "Slay the Iron Men"
-description = Array[String](["A horde of iron men has been terrorising the village.", "Hunt them down to prove your strength."])
+description = Array[String](["A horde of iron men has been terrorising the village"])
 state = "available"
 objective = {
 "count": 3,

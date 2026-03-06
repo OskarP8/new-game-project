@@ -154,81 +154,124 @@ func interact(player: Node2D) -> void:
 
 	print("[Taara] Debug: Gathering quest info for dialog:")
 	var any_quest_lines := false
+	# Find the next quest to show/offer: first quest in quest_ids that is NOT completed.
+	var next_qid: String = ""
 	for qid in quest_ids:
 		var q = null
 		if QM != null and QM.has_method("get_quest"):
 			q = QM.get_quest(qid)
 		if q == null:
-			print("  -", qid, " -> NULL")
+			# if resource missing, skip it
 			continue
-		var state_str := str(q.state) if "state" in q else "(no state)"
-		var title_str = q.title if "title" in q else qid
-		print("  -", qid, "-> state:", state_str, " title:", title_str)
+		# if this quest is completed, skip to next - we only want the first non-completed
+		if "state" in q and q.state == "completed":
+			continue
+		# otherwise this is the next quest to display (stop searching)
+		next_qid = qid
+		break
 
-		if q.state == "available":
-			# description may be a String or an Array (or missing). Handle both safely.
-			if "description" in q and q.description != null:
-				# If Array: each element is a separate line/paragraph
-				if typeof(q.description) == TYPE_ARRAY:
-					for elem in q.description:
-						var text_line := str(elem).strip_edges()
-						if text_line != "":
+	if next_qid == "":
+		# All quests completed or no quests available — fallback lines
+		lines.append({"text":"...", "speaker_name": npc_name, "speaker_role": "god"})
+		lines.append({"text":"I have no new task for you now.", "speaker_name": npc_name, "speaker_role": "god"})
+	else:
+		# Build lines only for the single next quest
+		var q = QM.get_quest(next_qid) if QM and QM.has_method("get_quest") else null
+		var title_str = (q.title if q and "title" in q else next_qid)
+
+		# If null or missing, provide fallback
+		if q == null:
+			lines.append({
+				"text": "I ask you to: " + title_str,
+				"speaker_name": npc_name,
+				"speaker_role": "god"
+			})
+			any_quest_lines = true
+		else:
+			if q.state == "available":
+				# description may be array or string — prefer non-empty array entries
+				if "description" in q and q.description != null:
+					if typeof(q.description) == TYPE_ARRAY:
+						var nonempty := []
+						for elem in q.description:
+							var line := str(elem).strip_edges()
+							if line != "":
+								nonempty.append(line)
+						if nonempty.size() > 0:
+							for para in nonempty:
+								lines.append({
+									"text": para,
+									"speaker_name": npc_name,
+									"speaker_role": "god"
+								})
+						else:
 							lines.append({
-								"text": text_line,
+								"text": "I ask you to: " + title_str,
 								"speaker_name": npc_name,
 								"speaker_role": "god"
 							})
-				# If String: split into paragraphs on blank lines (preserves multi-paragraphs)
-				elif typeof(q.description) == TYPE_STRING:
-					var paragraphs := str(q.description).split("\n\n")
-					for para in paragraphs:
-						var p := para.strip_edges()
-						if p != "":
+					elif typeof(q.description) == TYPE_STRING:
+						var sdesc := str(q.description).strip_edges()
+						if sdesc != "":
+							var paragraphs := sdesc.split("\n\n")
+							for para in paragraphs:
+								var p := para.strip_edges()
+								if p != "":
+									lines.append({
+										"text": p,
+										"speaker_name": npc_name,
+										"speaker_role": "god"
+									})
+						else:
 							lines.append({
-								"text": p,
+								"text": "I ask you to: " + title_str,
+								"speaker_name": npc_name,
+								"speaker_role": "god"
+							})
+					else:
+						var fallback := str(q.description).strip_edges()
+						if fallback != "":
+							lines.append({
+								"text": fallback,
+								"speaker_name": npc_name,
+								"speaker_role": "god"
+							})
+						else:
+							lines.append({
+								"text": "I ask you to: " + title_str,
 								"speaker_name": npc_name,
 								"speaker_role": "god"
 							})
 				else:
-					# fallback: coerce to string
-					var fallback := str(q.description).strip_edges()
-					if fallback != "":
-						lines.append({
-							"text": fallback,
-							"speaker_name": npc_name,
-							"speaker_role": "god"
-						})
-			else:
+					lines.append({
+						"text": "I ask you to: " + title_str,
+						"speaker_name": npc_name,
+						"speaker_role": "god"
+					})
+				any_quest_lines = true
+
+			elif q.state == "active":
 				lines.append({
-					"text": "I ask you to: " + title_str,
+					"text": "You are working on: " + title_str,
 					"speaker_name": npc_name,
 					"speaker_role": "god"
 				})
-			any_quest_lines = true
-		elif q.state == "active":
-			lines.append({
-				"text": "You are working on: " + title_str,
-				"speaker_name": npc_name,
-				"speaker_role": "god"
-			})
-			# optionally include progress
-			var prog = QM.get_kill_progress(qid) if QM and QM.has_method("get_kill_progress") else 0
-			if q.objective != null and q.objective.get("type", "") == "kill":
+				var prog = QM.get_kill_progress(next_qid) if QM and QM.has_method("get_kill_progress") else 0
+				if q.objective != null and q.objective.get("type", "") == "kill":
+					lines.append({
+						"text": "%s killed %d/%d" % [q.objective.get("target", "").capitalize(), prog, int(q.objective.get("count", 1))],
+						"speaker_name": "",
+						"speaker_role": "villager"
+					})
+				any_quest_lines = true
+
+			elif q.state == "completed":
 				lines.append({
-					"text": "%s killed %d/%d" % [q.objective.get("target", "").capitalize(), prog, int(q.objective.get("count", 1))],
-					"speaker_name": "",                  # villager / player lines can hide name or use "You"
-					"speaker_role": "villager"
+					"text": "Thank you — you completed: " + title_str,
+					"speaker_name": npc_name,
+					"speaker_role": "god"
 				})
-			any_quest_lines = true
-
-		elif q.state == "completed":
-			lines.append({
-				"text": "Thank you — you completed: " + title_str,
-				"speaker_name": npc_name,
-				"speaker_role": "god"
-			})
-			any_quest_lines = true
-
+				any_quest_lines = true
 	# fallback
 	if not any_quest_lines:
 		lines.append({"text":"...", "speaker_name": npc_name, "speaker_role": "god"})

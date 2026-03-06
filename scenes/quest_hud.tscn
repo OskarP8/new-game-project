@@ -1,10 +1,14 @@
-[gd_scene load_steps=2 format=3 uid="uid://chi2dmjd84dpu"]
+[gd_scene load_steps=3 format=3 uid="uid://chi2dmjd84dpu"]
 
 [ext_resource type="Script" path="res://quest_hud.gd" id="1_5vsht"]
+[ext_resource type="FontFile" uid="uid://t0pdd5rnm70k" path="res://exepixelperfect.medium.ttf" id="2_yl4js"]
 
 [node name="QuestHUD" type="CanvasLayer"]
 script = ExtResource("1_5vsht")
 max_visible = 3
+hud_title_font = ExtResource("2_yl4js")
+hud_objective_font = ExtResource("2_yl4js")
+hud_progress_font = ExtResource("2_yl4js")
 
 [node name="Panel" type="Panel" parent="."]
 anchors_preset = -1
@@ -21,12 +25,20 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 1.06403
+offset_top = 0.127998
+offset_right = 1.06403
+offset_bottom = 0.127991
 grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Label" type="Label" parent="Panel"]
 layout_mode = 0
-offset_left = 25.064
-offset_top = -26.872
-offset_right = 65.064
-offset_bottom = -3.872
+offset_left = 9.06403
+offset_top = -28.872
+offset_right = 49.064
+offset_bottom = -5.872
+scale = Vector2(2, 2)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_yl4js")
+text = "Quests"

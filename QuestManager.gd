@@ -260,3 +260,28 @@ func debug_list_quests() -> void:
 # returns integer progress for a quest id (0 if none)
 func get_kill_progress(qid: String) -> int:
 	return int(_kill_progress.get(qid, 0))
+
+func claim_quest(id:String) -> void:
+	var q = get_quest(id)
+	if q == null:
+		print("[QuestManager] claim_quest:", id, "-> quest not found")
+		return
+	if not ("state" in q):
+		print("[QuestManager] claim_quest:", id, "-> quest has no state field")
+		return
+	# Allow claiming only if completed (defensive) - you can relax this if needed
+	if q.state != "completed":
+		print("[QuestManager] claim_quest:", id, "-> cannot claim from state:", q.state)
+		# still allow forced claim if you'd like: uncomment next two lines
+		# q.state = "claimed"
+		# emit_signal("quest_updated", id, "claimed")
+		return
+
+	q.state = "claimed"
+	print("[QuestManager] claim_quest: claimed", id)
+	# optionally clear runtime progress for this quest
+	if _kill_progress.has(id):
+		_kill_progress.erase(id)
+
+	emit_signal("quest_updated", id, "claimed")
+	save()

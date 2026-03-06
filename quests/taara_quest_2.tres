@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="Quest" load_steps=2 format=3 uid="uid://cb30midpeug11"]
+[gd_resource type="Resource" script_class="Quest" load_steps=2 format=3 uid="uid://c34wro8fldrnb"]
 
 [ext_resource type="Script" path="res://quest.gd" id="1_dffmk"]
 
@@ -6,7 +6,7 @@
 script = ExtResource("1_dffmk")
 id = "taara_quest_2"
 title = "Kill the Fairies"
-description = Array[String](["Ok...<pause=1.0> You can do simple tasks.", "Now something a bit more challenging.", "Villagers have reported seeing fairies cursing crops and attacking.", "Get rid of them."])
+description = Array[String]([])
 state = "available"
 objective = {
 "count": 1,
