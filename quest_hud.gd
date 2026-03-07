@@ -1,17 +1,21 @@
 extends CanvasLayer
 
 @export var max_visible: int = 6
-@export var hud_title_font: Font      # create a font resource sized for "3x" title (e.g. 48px)
-@export var hud_objective_font: Font  # create a font resource sized for objective (e.g. 32px)
-@export var hud_progress_font: Font   # optional: font for progress (e.g. 32px)
+@export var hud_title_font: Font      # assign FontFile/FontVariation in inspector
+@export var hud_objective_font: Font
+@export var hud_progress_font: Font
+@export var row_scene: PackedScene    # assign your QuestRow.tscn here
 
 @onready var vbox: VBoxContainer = get_node_or_null("Panel/VBoxContainer")
+@export var row_height: int = 48   # tune to your pixel font + outline (increase if overlap)
+var _rows: Dictionary = {}
 
-var _rows: Dictionary = {}  # quest_id -> { title,type,target,count,progress,completed,description_preview, _raw_objective }
+# <-- new: exposed offset so you can tweak the gap in the Inspector
+@export var row_rightcol_offset := Vector2(0, 12)  # x = right offset, y = down offset (increased gap)
 
 func _ready() -> void:
 	if vbox == null:
-		print("[QuestHUD] WARNING: Panel/VBox node not found as child of this HUD.")
+		print("[QuestHUD] Panel/VBoxContainer not found.")
 	if typeof(QuestManager) != TYPE_NIL:
 		_connect_to_qm()
 	else:
@@ -22,7 +26,7 @@ func _ready() -> void:
 
 func _connect_to_qm() -> void:
 	if typeof(QuestManager) == TYPE_NIL:
-		print("[QuestHUD] QuestManager autoload not present.")
+		print("[QuestHUD] QuestManager autoload missing.")
 		return
 	if not QuestManager.is_connected("quest_updated", Callable(self, "_on_quest_updated")):
 		QuestManager.connect("quest_updated", Callable(self, "_on_quest_updated"))
@@ -30,24 +34,9 @@ func _connect_to_qm() -> void:
 		QuestManager.connect("quests_registered", Callable(self, "_update_all_from_qm"))
 	_update_all_from_qm()
 
-func _update_all_from_qm() -> void:
-	_rows.clear()
-	if typeof(QuestManager) == TYPE_NIL:
-		return
-	for id in QuestManager.quests.keys():
-		var q = QuestManager.get_quest(id)
-		if q == null:
-			continue
-		if not ("state" in q):
-			continue
-		# Only keep active quests in the main list (completed will be set via signal)
-		if q.state == "active":
-			_rows[id] = _make_row_from_quest(q)
-	_refresh_ui()
-
 func _make_row_from_quest(q) -> Dictionary:
 	var row: Dictionary = {}
-	if "title" in q:
+	if "title" in q and str(q.title).strip_edges() != "":
 		row.title = q.title
 	else:
 		row.title = q.id
@@ -60,6 +49,7 @@ func _make_row_from_quest(q) -> Dictionary:
 	else:
 		row.progress = 0
 	row.completed = (q.state == "completed")
+	# description preview as fallback
 	var desc_preview := ""
 	if "description" in q:
 		if typeof(q.description) == TYPE_ARRAY and q.description.size() > 0:
@@ -70,14 +60,12 @@ func _make_row_from_quest(q) -> Dictionary:
 			if parts.size() > 0:
 				desc_preview = parts[0].strip_edges()
 	row.description_preview = desc_preview
-	# keep raw objective map for better phrasing later if needed
 	row._raw_objective = obj
 	return row
 
 func _on_quest_updated(qid: String, new_state: String) -> void:
-	# handle progress updates of the form "progress:x/y"
 	if typeof(new_state) == TYPE_STRING and new_state.begins_with("progress:"):
-		var rest: String = new_state.substr(9)  # "x/y"
+		var rest: String = new_state.substr(9)
 		var parts: Array = rest.split("/")
 		var cur: int = 0
 		if parts.size() >= 1:
@@ -96,7 +84,6 @@ func _on_quest_updated(qid: String, new_state: String) -> void:
 		var q = QuestManager.get_quest(qid)
 		if q:
 			_rows[qid] = _make_row_from_quest(q)
-			# ensure progress shows full count when completed
 			_rows[qid].progress = int(_rows[qid].count)
 			_rows[qid].completed = true
 	elif new_state == "claimed" or new_state == "failed":
@@ -105,8 +92,7 @@ func _on_quest_updated(qid: String, new_state: String) -> void:
 
 	_refresh_ui()
 
-# -----------------------------
-# Objective text builder (no ternary operators)
+# Build display text for the objective; HUD puts objective_text into dict for rows
 func _build_objective_text(r: Dictionary) -> String:
 	var obj = r.get("_raw_objective", {})
 	var ttype := str(obj.get("type", "")).to_lower()
@@ -141,32 +127,48 @@ func _build_objective_text(r: Dictionary) -> String:
 			tn3 = "Place"
 		return "Visit: %s" % tn3
 
-	# fallback: prefer description preview if available
 	var dp := str(r.get("description_preview", "")).strip_edges()
 	if dp != "":
 		return dp
-	# final fallback
 	return "Objective: " + str(r.get("title", "Unknown Quest"))
 
-# -----------------------------
-# Render function — layout:
-# Title (3x)
-# Under it: single HBox containing: [Check visual] [Objective text (font-sized)] [small gap] [Progress (font-sized)]
+# -------------------------
+# Render UI: instantiate the QuestRow scene and call its API.
+func _update_all_from_qm() -> void:
+	# Rebuild the _rows map from QuestManager but only take active quests.
+	_rows.clear()
+	if typeof(QuestManager) == TYPE_NIL:
+		return
+	for id in QuestManager.quests.keys():
+		var q = QuestManager.get_quest(id)
+		if q == null:
+			continue
+		if not ("state" in q):
+			continue
+		# DEBUG: log states so you can track why a quest appears
+		# (you can remove or lower this after you verify behavior)
+		print("[QuestHUD] scan quest:", id, "state:", str(q.state))
+		if q.state == "active":
+			_rows[id] = _make_row_from_quest(q)
+	# refresh after rebuild
+	_refresh_ui()
+
+
 func _refresh_ui() -> void:
 	if vbox == null:
 		return
 
-	# clear existing children
+	# clear previous children
 	for child in vbox.get_children():
 		vbox.remove_child(child)
 		child.queue_free()
 
 	# hide HUD if nothing to show
 	if _rows.size() == 0:
-		self.visible = false
+		visible = false
 		return
 	else:
-		self.visible = true
+		visible = true
 
 	var ids: Array = _rows.keys()
 	ids.sort_custom(Callable(self, "_sort_by_title"))
@@ -177,50 +179,121 @@ func _refresh_ui() -> void:
 			break
 		var r: Dictionary = _rows[id]
 
-		# Title line (use title font resource; do NOT scale)
-		var title_lbl := _make_label_with_outline(r.title)
-		if hud_title_font != null:
-			title_lbl.add_theme_font_override("font", hud_title_font)
-		vbox.add_child(title_lbl)
+		# prepare data copy and objective_text
+		var copy := {}
+		for k in r.keys():
+			copy[k] = r[k]
+		copy["objective_text"] = _build_objective_text(r)
 
-		# Objective row (checkbox visual + objective + small gap + progress)
-		var obj_row := HBoxContainer.new()
+		if row_scene == null:
+			# fallback minimal: two labels
+			var title_lbl := _make_label_with_outline(r.title)
+			if hud_title_font != null:
+				title_lbl.add_theme_font_override("font", hud_title_font)
+			vbox.add_child(title_lbl)
 
-		# checkbox visual (non-interactive)
-		var pressed_flag := false
-		if r.has("completed") and r.completed:
-			pressed_flag = true
-		var chk_visual := _make_checkbox_visual(pressed_flag)
-		obj_row.add_child(chk_visual)
-
-		# objective label (uses objective font and expands)
-		var objective_text := _build_objective_text(r)
-		var obj_lbl := _make_label_with_outline(objective_text)
-		if hud_objective_font != null:
-			obj_lbl.add_theme_font_override("font", hud_objective_font)
-		obj_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		obj_row.add_child(obj_lbl)
-
-		# slight gap
-		var gap := Control.new()
-		gap.custom_minimum_size = Vector2(8, 0)
-		obj_row.add_child(gap)
-
-		# progress label (keeps close to objective)
-		var prog_lbl := _make_label_with_outline("(%d/%d)" % [int(r.progress), int(r.count)])
-		if hud_progress_font != null:
-			prog_lbl.add_theme_font_override("font", hud_progress_font)
-		# default size flags keep it tight to its content
-		obj_row.add_child(prog_lbl)
-
-		vbox.add_child(obj_row)
-
-		# completed note (optional)
-		if r.has("completed") and r.completed:
-			var comp_lbl := _make_label_with_outline("Completed - return to NPC to claim reward")
+			var obj_lbl := _make_label_with_outline(copy["objective_text"])
 			if hud_objective_font != null:
-				comp_lbl.add_theme_font_override("font", hud_objective_font)
-			vbox.add_child(comp_lbl)
+				obj_lbl.add_theme_font_override("font", hud_objective_font)
+			vbox.add_child(obj_lbl)
+		else:
+			# instantiate row (DO NOT add it twice)
+			var inst = row_scene.instantiate()
+			if inst == null:
+				print("[QuestHUD] ERROR: row_scene.instantiate() returned null for", id)
+			else:
+				# Add once to the vbox now so its onready vars initialize.
+				# (we only add *one* time here)
+				vbox.add_child(inst)
+
+				# Debug print to help trace why a quest appears and whether instance API exists
+				print("[QuestHUD] instanced QuestRow for:", id, " set_data:", inst.has_method("set_data"), " set_fonts:", inst.has_method("set_fonts"))
+
+				# Preferred API route: call instance methods if available
+				if inst.has_method("set_fonts"):
+					inst.set_fonts(hud_title_font, hud_objective_font, hud_progress_font)
+				if inst.has_method("set_data"):
+					inst.set_data(copy)
+					# enforce fixed height so vbox stacking doesn't shift slightly
+					if inst is Control:
+						# set a minimum height so different text sizes don't move later rows
+						inst.custom_minimum_size = Vector2(inst.custom_minimum_size.x, row_height)
+						# ensure the Control recalculates layout/minimum
+						inst.queue_redraw()
+						# Optionally: if your row contains internal containers, you can also set their rect_min_size:
+						# var rightcol = inst.get_node_or_null("RightCol")
+						# if rightcol: rightcol.custom_minimum_size = Vector2(rightcol.custom_minimum_size.x, row_height - 16)
+				else:
+					# fallback direct node writes (keep as before)
+					var title_node : Label = inst.get_node_or_null("Title")
+					var rightcol : Control = inst.get_node_or_null("RightCol")
+					var objective_node : Label = inst.get_node_or_null("RightCol/ObjectiveRow/Objective")
+					var progress_node : Label = inst.get_node_or_null("RightCol/ObjectiveRow/Progress")
+					var checked_tex : TextureRect = inst.get_node_or_null("RightCol/ObjectiveRow/CheckedBox")
+					var unchecked_tex : TextureRect = inst.get_node_or_null("RightCol/ObjectiveRow/UncheckedBox")
+
+					if title_node:
+						title_node.text = str(copy.get("title", ""))
+						if hud_title_font != null:
+							title_node.add_theme_font_override("font", hud_title_font)
+
+					if objective_node:
+						objective_node.text = str(copy.get("objective_text", copy.get("description_preview", "")))
+						if hud_objective_font != null:
+							objective_node.add_theme_font_override("font", hud_objective_font)
+
+					if progress_node:
+						progress_node.text = "(%d/%d)" % [int(copy.get("progress", 0)), int(copy.get("count", 1))]
+						if hud_progress_font != null:
+							progress_node.add_theme_font_override("font", hud_progress_font)
+
+					var quest_done := bool(copy.get("completed", false))
+					if checked_tex:
+						checked_tex.visible = quest_done
+					if unchecked_tex:
+						unchecked_tex.visible = not quest_done
+
+				# After API/fallback, enforce RightCol placement (avoid overlap)
+				var title_node2 : Label = inst.get_node_or_null("Title")
+				var rightcol2 : Control = inst.get_node_or_null("RightCol")
+				var objective_node2 : Label = inst.get_node_or_null("RightCol/ObjectiveRow/Objective")
+
+				var title_height := 0.0
+				if title_node2 != null:
+					var min_sz := title_node2.get_minimum_size()
+					title_height = float(min_sz.y)
+					title_node2.position = Vector2(0, 0)
+				else:
+					title_height = 24.0
+
+				if rightcol2 != null:
+					# use exported offset (row_rightcol_offset) so you can tweak gap
+					rightcol2.position = Vector2(row_rightcol_offset.x, title_height + row_rightcol_offset.y)
+
+				# enforce visuals (modulate/checkbox) in case instance didn't
+				var checked_tex2 : TextureRect = inst.get_node_or_null("RightCol/ObjectiveRow/CheckedBox")
+				var unchecked_tex2 : TextureRect = inst.get_node_or_null("RightCol/ObjectiveRow/UncheckedBox")
+				var progress_node2 : Label = inst.get_node_or_null("RightCol/ObjectiveRow/Progress")
+
+				var progress := int(copy.get("progress", 0))
+				var count := int(copy.get("count", 1))
+				var objective_done := progress >= count
+				var quest_done := bool(copy.get("completed", false))
+
+				var normal := Color(1,1,1,1)
+				var partial := Color(0.85,0.85,0.85,1)
+				var full := Color(0.6,0.6,0.6,1)
+
+				if title_node2:
+					title_node2.modulate = full if quest_done else normal
+				if objective_node2:
+					objective_node2.modulate = full if quest_done else (partial if objective_done else normal)
+				if progress_node2:
+					progress_node2.modulate = full if quest_done else (partial if objective_done else normal)
+				if checked_tex2:
+					checked_tex2.modulate = full if quest_done else (partial if objective_done else normal)
+				if unchecked_tex2:
+					unchecked_tex2.modulate = full if quest_done else (partial if objective_done else normal)
 
 		shown += 1
 
@@ -249,68 +322,3 @@ func _make_label_with_outline(text: String) -> Label:
 	settings.outline_color = Color(0, 0, 0)
 	lbl.label_settings = settings
 	return lbl
-
-func _make_checkbox_visual(pressed: bool) -> Control:
-	# Returns a small Control node that looks like an outlined empty box (like ☐),
-	# with a thin black outer outline and a white inner border (center empty).
-	# Non-interactive (mouse ignored).
-
-	var wrapper := Control.new()
-	wrapper.name = "checkbox_visual"
-	# Use Vector2 (not Vector2i) so math stays consistent
-	wrapper.custom_minimum_size = Vector2(28, 28)  # tweak size here
-
-	# Outer panel -> black outline
-	var outer := Panel.new()
-	outer.name = "cb_outer"
-	outer.custom_minimum_size = wrapper.custom_minimum_size
-
-	var outer_style := StyleBoxFlat.new()
-	outer_style.bg_color = Color(0, 0, 0, 0)        # transparent interior
-	outer_style.border_width_all = 2.0             # outer outline thickness (float ok)
-	outer_style.border_color = Color(0, 0, 0)      # black outline
-	outer.add_theme_stylebox_override("panel", outer_style)
-
-	# Inner panel -> white border (transparent center)
-	var inner := Panel.new()
-	# compute inner size using Vector2 so subtraction is valid
-	var inset := Vector2(8, 8)                     # total inset (4 px each side)
-	inner.custom_minimum_size = wrapper.custom_minimum_size - inset
-
-	var inner_style := StyleBoxFlat.new()
-	inner_style.bg_color = Color(0, 0, 0, 0)       # keep center transparent (not filled)
-	inner_style.border_width_all = 2.0             # visible white border thickness
-	inner_style.border_color = Color(1, 1, 1)      # white border color
-	inner.add_theme_stylebox_override("panel", inner_style)
-
-	# Layout: place outer and center inner on top of it
-	var place := MarginContainer.new()
-	place.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	place.custom_minimum_size = wrapper.custom_minimum_size
-	place.add_child(outer)
-
-	var center := CenterContainer.new()
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	center.custom_minimum_size = wrapper.custom_minimum_size
-	center.add_child(inner)
-	place.add_child(center)
-
-	wrapper.add_child(place)
-
-	# Optional check mark placed centered on top when pressed
-	if pressed:
-		var check_lbl := Label.new()
-		check_lbl.text = "✓"
-		check_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if hud_progress_font != null:
-			check_lbl.add_theme_font_override("font", hud_progress_font)
-		# center mark
-		var c2 := CenterContainer.new()
-		c2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		c2.custom_minimum_size = wrapper.custom_minimum_size
-		c2.add_child(check_lbl)
-		wrapper.add_child(c2)
-
-	# Make non-interactive
-	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return wrapper

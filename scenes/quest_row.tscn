@@ -1,0 +1,68 @@
+[gd_scene load_steps=6 format=3 uid="uid://cb8ccq0temkg5"]
+
+[ext_resource type="Script" path="res://quest_row.gd" id="1_5wwwg"]
+[ext_resource type="FontFile" uid="uid://t0pdd5rnm70k" path="res://exepixelperfect.medium.ttf" id="2_23mci"]
+[ext_resource type="Texture2D" uid="uid://cheghrhlhm436" path="res://sprites/checkbox.kra" id="3_7xl0o"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_fdb03"]
+atlas = ExtResource("3_7xl0o")
+region = Rect2(3, 3, 11, 10)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_6jh6l"]
+atlas = ExtResource("3_7xl0o")
+region = Rect2(3, 19, 11, 10)
+
+[node name="QuestRow" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_5wwwg")
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 1
+offset_right = 1152.0
+offset_bottom = 13.0
+scale = Vector2(1.8, 1.8)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_23mci")
+text = "Title"
+
+[node name="RightCol" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.005
+anchor_top = 0.03
+anchor_right = 0.01
+anchor_bottom = 0.048
+offset_right = 1152.0
+offset_bottom = 13.0
+scale = Vector2(1.4, 1.4)
+
+[node name="ObjectiveRow" type="HBoxContainer" parent="RightCol"]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 0
+
+[node name="UncheckedBox" type="TextureRect" parent="RightCol/ObjectiveRow"]
+layout_mode = 2
+texture = SubResource("AtlasTexture_fdb03")
+
+[node name="CheckedBox" type="TextureRect" parent="RightCol/ObjectiveRow"]
+visible = false
+layout_mode = 2
+texture = SubResource("AtlasTexture_6jh6l")
+
+[node name="Objective" type="Label" parent="RightCol/ObjectiveRow"]
+layout_mode = 2
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_23mci")
+text = "Objective"
+
+[node name="Progress" type="Label" parent="RightCol/ObjectiveRow"]
+layout_mode = 2
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_23mci")
+text = "(0/0)"

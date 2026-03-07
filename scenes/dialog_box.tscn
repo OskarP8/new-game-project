@@ -4,6 +4,7 @@
 [ext_resource type="FontFile" uid="uid://t0pdd5rnm70k" path="res://exepixelperfect.medium.ttf" id="2_sui48"]
 
 [node name="DialogBox" type="CanvasLayer"]
+process_mode = 3
 script = ExtResource("1_nuugy")
 
 [node name="Panel" type="Panel" parent="."]

@@ -6,11 +6,11 @@
 script = ExtResource("1_dffmk")
 id = "taara_quest_2"
 title = "Kill the Fairies"
-description = Array[String]([])
+description = Array[String](["Fairies are bad", "Kill them."])
 state = "available"
 objective = {
-"count": 1,
-"target": "",
+"count": 6,
+"target": "fairy",
 "type": "kill"
 }
 reward = {}

@@ -100,30 +100,48 @@ func _get_closest_interactable() -> Node:
 # PROMPT HANDLING
 # ---------------------------------------------------------------------
 func _update_prompt() -> void:
+	# find closest interactable (your existing helper)
 	var closest: Node = _get_closest_interactable()
 
+	# If nothing nearby -> hide prompt (if valid) and return
 	if closest == null:
 		if prompt:
-			if prompt.has_method("hide_prompt"):
-				prompt.hide_prompt()
+			# only call methods on the prompt if it's a valid instance
+			if is_instance_valid(prompt):
+				if prompt.has_method("hide_prompt"):
+					prompt.hide_prompt()
+				else:
+					prompt.visible = false
+			# if prompt is invalid, drop the reference
 			else:
-				prompt.hide()
+				prompt = null
 		return
 
+	# If prompt reference exists but was freed, nil it so we recreate
+	if prompt and not is_instance_valid(prompt):
+		print("[InteractArea] prompt reference was freed — clearing reference")
+		prompt = null
+
+	# Ensure prompt exists and is valid
 	if prompt == null:
 		prompt = prompt_scene.instantiate()
+		# Use deferred add to avoid tree modification during physics/frame callbacks
 		get_tree().current_scene.call_deferred("add_child", prompt)
-		print("[InteractArea] prompt created:", prompt)
+		print("[InteractArea] prompt created:", prompt, "id:", str(prompt.get_instance_id()))
 
-	var offset := Vector2(10, 6)
-	var target_pos: Vector2 = closest.global_position + offset
+	# Now it's safe to call methods (again verify validity)
+	if prompt and is_instance_valid(prompt):
+		var offset := Vector2(10, 6)
+		var target_pos: Vector2 = closest.global_position + offset
 
-	if prompt.has_method("show_prompt"):
-		prompt.show_prompt("Press E", target_pos)
+		if prompt.has_method("show_prompt"):
+			prompt.show_prompt("Press E", target_pos)
+		else:
+			prompt.global_position = target_pos
+			prompt.visible = true
 	else:
-		prompt.global_position = target_pos
-		prompt.visible = true
-
+		# very defensive fallback
+		prompt = null
 
 # ---------------------------------------------------------------------
 # INPUT HANDLING
