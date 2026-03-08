@@ -5,7 +5,7 @@ class_name Quest
 
 @export var id: String = ""
 @export var title: String = ""
-@export var description: Array[String] = []
+@export var description: Array[DialogLine] = []
 # possible states: "available", "active", "completed", "failed"
 @export var state: String = "available"
 @export var objective: Dictionary = {

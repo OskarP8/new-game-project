@@ -25,7 +25,7 @@ layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.012
 anchor_top = 0.055
-anchor_right = 0.964
+anchor_right = 0.5
 anchor_bottom = 0.946
 offset_left = -0.168259
 offset_top = 0.228394
@@ -38,6 +38,7 @@ theme_override_constants/outline_size = 4
 theme_override_fonts/font = ExtResource("2_sui48")
 theme_override_font_sizes/font_size = 16
 text = "Text"
+autowrap_mode = 2
 
 [node name="Label" type="Label" parent="Panel"]
 layout_mode = 1

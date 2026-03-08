@@ -1,12 +1,25 @@
-[gd_resource type="Resource" script_class="Quest" load_steps=2 format=3 uid="uid://t4nicfg78ljr"]
+[gd_resource type="Resource" script_class="Quest" load_steps=5 format=3 uid="uid://t4nicfg78ljr"]
 
 [ext_resource type="Script" path="res://quest.gd" id="1_qm4s3"]
+[ext_resource type="Script" path="res://dialog_line.gd" id="1_v21ds"]
+
+[sub_resource type="Resource" id="Resource_86p2t"]
+script = ExtResource("1_v21ds")
+text = "If you can handle three Iron Men without embarassing me<pause=0.5>, I might as well consider your wish."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_k2p5h"]
+script = ExtResource("1_v21ds")
+text = "Take the pitchfork from the chest.<pause=0.5> It might improve your odds."
+speaker_name = ""
+speaker_role = ""
 
 [resource]
 script = ExtResource("1_qm4s3")
 id = "taara_quest_1"
 title = "Slay the Iron Men"
-description = Array[String](["A horde of iron men has been terrorising the village"])
+description = Array[ExtResource("1_v21ds")]([SubResource("Resource_86p2t"), SubResource("Resource_k2p5h")])
 state = "available"
 objective = {
 "count": 3,

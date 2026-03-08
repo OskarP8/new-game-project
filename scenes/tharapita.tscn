@@ -1,7 +1,104 @@
-[gd_scene load_steps=11 format=3 uid="uid://d3da7x6w7suaa"]
+[gd_scene load_steps=28 format=3 uid="uid://d3da7x6w7suaa"]
 
 [ext_resource type="Script" path="res://tharapita.gd" id="1_14x27"]
+[ext_resource type="Script" path="res://dialog_line.gd" id="2_kqfv2"]
 [ext_resource type="Texture2D" uid="uid://dm2g5x1jk4swa" path="res://sprites/light.kra" id="2_vqxtj"]
+
+[sub_resource type="Resource" id="Resource_4sika"]
+script = ExtResource("2_kqfv2")
+text = "test"
+speaker_name = "test"
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_obo8b"]
+script = ExtResource("2_kqfv2")
+text = "Oh... <pause=0.5> you actually completed the quests."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_8fmqb"]
+script = ExtResource("2_kqfv2")
+text = "I mean<pause=0.5> — of course you did."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_mjsbi"]
+script = ExtResource("2_kqfv2")
+text = "Your next task is to..."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_kjp1l"]
+script = ExtResource("2_kqfv2")
+text = "Hey!<pause=0.5> You are youst buying time, aren't you?"
+speaker_name = "You"
+speaker_role = "player"
+
+[sub_resource type="Resource" id="Resource_dxpv1"]
+script = ExtResource("2_kqfv2")
+text = "Buying time?"
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_7qrbm"]
+script = ExtResource("2_kqfv2")
+text = "You've known me for five minutes."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_lfdab"]
+script = ExtResource("2_kqfv2")
+text = "Then why won't you grant the wish?"
+speaker_name = "You"
+speaker_role = "player"
+
+[sub_resource type="Resource" id="Resource_ijl70"]
+script = ExtResource("2_kqfv2")
+text = "Because i cannot."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_j3kjm"]
+script = ExtResource("2_kqfv2")
+text = "You're a God."
+speaker_name = "You"
+speaker_role = "player"
+
+[sub_resource type="Resource" id="Resource_cgrl8"]
+script = ExtResource("2_kqfv2")
+text = "Not all Gods can grant wishes."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_3ea0m"]
+script = ExtResource("2_kqfv2")
+text = "What I CAN do is bend time."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_118ss"]
+script = ExtResource("2_kqfv2")
+text = "Your village will be free... <pause=1>in about a thousand years."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_oa4fo"]
+script = ExtResource("2_kqfv2")
+text = "Wait, but..."
+speaker_name = "You"
+speaker_role = "player"
+
+[sub_resource type="Resource" id="Resource_u1ohf"]
+script = ExtResource("2_kqfv2")
+text = "Well... <pause=0.5> I hope you are happy."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_ufib6"]
+script = ExtResource("2_kqfv2")
+text = "Byebye!"
+speaker_name = ""
+speaker_role = ""
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_mglcv"]
 atlas = ExtResource("2_vqxtj")
@@ -64,18 +161,9 @@ radius = 50.0
 [node name="Tharapita" type="Node2D"]
 scale = Vector2(0.2, 0.2)
 script = ExtResource("1_14x27")
-npc_name = null
-greeting_lines = Array[Dictionary]([{
-"speaker_name": "",
-"speaker_role": "",
-"text": "Who approaches the oak? Speak, child of the land."
-}, {
-"speaker_name": "",
-"speaker_role": "",
-"text": "Prove your strength and I shall consider your wish."
-}, {}])
-quest_ids = null
-npc_id = null
+greeting_lines = Array[ExtResource("2_kqfv2")]([SubResource("Resource_4sika")])
+wish_lines = Array[ExtResource("2_kqfv2")]([SubResource("Resource_obo8b"), SubResource("Resource_8fmqb"), SubResource("Resource_mjsbi"), SubResource("Resource_kjp1l"), SubResource("Resource_dxpv1"), SubResource("Resource_7qrbm"), SubResource("Resource_lfdab"), SubResource("Resource_ijl70"), SubResource("Resource_j3kjm"), SubResource("Resource_cgrl8"), SubResource("Resource_3ea0m"), SubResource("Resource_118ss"), SubResource("Resource_oa4fo"), SubResource("Resource_u1ohf"), SubResource("Resource_ufib6")])
+quest_ids = ["taara_quest_1", "taara_quest_2"]
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 position = Vector2(-565, 150)

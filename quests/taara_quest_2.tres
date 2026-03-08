@@ -1,12 +1,43 @@
-[gd_resource type="Resource" script_class="Quest" load_steps=2 format=3 uid="uid://c34wro8fldrnb"]
+[gd_resource type="Resource" script_class="Quest" load_steps=8 format=3 uid="uid://c34wro8fldrnb"]
 
 [ext_resource type="Script" path="res://quest.gd" id="1_dffmk"]
+[ext_resource type="Script" path="res://dialog_line.gd" id="1_gfwvv"]
+
+[sub_resource type="Resource" id="Resource_0nejl"]
+script = ExtResource("1_gfwvv")
+text = "So.<pause=0.5> You can handle simple tasks. <pause=0.5>Now something a bit more challenging."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_vv5mh"]
+script = ExtResource("1_gfwvv")
+text = "The fairies in the forest are quicker and far less clumsy than iron men. Defeat five of them and I shall truly consider your wish."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_0ff1o"]
+script = ExtResource("1_gfwvv")
+text = "You...<pause=0.5> already said that before."
+speaker_name = "You"
+speaker_role = "player"
+
+[sub_resource type="Resource" id="Resource_sv2d1"]
+script = ExtResource("1_gfwvv")
+text = "Before, I contemplated. <pause=0.5>Now, I consider."
+speaker_name = ""
+speaker_role = ""
+
+[sub_resource type="Resource" id="Resource_dours"]
+script = ExtResource("1_gfwvv")
+text = "A blade taken from an iron man may improve your odds."
+speaker_name = ""
+speaker_role = ""
 
 [resource]
 script = ExtResource("1_dffmk")
 id = "taara_quest_2"
 title = "Kill the Fairies"
-description = Array[String](["Fairies are bad", "Kill them."])
+description = Array[ExtResource("1_gfwvv")]([SubResource("Resource_0nejl"), SubResource("Resource_vv5mh"), SubResource("Resource_0ff1o"), SubResource("Resource_sv2d1"), SubResource("Resource_dours")])
 state = "available"
 objective = {
 "count": 6,

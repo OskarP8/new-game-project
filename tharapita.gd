@@ -5,11 +5,9 @@ signal wish_granted(player: Node)
 
 # Basic NPC data
 @export var npc_name := "Taara"
-# top of file (replace the existing export)
-@export var greeting_lines: Array[DialogLine] = [
-	{ "text": "Who approaches the oak? Speak, child of the land.", "speaker_name": "", "speaker_role": "" },
-	{ "text": "Prove your strength and I shall consider your wish.", "speaker_name": "", "speaker_role": "" }
-]
+# Accept any resource (simplest, inspector lets you create DialogLine)
+@export var greeting_lines: Array[DialogLine] = []
+@export var wish_lines: Array[DialogLine] = []
 @export var quest_ids := ["taara_quest_1", "taara_quest_2", "taara_quest_3"]
 
 # Interaction / prompt (Chest-style)
@@ -62,6 +60,18 @@ func _get_quest_mgr() -> Node:
 	return null
 
 func _ready() -> void:
+	print("[Taara DEBUG] greeting_lines size:", greeting_lines.size())
+	for i in range(greeting_lines.size()):
+		var entry = greeting_lines[i]
+		print("  - index", i, "typeof:", typeof(entry), " ->", entry)
+		if typeof(entry) == TYPE_OBJECT:
+			# Resource / Object: try to show its fields if present
+			if "text" in entry:
+				print("     .text =", entry.text)
+			if "speaker_name" in entry:
+				print("     .speaker_name =", entry.speaker_name)
+			if "speaker_role" in entry:
+				print("     .speaker_role =", entry.speaker_role)
 	_resolve_and_connect_dialogbox()
 	var QM := _get_quest_mgr()
 	if QM != null and not _connected_to_quest_mgr:
@@ -103,15 +113,22 @@ func _update_done_state() -> void:
 	if QM == null:
 		is_done = false
 		return
+
+	var found_any := false
 	for qid in quest_ids:
 		var q = QM.get_quest(qid)
 		if q == null:
-			is_done = false
-			return
+			# skip missing quests (do not treat missing as "not completed")
+			continue
+		found_any = true
 		if not ("state" in q) or q.state != "completed":
 			is_done = false
 			return
-	is_done = true
+
+	# If we reach here: every existing quest in quest_ids is completed.
+	# If none of the quest_ids existed at all, found_any == false -> don't consider "done".
+	is_done = found_any
+	print("[Taara] _update_done_state -> is_done =", is_done)
 
 # Ensure DialogBox (or a CanvasLayer ancestor) has pause_mode set to PROCESS so the dialog UI keeps running.
 # Returns true if it managed to set pause_mode on dialog or a parent CanvasLayer.
@@ -189,6 +206,7 @@ func interact(player: Node2D) -> void:
 	if not _greeted_once:
 		for entry in greeting_lines:
 			_push_normalized_entry(lines, entry, npc_name, "god")
+		print("Taara: prepared lines:", lines)
 		_greeted_once = true
 
 	print("[Taara] Debug: Gathering quest info for dialog:")
@@ -216,34 +234,9 @@ func interact(player: Node2D) -> void:
 			any_quest_lines = true
 		else:
 			if q.state == "available":
+				# Use same normalizer as greetings so DialogLine resources work, too.
 				if "description" in q and q.description != null:
-					if typeof(q.description) == TYPE_ARRAY:
-						var nonempty := []
-						for elem in q.description:
-							var line := str(elem).strip_edges()
-							if line != "":
-								nonempty.append(line)
-						if nonempty.size() > 0:
-							for para in nonempty:
-								lines.append({"text": para, "speaker_name": npc_name, "speaker_role": "god"})
-						else:
-							lines.append({"text": "I ask you to: " + title_str, "speaker_name": npc_name, "speaker_role": "god"})
-					elif typeof(q.description) == TYPE_STRING:
-						var sdesc := str(q.description).strip_edges()
-						if sdesc != "":
-							var paragraphs := sdesc.split("\n\n")
-							for para in paragraphs:
-								var p := para.strip_edges()
-								if p != "":
-									lines.append({"text": p, "speaker_name": npc_name, "speaker_role": "god"})
-						else:
-							lines.append({"text": "I ask you to: " + title_str, "speaker_name": npc_name, "speaker_role": "god"})
-					else:
-						var fallback := str(q.description).strip_edges()
-						if fallback != "":
-							lines.append({"text": fallback, "speaker_name": npc_name, "speaker_role": "god"})
-						else:
-							lines.append({"text": "I ask you to: " + title_str, "speaker_name": npc_name, "speaker_role": "god"})
+					_append_description_entries(lines, q.description, npc_name, "god")
 				else:
 					lines.append({"text": "I ask you to: " + title_str, "speaker_name": npc_name, "speaker_role": "god"})
 				any_quest_lines = true
@@ -366,22 +359,20 @@ func _claim_completed_quests() -> bool:
 
 # Modified _on_dialog_complete to ensure we unfreeze and proceed to offer next quest.
 func _on_dialog_complete() -> void:
-	print("[Taara] _on_dialog_complete() called — checking quests to offer/accept")
+	print("[Taara] _on_dialog_complete() called — beginning flow")
 	var QM := _get_quest_mgr()
 
-	# debug states (unchanged)
-	for qid in quest_ids:
-		var q = null
-		if QM:
-			q = QM.get_quest(qid)
-		if q == null:
-			print("  -", qid, " -> NULL")
-			continue
-		var state_str := str(q.state) if "state" in q else "(no state)"
-		print("  -", qid, "-> state:", state_str)
+	# Always refresh done-state right away to avoid stale info.
+	_update_done_state()
+	print("[Taara] after _update_done_state -> is_done =", is_done)
 
-	# ---- NEW GUARD: if the player already has ANY active quest from this NPC,
-	# ---- do not auto-offer/accept a second one now.
+	# Debug dump quests so we know what QuestManager actually returns right now
+	if QM:
+		for qid in quest_ids:
+			var q = QM.get_quest(qid)
+			print("[Taara DEBUG] quest", qid, "->", q)
+
+	# ---- Guard: don't auto-offer a new quest if player already has one active ----
 	var any_active := false
 	if QM:
 		for qid in quest_ids:
@@ -389,72 +380,110 @@ func _on_dialog_complete() -> void:
 			if q2 != null and "state" in q2 and q2.state == "active":
 				any_active = true
 				break
+
 	if any_active:
 		print("[Taara] Player already has an active quest from me; not auto-offering another.")
-		_update_done_state()
-		# If all are completed, claim / wish flow will still run below; otherwise return to normal dialog behavior.
-		if is_done:
-			_claim_completed_quests()
-			_perform_wish_flow(_current_player)
-		else:
+		# If not done -> restore UI and return
+		if not is_done:
 			_unfreeze_game()
 			_hide_dim_overlay()
 			_restore_all_player_prompts()
 			is_interacting = false
-		return
-	# ---- END NEW GUARD ----
+			return
+		# if done -> fall through to claim + wish below
 
-	# Attempt to auto-offer/accept first available quest (unchanged logic)
-	for qid in quest_ids:
-		var q = null
-		if QM:
-			q = QM.get_quest(qid)
-		if q and "state" in q and q.state == "available":
-			var title_str = q.title if "title" in q else qid
-			print("[Taara] Offering quest:", qid, "title:", title_str)
-			if QM and QM.has_method("accept_quest"):
-				print("[Taara] Calling QuestManager.accept_quest(", qid, ")")
-				QM.accept_quest(qid)
-				if dlg == null:
-					_resolve_and_connect_dialogbox()
-				if dlg:
-					dlg.show_dialog(["You accepted: " + title_str], npc_name, "slide_up")
-				# restore game and UI
-				_unfreeze_game()
-				_hide_dim_overlay()
-				_restore_all_player_prompts()
-				is_interacting = false
-				return
-			else:
-				print("[Taara] ⚠ QuestManager.accept_quest not available")
+	# Attempt to auto-offer/accept first available quest
+	if QM:
+		for qid in quest_ids:
+			var q = QM.get_quest(qid)
+			if q and "state" in q and q.state == "available":
+				var title_str = q.title if "title" in q else qid
+				print("[Taara] Offering quest:", qid, "title:", title_str)
+				if QM.has_method("accept_quest"):
+					QM.accept_quest(qid)
+					if dlg == null:
+						_resolve_and_connect_dialogbox()
+					if dlg:
+						dlg.show_dialog(["You accepted: " + title_str], npc_name, "slide_up")
+					_unfreeze_game()
+					_hide_dim_overlay()
+					_restore_all_player_prompts()
+					is_interacting = false
+					return
+				else:
+					print("[Taara] ⚠ QuestManager.accept_quest not available")
 
-	# none to offer — re-check done
+	# Re-check done-state (safe) and decide wish vs normal end.
 	_update_done_state()
+	print("[Taara] final is_done after offers check =", is_done)
 
-	# If quests are done (completed), claim them now (player is talking to Taara to claim)
 	if is_done:
-		# Attempt to mark completed quests as claimed via QuestManager API (safe fallback)
+		print("[Taara] All my quests are completed -> claiming + performing wish flow")
 		_claim_completed_quests()
-		# After claiming we do the wish flow for the player
+		# start the wish flow (this will show its own dialog and then run the end sequence)
 		_perform_wish_flow(_current_player)
-	else:
-		_unfreeze_game()
-		_hide_dim_overlay()
-		_restore_all_player_prompts()
-		is_interacting = false
+		return
+
+	# Not done and nothing to offer -> normal finish + cleanup
+	print("[Taara] No quests to offer and not done -> normal cleanup")
+	_unfreeze_game()
+	_hide_dim_overlay()
+	_restore_all_player_prompts()
+	is_interacting = false
 
 func _on_line_finished() -> void:
 	# optional: sound/effect per-line
 	pass
 
+# place near your other vars
+var _wish_dialog_completed: bool = false
+
+func _on_wish_dialog_complete() -> void:
+	# mark completed and run end sequence using current player
+	_wish_dialog_completed = true
+	_run_endgame_sequence(_current_player)
+
+# Godot 4 compatible _perform_wish_flow
 func _perform_wish_flow(player: Node) -> void:
 	print("[Taara] You proved worthy. Granting wish now.")
-	if dlg:
-		# during this show_dialog the tree may be paused; DialogBox must be PROCESS during pause
-		dlg.show_dialog(["You have proven yourself. Speak your wish."], npc_name, "slide_up")
-	emit_signal("wish_granted", player)
-	is_done = true
-	_show_prompt(false)
+
+	# restore UI state so dialog can show
+	_unfreeze_game()
+	_hide_dim_overlay()
+	_restore_all_player_prompts()
+
+	# keep interacting true while running the flow
+	is_interacting = true
+
+	# ensure dlg is valid (try to resolve again)
+	if dlg == null or not is_instance_valid(dlg):
+		print("[Taara] dlg was null/invalid at wish time — attempting to resolve again.")
+		_resolve_and_connect_dialogbox()
+
+	if dlg == null or not is_instance_valid(dlg):
+		# no dialog available — skip showing wish dialog and run end sequence
+		print("[Taara] WARNING: DialogBox still null/invalid. Skipping wish dialog and running end sequence.")
+		_run_endgame_sequence(player)
+		return
+
+	# build lines defensively
+	var lines: Array = []
+	for entry in wish_lines:
+		_push_normalized_entry(lines, entry, npc_name, "god")
+
+	if lines.is_empty():
+		lines.append({ "text": "Very well. Your wish shall be granted.", "speaker_name": npc_name, "speaker_role": "god" })
+
+	print("[Taara] Showing wish dialog (count):", lines.size())
+
+	# show dialog (DialogBox should emit dialog_complete when done)
+	dlg.show_dialog(lines, npc_name, "slide_up")
+
+	# wait for the dialog_complete signal (Godot 4 supports awaiting signals)
+	await dlg.dialog_complete
+
+	# Once the dialog finishes, run the end sequence directly.
+	_run_endgame_sequence(player)
 
 # ----- Area2D handlers (connect these) -----
 func _on_area_body_entered(body: Node) -> void:
@@ -885,21 +914,230 @@ func _clear_suppress_prompts() -> void:
 # Accepts:
 #  - String -> becomes dict with default speaker/role
 #  - Dictionary -> uses its fields but fills missing/empty ones with defaults
+#  - DialogLine (Resource) -> uses its exported fields
 func _push_normalized_entry(out: Array, entry, default_speaker: String, default_role: String = "narrator") -> void:
+	# String
 	if typeof(entry) == TYPE_STRING:
 		out.append({"text": str(entry), "speaker_name": default_speaker, "speaker_role": default_role})
-	elif typeof(entry) == TYPE_DICTIONARY:
+		return
+
+	# Dictionary
+	if typeof(entry) == TYPE_DICTIONARY:
 		var e = entry.duplicate(true)
-		# ensure required key
 		if not e.has("text"):
 			e["text"] = ""
-		# if speaker_name is missing OR empty, use the default_speaker
 		if not e.has("speaker_name") or str(e["speaker_name"]).strip_edges() == "":
 			e["speaker_name"] = default_speaker
-		# if speaker_role missing or empty, use default_role
 		if not e.has("speaker_role") or str(e["speaker_role"]).strip_edges() == "":
 			e["speaker_role"] = default_role
-		# keep any "style" key the designer placed
 		out.append(e)
+		return
+
+	# Object / Resource (e.g. DialogLine)
+	if typeof(entry) == TYPE_OBJECT:
+		var text_val := ""
+		var sp_name := default_speaker
+		var sp_role := default_role
+
+		# 1) If it's a Dictionary-like object (some resources can behave that way), prefer that.
+		if entry is Dictionary:
+			# defensive, though this branch rarely triggers for Resource
+			var d = entry
+			if d.has("text"):
+				text_val = str(d["text"])
+			if d.has("speaker_name") and str(d["speaker_name"]).strip_edges() != "":
+				sp_name = str(d["speaker_name"])
+			if d.has("speaker_role") and str(d["speaker_role"]).strip_edges() != "":
+				sp_role = str(d["speaker_role"])
+		else:
+			# 2) Try single-arg get(...) (safe for Resource/Object)
+			#    Note: Object.get expects 1 arg — DO NOT pass a default value here.
+			if entry.has_method("get"):
+				var t = entry.get("text")
+				if t != null and str(t).strip_edges() != "":
+					text_val = str(t)
+				var n = entry.get("speaker_name")
+				if n != null and str(n).strip_edges() != "":
+					sp_name = str(n)
+				var r = entry.get("speaker_role")
+				if r != null and str(r).strip_edges() != "":
+					sp_role = str(r)
+
+			# 3) Fallback to direct property access (works for exported Resource vars)
+			#    (only if we still don't have values)
+			if text_val == "" and "text" in entry:
+				text_val = str(entry.text)
+			if sp_name == default_speaker and "speaker_name" in entry and str(entry.speaker_name).strip_edges() != "":
+				sp_name = str(entry.speaker_name)
+			if sp_role == default_role and "speaker_role" in entry and str(entry.speaker_role).strip_edges() != "":
+				sp_role = str(entry.speaker_role)
+
+		# Final fallback for text
+		if text_val == "":
+			text_val = str(entry)
+
+		out.append({"text": text_val, "speaker_name": sp_name, "speaker_role": sp_role})
+		return
+
+	# Anything else -> coerce to string
+	out.append({"text": str(entry), "speaker_name": default_speaker, "speaker_role": default_role})
+
+# Helper: append quest description(s) to out using the same normalizer used for greetings.
+# Accepts: Array[DialogLine] OR Array[String] OR single String/Dictionary/Resource
+func _append_description_entries(out: Array, desc, default_speaker: String, default_role: String = "god") -> void:
+	# if null -> nothing
+	if desc == null:
+		return
+
+	# If it's an Array, iterate elements and normalize each
+	if typeof(desc) == TYPE_ARRAY:
+		for elem in desc:
+			_push_normalized_entry(out, elem, default_speaker, default_role)
+		return
+
+	# If it's a string or dict or resource, just normalize one entry
+	_push_normalized_entry(out, desc, default_speaker, default_role)
+
+# ---- Endgame / wish sequence helpers ----
+
+# Try to lock or unlock player controls using a few common APIs.
+func _lock_player_controls(player: Node, locked: bool) -> void:
+	if player == null:
+		return
+	# 1) common explicit API (if your player has this)
+	if player.has_method("set_control_enabled"):
+		player.call("set_control_enabled", not locked) # set_control_enabled(true) -> allow controls
+		return
+	# 2) common boolean flags
+	if "can_move" in player:
+		player.can_move = not locked
+		return
+	if "controls_enabled" in player:
+		player.controls_enabled = not locked
+		return
+	# 3) fallback: toggle process/physics_process (may disable animations too)
+	if player.has_method("set_physics_process"):
+		player.set_physics_process(not locked)
+	if player.has_method("set_process"):
+		player.set_process(not locked)
+
+
+# Create (or reuse) a simple endgame overlay in the current scene:
+func _create_endgame_overlay() -> CanvasLayer:
+	var cs := get_tree().current_scene
+	if cs == null:
+		cs = get_tree().get_root()
+
+	# reuse if present
+	var existing := cs.get_node_or_null("_TaaraEndgameOverlay")
+	if existing and is_instance_valid(existing):
+		return existing as CanvasLayer
+
+	var overlay := CanvasLayer.new()
+	overlay.name = "_TaaraEndgameOverlay"
+	# ensure it draws on top
+	if overlay.has_method("set"):
+		overlay.set("layer", 1000)
+
+	# full-screen ColorRect (fade)
+	var cr := ColorRect.new()
+	cr.name = "Fade"
+	cr.color = Color(0,0,0,0) # start transparent
+	# stretch full rect
+	if cr.has_method("set_anchors_preset"):
+		cr.set_anchors_preset(Control.PRESET_FULL_RECT)
 	else:
-		out.append({"text": str(entry), "speaker_name": default_speaker, "speaker_role": default_role})
+		cr.anchor_left = 0
+		cr.anchor_top = 0
+		cr.anchor_right = 1
+		cr.anchor_bottom = 1
+	cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(cr)
+
+	# CenterContainer + Label so we don't need alignment constants
+	var center := CenterContainer.new()
+	center.name = "Center"
+	if center.has_method("set_anchors_preset"):
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	else:
+		center.anchor_left = 0
+		center.anchor_top = 0
+		center.anchor_right = 1
+		center.anchor_bottom = 1
+	overlay.add_child(center)
+
+	var lbl := Label.new()
+	lbl.name = "ThankYou"
+	lbl.text = "Thank you for playing"
+	lbl.visible = false
+	# make it big-ish by increasing custom minimum size — tweak in inspector if you have fonts
+	lbl.rect_min_size = Vector2(600, 120)
+	# Start transparent via modulate
+	lbl.modulate = Color(1,1,1,0)
+	center.add_child(lbl)
+
+	cs.add_child(overlay)
+	return overlay
+
+
+# Run the full endgame sequence.
+func _run_endgame_sequence(player: Node) -> void:
+	# safety guards
+	if is_instance_valid(player) == false:
+		player = null
+
+	# Ensure dialog is closed / UI restored and game unpaused
+	_unfreeze_game()
+	_hide_dim_overlay()
+	_restore_all_player_prompts()
+	is_interacting = false
+
+	# Lock player's controls so they can't move while we do the fade
+	_lock_player_controls(player, true)
+
+	# create overlay
+	var overlay := _create_endgame_overlay()
+	var fade_rect := overlay.get_node("Fade") as ColorRect
+	var center := overlay.get_node("Center") as CenterContainer
+	var thank_lbl := center.get_node("ThankYou") as Label if center and center.has_node("ThankYou") else null
+
+	# Short delay so the player sees dialog close
+	await get_tree().create_timer(0.35).timeout
+
+	# Fade to black (0 => 1 alpha over 1.0s)
+	if fade_rect:
+		fade_rect.visible = true
+		var tw = get_tree().create_tween()
+		# tween the Color (modulate-like) to opaque black
+		tw.tween_property(fade_rect, "color", Color(0,0,0,1.0), 1.0).from(Color(0,0,0,0))
+		await tw.finished
+
+	# Show thank you text with a fade-in
+	if thank_lbl:
+		thank_lbl.visible = true
+		var tw2 = get_tree().create_tween()
+		tw2.tween_property(thank_lbl, "modulate", Color(1,1,1,1), 0.6).from(Color(1,1,1,0))
+		await tw2.finished
+
+	# Hold for a couple seconds so player can read
+	await get_tree().create_timer(2.0).timeout
+
+	# Optional: fade overlay back to transparent (0.8s) before changing scene
+	if fade_rect:
+		var tw3 = get_tree().create_tween()
+		tw3.tween_property(fade_rect, "color", Color(0,0,0,0), 0.8).from(Color(0,0,0,1))
+		await tw3.finished
+
+	# Unlock player controls (cleanup)
+	_lock_player_controls(player, false)
+
+	# Cleanup overlay
+	if overlay and is_instance_valid(overlay):
+		overlay.queue_free()
+
+	# Finally change to main menu (edit path as required)
+	var menu_path := "res://scenes/main_menu.tscn"
+	if ResourceLoader.exists(menu_path):
+		get_tree().change_scene_to_file(menu_path)
+	else:
+		print("[Taara] _run_endgame_sequence: main menu scene not found at", menu_path, "- not changing scene.")

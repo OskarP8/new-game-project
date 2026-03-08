@@ -16,20 +16,59 @@ var _player_inside: Node = null
 func _ready() -> void:
 	# keep group for toggling other checkpoints
 	add_to_group("Checkpoints")
+	print("[Checkpoint DEBUG] _ready() running for", name, "global_pos:", global_position)
 
-	# connect signals safely (same as before)
-	if interaction_area:
+	# ensure Interaction node exists
+	if not has_node("Interaction"):
+		print("[Checkpoint DEBUG] ERROR: No child named 'Interaction' found under Checkpoint!")
+	else:
+		interaction_area = $Interaction
+		print("[Checkpoint DEBUG] Interaction node found:", interaction_area,
+			  " monitoring:", interaction_area.monitoring, " monitorable:", interaction_area.monitorable)
+		# ensure monitoring/monitorable are enabled
+		if not interaction_area.monitoring:
+			print("[Checkpoint DEBUG] enabling interaction_area.monitoring")
+			interaction_area.monitoring = true
+		if not interaction_area.monitorable:
+			print("[Checkpoint DEBUG] enabling interaction_area.monitorable")
+			interaction_area.monitorable = true
+
+		# print collision layer/mask and children shapes
+		print("[Checkpoint DEBUG] interaction_area.collision_layer:", interaction_area.collision_layer,
+			  " collision_mask:", interaction_area.collision_mask)
+		for i in range(interaction_area.get_child_count()):
+			var ch = interaction_area.get_child(i)
+			if ch is CollisionShape2D:
+				print(" - CollisionShape2D child:", ch.name, "disabled:", ch.disabled,
+					  " shape:", (ch.shape.get_class() if ch.shape else "null"))
+
+		# (re)connect signals defensively
 		if not interaction_area.is_connected("body_entered", Callable(self, "_on_interaction_body_entered")):
 			interaction_area.body_entered.connect(Callable(self, "_on_interaction_body_entered"))
-		if not interaction_area.is_connected("area_entered", Callable(self, "_on_interaction_area_entered")):
-			interaction_area.area_entered.connect(Callable(self, "_on_interaction_area_entered"))
+			print("[Checkpoint DEBUG] connected body_entered")
 		if not interaction_area.is_connected("body_exited", Callable(self, "_on_interaction_body_exited")):
 			interaction_area.body_exited.connect(Callable(self, "_on_interaction_body_exited"))
+			print("[Checkpoint DEBUG] connected body_exited")
+		if not interaction_area.is_connected("area_entered", Callable(self, "_on_interaction_area_entered")):
+			interaction_area.area_entered.connect(Callable(self, "_on_interaction_area_entered"))
+			print("[Checkpoint DEBUG] connected area_entered")
 		if not interaction_area.is_connected("area_exited", Callable(self, "_on_interaction_area_exited")):
 			interaction_area.area_exited.connect(Callable(self, "_on_interaction_area_exited"))
+			print("[Checkpoint DEBUG] connected area_exited")
+
+	# show known players/groups
+	var players := get_tree().get_nodes_in_group("Player") + get_tree().get_nodes_in_group("player")
+	print("[Checkpoint DEBUG] nodes in Player groups count:", players.size())
+	for p in players:
+		print("  - player node:", p.name, "pos:", p.global_position, " layers:", (p.get("collision_layer") if p.has_method("get") else "(unknown)"))
 
 	_update_animation_from_gamestate()
-
+	# DEBUG: what the checkpoint area currently overlaps (immediate check)
+	if interaction_area:
+		var bodies = interaction_area.get_overlapping_bodies()
+		var areas = interaction_area.get_overlapping_areas()
+		print("[Checkpoint DEBUG] overlapping bodies count:", bodies.size(), "list:", bodies)
+		print("[Checkpoint DEBUG] overlapping areas count:", areas.size(), "list:", areas)
 func _process(delta: float) -> void:
 	# If player is inside and pressed the interact key -> call Taara
 	if _player_inside and Input.is_action_just_pressed("interact"):
@@ -37,29 +76,34 @@ func _process(delta: float) -> void:
 		# pressing 'interact' here will call Taara but activation on enter is unchanged.
 		_call_taara_to_player(_player_inside)
 
-# body / area enter handlers (cover both CharacterBody2D and Area2D player hitboxes)
 func _on_interaction_body_entered(body: Node) -> void:
+	print("cpoint body entered")
 	if _is_player_node(body):
 		_player_inside = body
 		_show_prompt(true)
-		# preserve original behavior: auto-activate on enter when require_button_press==false
-		if not require_button_press:
-			_try_activate(body)
+
+		# ALWAYS activate checkpoint on enter
+		_try_activate(body)
+
 
 func _on_interaction_area_entered(area: Area2D) -> void:
+	print("cpoint area entered")
 	var candidate := area.get_parent() if area.get_parent() != null else area
 	if _is_player_node(candidate):
 		_player_inside = candidate
 		_show_prompt(true)
-		if not require_button_press:
-			_try_activate(candidate)
+
+		# ALWAYS activate checkpoint on enter
+		_try_activate(candidate)
 
 func _on_interaction_body_exited(body: Node) -> void:
+	print('cpoint body exited')
 	if _player_inside == body:
 		_player_inside = null
 		_show_prompt(false)
 
 func _on_interaction_area_exited(area: Area2D) -> void:
+	print('cpoint area exited')
 	var candidate := area.get_parent() if area.get_parent() != null else area
 	if _player_inside == candidate:
 		_player_inside = null
@@ -67,29 +111,32 @@ func _on_interaction_area_exited(area: Area2D) -> void:
 
 # activation attempt (keeps your original logic)
 func _try_activate(player_node: Node) -> void:
-	# If already the checkpoint in GameState, still run activation visual/logic but make sure state is normal.
+	# If already the checkpoint in GameState, don't repeat heavy work;
+	# still keep visuals correct (but avoid clearing player/prompt).
 	var already = (GameState.checkpoint_position == global_position)
+	if not already:
+		# set the checkpoint in GameState (same as before)
+		GameState.set_checkpoint(get_tree().current_scene.scene_file_path, global_position)
+		print("[Checkpoint] Activated at ", global_position)
 
-	# set the checkpoint in GameState (same as before)
-	GameState.set_checkpoint(get_tree().current_scene.scene_file_path, global_position)
-	print("[Checkpoint] Activated at ", global_position)
+		# update visuals on all checkpoints
+		_set_active_and_deactivate_others()
 
-	# update visuals on all checkpoints
-	_set_active_and_deactivate_others()
+		# play activation animation
+		if anim_player and anim_player.has_animation("activate"):
+			anim_player.play("activate")
 
-	# play activation animation
-	if anim_player and anim_player.has_animation("activate"):
-		anim_player.play("activate")
+		# If activate_once is requested, disable the interaction area so it truly becomes single-use.
+		if activate_once and interaction_area:
+			# disable now (deferred to be safe from signal stack)
+			interaction_area.set_deferred("monitoring", false)
 
-	# If activate_once is requested, disable the interaction area so it truly becomes single-use.
-	if activate_once and interaction_area:
-		# disable now (deferred to be safe from signal stack)
-		interaction_area.set_deferred("monitoring", false)
-
-	# IMPORTANT: clear local player reference and hide the prompt so the player's interaction component
-	# will recompute the closest interactable on the next frame and won't hold a stale reference.
-	_player_inside = null
-	_show_prompt(false)
+	# IMPORTANT: do NOT clear _player_inside or hide the prompt here.
+	# Keep the prompt visible and _player_inside set so the player can press E to call Taara.
+	# Only clear them if this checkpoint is one-shot and we explicitly want to prevent re-interaction.
+	if activate_once:
+		_player_inside = null
+		_show_prompt(false)
 
 func _set_active_and_deactivate_others() -> void:
 	for cp in get_tree().get_nodes_in_group("Checkpoints"):
