@@ -5,9 +5,10 @@ signal wish_granted(player: Node)
 
 # Basic NPC data
 @export var npc_name := "Taara"
-@export var greeting_lines := [
-	"Who approaches the oak? Speak, child of the land.",
-	"Prove your strength and I shall consider your wish."
+# top of file (replace the existing export)
+@export var greeting_lines: Array[DialogLine] = [
+	{ "text": "Who approaches the oak? Speak, child of the land.", "speaker_name": "", "speaker_role": "" },
+	{ "text": "Prove your strength and I shall consider your wish.", "speaker_name": "", "speaker_role": "" }
 ]
 @export var quest_ids := ["taara_quest_1", "taara_quest_2", "taara_quest_3"]
 
@@ -26,6 +27,8 @@ var is_interacting: bool = false
 var is_done: bool = false
 var _current_player: Node = null
 
+# temporary flag to avoid showing prompts when teleporting/summoning Taara
+var _suppress_prompts: bool = false
 # only show base greeting once per game session (prevents repeating the same lines)
 var _greeted_once: bool = false
 
@@ -182,13 +185,10 @@ func interact(player: Node2D) -> void:
 	_current_player = player
 
 	var lines: Array = []
+
 	if not _greeted_once:
-		for l in greeting_lines:
-			lines.append({
-				"text": l,
-				"speaker_name": npc_name,
-				"speaker_role": "god"
-			})
+		for entry in greeting_lines:
+			_push_normalized_entry(lines, entry, npc_name, "god")
 		_greeted_once = true
 
 	print("[Taara] Debug: Gathering quest info for dialog:")
@@ -311,13 +311,17 @@ func call_to(player: Node2D, auto_open_dialog: bool = true) -> void:
 	if player == null:
 		return
 
+	# Temporarily suppress prompts so area-enter overlap on teleport does not show a prompt.
+	_suppress_prompts = true
+
 	# Show Taara (in case we hid it previously)
 	_show_for_summon()
 
 	# position Taara exactly at the player's global position (center)
 	global_position = player.global_position
 	_play_summon()
-	_show_prompt(true)
+	# DO NOT call _show_prompt(true) here — prompt should appear only when player approaches.
+
 	# optionally immediately start the interaction
 	if auto_open_dialog:
 		interact(player)
@@ -397,7 +401,6 @@ func _on_dialog_complete() -> void:
 			_hide_dim_overlay()
 			_restore_all_player_prompts()
 			is_interacting = false
-			_show_prompt(true)
 		return
 	# ---- END NEW GUARD ----
 
@@ -421,7 +424,6 @@ func _on_dialog_complete() -> void:
 				_hide_dim_overlay()
 				_restore_all_player_prompts()
 				is_interacting = false
-				_show_prompt(true)
 				return
 			else:
 				print("[Taara] ⚠ QuestManager.accept_quest not available")
@@ -440,7 +442,6 @@ func _on_dialog_complete() -> void:
 		_hide_dim_overlay()
 		_restore_all_player_prompts()
 		is_interacting = false
-		_show_prompt(true)
 
 func _on_line_finished() -> void:
 	# optional: sound/effect per-line
@@ -458,6 +459,10 @@ func _perform_wish_flow(player: Node) -> void:
 # ----- Area2D handlers (connect these) -----
 func _on_area_body_entered(body: Node) -> void:
 	if body == null:
+		return
+	# top of _on_area_body_entered
+	if _suppress_prompts or is_interacting or not visible:
+		_current_player = body if (body is Node and (body.is_in_group("player") or body.is_in_group("Player"))) else _current_player
 		return
 	print("[Taara] Area body_entered:", body.name if "name" in body else body)
 	if body is Node and (body.is_in_group("player") or body.is_in_group("Player")):
@@ -488,11 +493,20 @@ func _on_area_body_exited(body: Node) -> void:
 	if body is Node and (body.is_in_group("player") or body.is_in_group("Player")):
 		var interactor = body.find_child("InteractionComponent", true, false)
 		if interactor:
+			# Prefer explicit hide while interactor still references this NPC
+			if interactor.has_method("hide_prompt_for"):
+				print("[Taara] calling interactor.hide_prompt_for(self) on body_exited")
+				interactor.hide_prompt_for(self)
+			elif interactor.has_method("hide_prompt"):
+				print("[Taara] calling interactor.hide_prompt() on body_exited")
+				interactor.hide_prompt()
+
+			# Now remove from can_interact and ask for an update
 			if "can_interact" in interactor and self in interactor.can_interact:
 				interactor.can_interact.erase(self)
-				if interactor.has_method("_update_prompt"):
-					interactor._update_prompt()
-				return
+			if interactor.has_method("_update_prompt"):
+				interactor._update_prompt()
+			return
 			if interactor.has_method("_update_prompt"):
 				interactor._update_prompt()
 			elif interactor.has_method("hide_prompt_for"):
@@ -506,6 +520,10 @@ func _on_area_body_exited(body: Node) -> void:
 
 func _on_area_area_entered(a: Area2D) -> void:
 	if a == null:
+		return
+	# If suppressed, avoid adding to area/interactor prompt lists
+	# top of _on_area_area_entered
+	if _suppress_prompts or is_interacting or not visible:
 		return
 	_play_summon()
 	print("[Taara] Area area_entered:", a.name if "name" in a else a, "class:", a.get_class())
@@ -534,6 +552,15 @@ func _on_area_area_exited(a: Area2D) -> void:
 	_play_leave()
 	print("[Taara] Area area_exited:", a.name if "name" in a else a, "class:", a.get_class())
 	if "can_interact" in a and self in a.can_interact:
+		# try to hide first
+		if a.has_method("hide_prompt_for"):
+			print("[Taara] calling area.hide_prompt_for(self) on area_exited")
+			a.hide_prompt_for(self)
+		elif a.has_method("hide_prompt"):
+			print("[Taara] calling area.hide_prompt() on area_exited")
+			a.hide_prompt()
+
+		# then remove reference and update
 		a.can_interact.erase(self)
 		if a.has_method("_update_prompt"):
 			a._update_prompt()
@@ -708,6 +735,9 @@ func _show_dim_overlay() -> void:
 		if dlg is Control:
 			dlg.raise()
 			dlg.grab_focus()
+	# ---- clear suppression next idle (one-shot) ----
+	if _suppress_prompts:
+		call_deferred("_clear_suppress_prompts")
 
 func _hide_dim_overlay() -> void:
 	var cs := get_tree().current_scene
@@ -727,8 +757,9 @@ func _show_for_summon() -> void:
 	if area:
 		area.monitoring = true
 		area.monitorable = true
-	# ensure prompt can appear again
-	_show_prompt(true)
+	# DO NOT show prompt when summoned by other systems (checkpoint). Prompt should appear only
+	# when player enters the InteractionArea or their interactor decides to show it.
+	# _show_prompt(true)
 
 func _hide_after_dialog() -> void:
 	# play leave animation if you have it
@@ -743,12 +774,20 @@ func _hide_after_dialog() -> void:
 	# remove Taara from current player's interactor so the "Press E" prompt disappears
 	if _current_player:
 		var interactor = _current_player.find_child("InteractionComponent", true, false)
-		if interactor and "can_interact" in interactor and self in interactor.can_interact:
-			interactor.can_interact.erase(self)
+		if interactor:
+			# 1) ask interactor to hide any prompt for this NPC first (preferred)
+			if interactor.has_method("hide_prompt_for"):
+				print("[Taara] asking interactor to hide_prompt_for(self)")
+				interactor.hide_prompt_for(self)
+			elif interactor.has_method("hide_prompt"):
+				print("[Taara] asking interactor to hide_prompt()")
+				interactor.hide_prompt()
+			# 2) then remove from can_interact so it won't be suggested again
+			if "can_interact" in interactor and self in interactor.can_interact:
+				interactor.can_interact.erase(self)
+			# 3) force an update so the interactor can clean up any lingering UI
 			if interactor.has_method("_update_prompt"):
 				interactor._update_prompt()
-			elif interactor.has_method("hide_prompt_for"):
-				interactor.hide_prompt_for(self)
 
 	# make absolutely sure the Taara area cannot trigger
 	if area:
@@ -763,58 +802,50 @@ func _hide_after_dialog() -> void:
 
 # Call when you want all prompts for Taara to disappear immediately.
 func _clear_all_taara_prompts() -> void:
-	# 1) Free local prompt node if we created one
-	# TaaraNPC._clear_all_taara_prompts() — minimal change: hide prompt instead of freeing
+	# 1) Hide (don't free) the local prompt instance so other code never gets a freed object.
 	if prompt:
 		if is_instance_valid(prompt):
-			# hide the prompt so it won't be visible or interactive
 			if prompt.has_method("hide_prompt"):
 				prompt.hide_prompt()
 			else:
-				prompt.visible = false
-		# keep the instance around for reuse (no queue_free)
-		# But still notify all player Interactors to clear/hide references to this NPC
-		var players := get_tree().get_nodes_in_group("Player") + get_tree().get_nodes_in_group("player")
-		for p in players:
-			if p == null:
-				continue
-			var interactor := p.find_child("InteractionComponent", true, false)
-			if interactor:
-				# ask it to hide any prompt for this NPC
-				if interactor.has_method("hide_prompt_for"):
-					interactor.hide_prompt_for(self)
-				elif interactor.has_method("_update_prompt"):
-					interactor._update_prompt()
+				# safe fallback: hide visually
+				if prompt is CanvasItem:
+					prompt.visible = false
+		# keep the instance around for reuse (do not queue_free)
+		# we still notify players below.
 
-	# 2) If there is a global prompt instance on the scene with a name pattern, remove it.
+	# 2) DO NOT queue_free() scene-wide prompt nodes. ONLY hide them.
 	var cs := get_tree().current_scene
 	if cs:
 		for child in cs.get_children():
+			# best-effort: only hide nodes that look like prompts, do NOT free them
 			if typeof(child) == TYPE_OBJECT:
 				var nm := str(child.name).to_lower()
 				if nm.find("prompt") != -1 or nm.find("interact") != -1:
-					# only remove if it's clearly a UI/control (safety)
-					if child is Control or child is Node2D:
-						if is_instance_valid(child):
-							child.queue_free()
+					if is_instance_valid(child):
+						if child.has_method("hide_prompt"):
+							child.hide_prompt()
+						elif child is CanvasItem:
+							child.visible = false
 
-	# 3) Ask any Player InteractionComponent to hide references to this NPC
+	# 3) Ask any Player InteractionComponent to hide references to this NPC and remove this NPC from can_interact
 	var players := get_tree().get_nodes_in_group("Player") + get_tree().get_nodes_in_group("player")
 	for p in players:
 		if p == null:
 			continue
 		var interactor := p.find_child("InteractionComponent", true, false)
-		if interactor:
-			# remove this NPC from can_interact if present
-			if "can_interact" in interactor and self in interactor.can_interact:
-				interactor.can_interact.erase(self)
-			# call typical hide methods if they exist
-			if interactor.has_method("hide_prompt_for"):
-				interactor.hide_prompt_for(self)
-			elif interactor.has_method("_update_prompt"):
-				interactor._update_prompt()
-			elif interactor.has_method("hide_prompt"):
-				interactor.hide_prompt()
+		if not interactor:
+			continue
+		# remove this NPC from can_interact if present (so it won't be suggested any more)
+		if "can_interact" in interactor and self in interactor.can_interact:
+			interactor.can_interact.erase(self)
+		# prefer targeted hide call if component provides it
+		if interactor.has_method("hide_prompt_for"):
+			interactor.hide_prompt_for(self)
+		elif interactor.has_method("_update_prompt"):
+			interactor._update_prompt()
+		elif interactor.has_method("hide_prompt"):
+			interactor.hide_prompt()
 
 # hide every player's prompts (best-effort)
 func _hide_all_player_prompts() -> void:
@@ -845,3 +876,30 @@ func _restore_all_player_prompts() -> void:
 				interactor._update_prompt()
 			elif interactor.has_method("show_prompt"):
 				interactor.show_prompt() # best-effort
+
+func _clear_suppress_prompts() -> void:
+	# simple one-shot clear — don't loop here
+	_suppress_prompts = false
+
+# Helper: normalize an entry and append to out array.
+# Accepts:
+#  - String -> becomes dict with default speaker/role
+#  - Dictionary -> uses its fields but fills missing/empty ones with defaults
+func _push_normalized_entry(out: Array, entry, default_speaker: String, default_role: String = "narrator") -> void:
+	if typeof(entry) == TYPE_STRING:
+		out.append({"text": str(entry), "speaker_name": default_speaker, "speaker_role": default_role})
+	elif typeof(entry) == TYPE_DICTIONARY:
+		var e = entry.duplicate(true)
+		# ensure required key
+		if not e.has("text"):
+			e["text"] = ""
+		# if speaker_name is missing OR empty, use the default_speaker
+		if not e.has("speaker_name") or str(e["speaker_name"]).strip_edges() == "":
+			e["speaker_name"] = default_speaker
+		# if speaker_role missing or empty, use default_role
+		if not e.has("speaker_role") or str(e["speaker_role"]).strip_edges() == "":
+			e["speaker_role"] = default_role
+		# keep any "style" key the designer placed
+		out.append(e)
+	else:
+		out.append({"text": str(entry), "speaker_name": default_speaker, "speaker_role": default_role})

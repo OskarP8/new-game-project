@@ -183,7 +183,6 @@ func _style_for_role(role: String) -> String:
 		_:
 			return "narrator_plain"
 
-# helper: apply a simple style by changing label colors / small tweens (lightweight)
 func _apply_style(style_id: String) -> void:
 	$Panel.position = _panel_base_pos
 
@@ -196,10 +195,11 @@ func _apply_style(style_id: String) -> void:
 			text_color = Color(0.9, 0.5, 0.5, 1)
 		"villager_plain", "narrator_plain":
 			text_color = Color(0.95, 0.95, 0.95, 1)
+		"player_plain":
+			text_color = Color(1,1,1,1)
 		_:
 			text_color = Color(1,1,1,1)
 
-	# Apply same color to text and speaker
 	_text_ctrl.modulate = text_color
 	_speaker_label.modulate = text_color
 
@@ -212,7 +212,15 @@ func _apply_style(style_id: String) -> void:
 			_text_ctrl.add_theme_font_override("font", normal_font)
 			_speaker_label.add_theme_font_override("font", normal_font)
 
-	# Do NOT change node scale (scaling causes blur). Speaker name size should come from the font resource itself.
+	# --- speaker name horizontal alignment ---
+	# Use numeric values to avoid depending on engine enum constants:
+	# 0 = LEFT, 1 = CENTER, 2 = RIGHT
+	if style_id == "player_plain":
+		# player text: speaker name aligned to left
+		_speaker_label.set("horizontal_alignment", 0)
+	else:
+		# other characters: speaker name aligned to right
+		_speaker_label.set("horizontal_alignment", 2)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_showing:

@@ -67,21 +67,29 @@ func _on_interaction_area_exited(area: Area2D) -> void:
 
 # activation attempt (keeps your original logic)
 func _try_activate(player_node: Node) -> void:
+	# If already the checkpoint in GameState, still run activation visual/logic but make sure state is normal.
 	var already = (GameState.checkpoint_position == global_position)
 
 	# set the checkpoint in GameState (same as before)
 	GameState.set_checkpoint(get_tree().current_scene.scene_file_path, global_position)
 	print("[Checkpoint] Activated at ", global_position)
 
+	# update visuals on all checkpoints
 	_set_active_and_deactivate_others()
 
-	if activate_once:
-		if interaction_area:
-			interaction_area.monitoring = false
-			interaction_area.set_deferred("monitoring", false)
-
+	# play activation animation
 	if anim_player and anim_player.has_animation("activate"):
 		anim_player.play("activate")
+
+	# If activate_once is requested, disable the interaction area so it truly becomes single-use.
+	if activate_once and interaction_area:
+		# disable now (deferred to be safe from signal stack)
+		interaction_area.set_deferred("monitoring", false)
+
+	# IMPORTANT: clear local player reference and hide the prompt so the player's interaction component
+	# will recompute the closest interactable on the next frame and won't hold a stale reference.
+	_player_inside = null
+	_show_prompt(false)
 
 func _set_active_and_deactivate_others() -> void:
 	for cp in get_tree().get_nodes_in_group("Checkpoints"):

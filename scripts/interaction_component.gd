@@ -100,6 +100,7 @@ func _get_closest_interactable() -> Node:
 # PROMPT HANDLING
 # ---------------------------------------------------------------------
 func _update_prompt() -> void:
+	_clean_invalid_can_interact_entries()
 	# find closest interactable (your existing helper)
 	var closest: Node = _get_closest_interactable()
 
@@ -199,3 +200,59 @@ func _unhandled_key_input(event: InputEvent) -> void:
 					print("[InteractArea] 🔄 Chest reopen allowed — kept in interact list")
 
 			continue
+
+# cleanup invalid entries in can_interact
+func _clean_invalid_can_interact_entries() -> void:
+	for i in range(can_interact.size() - 1, -1, -1):
+		var item = can_interact[i]
+		if not is_instance_valid(item):
+			can_interact.remove_at(i)
+
+# public API expected by Taara (and other callers)
+func hide_prompt() -> void:
+	if prompt and is_instance_valid(prompt):
+		if prompt.has_method("hide_prompt"):
+			prompt.hide_prompt()
+		elif prompt is CanvasItem:
+			prompt.visible = false
+	# keep reference unless it's invalid
+	if prompt and not is_instance_valid(prompt):
+		prompt = null
+	# also remove any invalid entries so _update_prompt doesn't immediately recreate
+	_clean_invalid_can_interact_entries()
+
+# hide prompt for a particular owner (Taara passes self)
+func hide_prompt_for(owner: Node) -> void:
+	if owner == null:
+		hide_prompt()
+		return
+
+	# find owner position (safe)
+	var owner_pos = null
+	if "global_position" in owner:
+		owner_pos = owner.global_position
+	elif owner.has_method("get_global_position"):
+		owner_pos = owner.get_global_position()
+
+	# If there is no prompt currently — just ensure owner removed and return
+	if prompt == null or not is_instance_valid(prompt):
+		if owner in can_interact:
+			can_interact.erase(owner)
+		_clean_invalid_can_interact_entries()
+		return
+
+	# If we have both positions, compare distance (small tolerance)
+	if owner_pos != null:
+		var ppos := prompt.global_position
+		if ppos.distance_to(owner_pos) < 4.0:
+			# prompt likely belongs to owner -> hide
+			hide_prompt()
+			if owner in can_interact:
+				can_interact.erase(owner)
+			return
+
+	# fallback: remove owner from list and hide prompt defensively
+	if owner in can_interact:
+		can_interact.erase(owner)
+	hide_prompt()
+	_update_prompt()

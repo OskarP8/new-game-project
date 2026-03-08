@@ -190,6 +190,7 @@ y_sort_enabled = true
 collision_layer = 16
 collision_mask = 33
 script = ExtResource("1_a7tyr")
+require_button_press = true
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 sprite_frames = SubResource("SpriteFrames_n11as")

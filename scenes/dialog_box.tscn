@@ -41,8 +41,8 @@ text = "Text"
 
 [node name="Label" type="Label" parent="Panel"]
 layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
+anchors_preset = -1
+anchor_right = 0.333
 offset_top = -44.0
 offset_bottom = -21.0
 grow_horizontal = 2
@@ -51,3 +51,4 @@ theme_override_constants/outline_size = 4
 theme_override_fonts/font = ExtResource("2_sui48")
 theme_override_font_sizes/font_size = 16
 text = "Taara"
+horizontal_alignment = 2

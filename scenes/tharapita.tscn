@@ -64,7 +64,18 @@ radius = 50.0
 [node name="Tharapita" type="Node2D"]
 scale = Vector2(0.2, 0.2)
 script = ExtResource("1_14x27")
-greeting_lines = ["Who approaches the oak?<pause=1.0> Speak, child of the land.", "Prove your strength and I shall consider your wish."]
+npc_name = null
+greeting_lines = Array[Dictionary]([{
+"speaker_name": "",
+"speaker_role": "",
+"text": "Who approaches the oak? Speak, child of the land."
+}, {
+"speaker_name": "",
+"speaker_role": "",
+"text": "Prove your strength and I shall consider your wish."
+}, {}])
+quest_ids = null
+npc_id = null
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 position = Vector2(-565, 150)
