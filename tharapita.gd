@@ -201,6 +201,31 @@ func interact(player: Node2D) -> void:
 
 	_current_player = player
 
+	# ---------------------------------------------------------
+	# Insert this in interact(player) immediately after `_current_player = player`
+	# (i.e. before building 'lines' or showing any dialog)
+	# ---------------------------------------------------------
+	# refresh done-state now — if we're already finished, go straight to wish flow.
+	_update_done_state()
+	if is_done:
+		print("[Taara] interact(): all quests already completed — skipping normal dialog, starting wish flow")
+		# prevent other interactions while we run the wish flow
+		is_interacting = true
+		_show_prompt(false)
+
+		# Claim completed quests and persist (safe no-op if nothing to claim)
+		_claim_completed_quests()
+
+		# Ensure dlg is resolved so _perform_wish_flow doesn't need to try later
+		if dlg == null:
+			_resolve_and_connect_dialogbox()
+
+		# start wish flow immediately (use player arg)
+		_perform_wish_flow(player)
+		return
+	# ---------------------------------------------------------
+	# then continue with the existing dialog-building code
+
 	var lines: Array = []
 
 	if not _greeted_once:
@@ -226,6 +251,7 @@ func interact(player: Node2D) -> void:
 	if next_qid == "":
 		lines.append({"text":"...", "speaker_name": npc_name, "speaker_role": "god"})
 		lines.append({"text":"I have no new task for you now.", "speaker_name": npc_name, "speaker_role": "god"})
+		any_quest_lines = true
 	else:
 		var q = QM.get_quest(next_qid) if QM and QM.has_method("get_quest") else null
 		var title_str = (q.title if q and "title" in q else next_qid)
@@ -457,16 +483,16 @@ func _perform_wish_flow(player: Node) -> void:
 
 	# ensure dlg is valid (try to resolve again)
 	if dlg == null or not is_instance_valid(dlg):
-		print("[Taara] dlg was null/invalid at wish time — attempting to resolve again.")
+		print("taara: dlg was null/invalid at wish time — attempting to resolve again.")
 		_resolve_and_connect_dialogbox()
 
 	if dlg == null or not is_instance_valid(dlg):
 		# no dialog available — skip showing wish dialog and run end sequence
-		print("[Taara] WARNING: DialogBox still null/invalid. Skipping wish dialog and running end sequence.")
+		print("taara: WARNING: DialogBox still null/invalid. Skipping wish dialog and running end sequence.")
 		_run_endgame_sequence(player)
 		return
 
-	# build lines defensively
+	# build lines defensively (your original code)
 	var lines: Array = []
 	for entry in wish_lines:
 		_push_normalized_entry(lines, entry, npc_name, "god")
@@ -474,16 +500,63 @@ func _perform_wish_flow(player: Node) -> void:
 	if lines.is_empty():
 		lines.append({ "text": "Very well. Your wish shall be granted.", "speaker_name": npc_name, "speaker_role": "god" })
 
-	print("[Taara] Showing wish dialog (count):", lines.size())
+	print("taara: Showing wish dialog (count):", lines.size())
 
-	# show dialog (DialogBox should emit dialog_complete when done)
+	# --- Instrumented show/await block with debug handlers ---
+	print("taara: wish flow start — dlg:", dlg)
+
+	# Defensive info about dlg
+	if dlg.has_method("get_path"):
+		print("taara: dlg path:", dlg.get_path())
+
+	# Connect a one-off debug handler so we always see when this dlg emits dialog_complete.
+	if not dlg.is_connected("dialog_complete", Callable(self, "_taara_debug_dialog_complete")):
+		dlg.connect("dialog_complete", Callable(self, "_taara_debug_dialog_complete"))
+		print("taara: connected debug dialog_complete handler")
+
+	# Temporarily disconnect the generic handler so it doesn't run for the wish dialog.
+	var had_general_handler := false
+	if dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
+		dlg.disconnect("dialog_complete", Callable(self, "_on_dialog_complete"))
+		had_general_handler = true
+		print("taara: disconnected generic _on_dialog_complete (will restore later)")
+
+	# Connect our wish-specific handler (one-shot style)
+	if not dlg.is_connected("dialog_complete", Callable(self, "_on_wish_dialog_complete")):
+		dlg.connect("dialog_complete", Callable(self, "_on_wish_dialog_complete"))
+		print("taara: connected _on_wish_dialog_complete")
+
+	print("taara: calling dlg.show_dialog(lines_count=", lines.size(), ")")
 	dlg.show_dialog(lines, npc_name, "slide_up")
 
-	# wait for the dialog_complete signal (Godot 4 supports awaiting signals)
+	# wait for the dialog_complete signal
+	_wish_dialog_completed = false
+	print("taara: awaiting dlg.dialog_complete ...")
 	await dlg.dialog_complete
+	print("taara: await returned from dlg.dialog_complete — _wish_dialog_completed =", _wish_dialog_completed)
 
-	# Once the dialog finishes, run the end sequence directly.
-	_run_endgame_sequence(player)
+	# cleanup: disconnect wish handler and debug handler
+	if dlg.is_connected("dialog_complete", Callable(self, "_on_wish_dialog_complete")):
+		dlg.disconnect("dialog_complete", Callable(self, "_on_wish_dialog_complete"))
+		if dlg.is_connected("dialog_complete", Callable(self, "_taara_debug_dialog_complete")):
+			dlg.disconnect("dialog_complete", Callable(self, "_taara_debug_dialog_complete"))
+			print("taara: disconnected wish & debug handlers")
+
+	# restore original general handler if we removed it
+	if had_general_handler:
+		if not dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
+			dlg.connect("dialog_complete", Callable(self, "_on_dialog_complete"))
+		print("taara: restored generic _on_dialog_complete")
+	else:
+		print("taara: no generic handler to restore")
+
+	# If the wish handler didn't set the flag for some reason, run the end sequence here.
+	if not _wish_dialog_completed:
+		print("taara: WARNING: _wish_dialog_completed false after await — running end sequence.")
+		_run_endgame_sequence(player)
+		return
+
+	print("taara: wish flow finished normally.")
 
 # ----- Area2D handlers (connect these) -----
 func _on_area_body_entered(body: Node) -> void:
@@ -1141,3 +1214,7 @@ func _run_endgame_sequence(player: Node) -> void:
 		get_tree().change_scene_to_file(menu_path)
 	else:
 		print("[Taara] _run_endgame_sequence: main menu scene not found at", menu_path, "- not changing scene.")
+
+# debug helper — puts "taara" at start so your log filter catches it
+func _taara_debug_dialog_complete() -> void:
+	print("taara: _taara_debug_dialog_complete() fired on dlg ->", dlg)
