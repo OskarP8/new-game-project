@@ -498,29 +498,33 @@ position = Vector2(693, -24)
 enemy_scenes = Array[PackedScene]([ExtResource("9_wbwfa")])
 max_active = 1
 respawn_delay = 4.0
+despawn_distance = 1200.0
 
 [node name="SpawnPoint2" parent="Y-Sort/SpawnPoints" instance=ExtResource("8_067sx")]
 position = Vector2(769, -23)
 enemy_scenes = Array[PackedScene]([ExtResource("9_wbwfa")])
 respawn_delay = 4.0
-despawn_distance = 1000.0
+despawn_distance = 1200.0
 
 [node name="SpawnPoint3" parent="Y-Sort/SpawnPoints" instance=ExtResource("8_067sx")]
 position = Vector2(1822, -102)
 enemy_scenes = Array[PackedScene]([ExtResource("11_m4js1")])
 max_active = 1
 respawn_delay = 5.0
+despawn_distance = 1200.0
 
 [node name="SpawnPoint4" parent="Y-Sort/SpawnPoints" instance=ExtResource("8_067sx")]
 position = Vector2(1903, -27)
 enemy_scenes = Array[PackedScene]([ExtResource("11_m4js1")])
 max_active = 3
 respawn_delay = 5.0
+despawn_distance = 1200.0
 
 [node name="SpawnPoint5" parent="Y-Sort/SpawnPoints" instance=ExtResource("8_067sx")]
 position = Vector2(1887, 43)
 enemy_scenes = Array[PackedScene]([ExtResource("11_m4js1")])
 respawn_delay = 5.0
+despawn_distance = 1200.0
 
 [node name="Chests" type="Node2D" parent="Y-Sort"]
 position = Vector2(32, -71)

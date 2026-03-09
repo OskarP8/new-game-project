@@ -212,7 +212,8 @@ func interact(player: Node2D) -> void:
 		# prevent other interactions while we run the wish flow
 		is_interacting = true
 		_show_prompt(false)
-
+		if _current_player:
+			_lock_player_controls(_current_player, true)
 		# Claim completed quests and persist (safe no-op if nothing to claim)
 		_claim_completed_quests()
 
@@ -411,10 +412,7 @@ func _on_dialog_complete() -> void:
 		print("[Taara] Player already has an active quest from me; not auto-offering another.")
 		# If not done -> restore UI and return
 		if not is_done:
-			_unfreeze_game()
-			_hide_dim_overlay()
-			_restore_all_player_prompts()
-			is_interacting = false
+			_end_interaction_cleanup()
 			return
 		# if done -> fall through to claim + wish below
 
@@ -431,10 +429,7 @@ func _on_dialog_complete() -> void:
 						_resolve_and_connect_dialogbox()
 					if dlg:
 						dlg.show_dialog(["You accepted: " + title_str], npc_name, "slide_up")
-					_unfreeze_game()
-					_hide_dim_overlay()
-					_restore_all_player_prompts()
-					is_interacting = false
+					_end_interaction_cleanup()
 					return
 				else:
 					print("[Taara] ⚠ QuestManager.accept_quest not available")
@@ -452,10 +447,7 @@ func _on_dialog_complete() -> void:
 
 	# Not done and nothing to offer -> normal finish + cleanup
 	print("[Taara] No quests to offer and not done -> normal cleanup")
-	_unfreeze_game()
-	_hide_dim_overlay()
-	_restore_all_player_prompts()
-	is_interacting = false
+	_end_interaction_cleanup()
 
 func _on_line_finished() -> void:
 	# optional: sound/effect per-line
@@ -1077,22 +1069,27 @@ func _append_description_entries(out: Array, desc, default_speaker: String, defa
 func _lock_player_controls(player: Node, locked: bool) -> void:
 	if player == null:
 		return
-	# 1) common explicit API (if your player has this)
+	# 1) explicit API
 	if player.has_method("set_control_enabled"):
-		player.call("set_control_enabled", not locked) # set_control_enabled(true) -> allow controls
-		return
-	# 2) common boolean flags
-	if "can_move" in player:
+		player.call("set_control_enabled", not locked)
+	# 2) boolean flags (movement)
+	elif "can_move" in player:
 		player.can_move = not locked
-		return
-	if "controls_enabled" in player:
+	elif "controls_enabled" in player:
 		player.controls_enabled = not locked
-		return
 	# 3) fallback: toggle process/physics_process (may disable animations too)
 	if player.has_method("set_physics_process"):
 		player.set_physics_process(not locked)
 	if player.has_method("set_process"):
 		player.set_process(not locked)
+
+	# 4) common attack flags / API (try to disable attacking)
+	if "can_attack" in player:
+		player.can_attack = not locked
+	if "attack_enabled" in player:
+		player.attack_enabled = not locked
+	if player.has_method("set_attack_enabled"):
+		player.call("set_attack_enabled", not locked)
 
 
 # Create (or reuse) a simple endgame overlay in the current scene:
@@ -1127,7 +1124,7 @@ func _create_endgame_overlay() -> CanvasLayer:
 	cr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(cr)
 
-	# CenterContainer + Label so we don't need alignment constants
+	# CenterContainer + RichTextLabel so we can control size easily via bbcode
 	var center := CenterContainer.new()
 	center.name = "Center"
 	if center.has_method("set_anchors_preset"):
@@ -1139,15 +1136,22 @@ func _create_endgame_overlay() -> CanvasLayer:
 		center.anchor_bottom = 1
 	overlay.add_child(center)
 
-	var lbl := Label.new()
-	lbl.name = "ThankYou"
-	lbl.text = "Thank you for playing"
-	lbl.visible = false
-	# make it big-ish by increasing custom minimum size — tweak in inspector if you have fonts
-	lbl.rect_min_size = Vector2(600, 120)
-	# Start transparent via modulate
-	lbl.modulate = Color(1,1,1,0)
-	center.add_child(lbl)
+	# Use RichTextLabel (bbcode) so we can set a large font size and center reliably
+	var rtl := RichTextLabel.new()
+
+	var font_file := load("res://exepixelperfect.medium.ttf") as FontFile
+	rtl.add_theme_font_override("normal_font", font_file)
+	rtl.add_theme_font_size_override("normal_font_size", 56)
+
+	rtl.name = "ThankYou"
+	rtl.visible = false
+	rtl.bbcode_enabled = true
+	rtl.scroll_active = false            # no scrolling
+	# (removed invalid: rtl.fit_content_height = true)
+	rtl.custom_minimum_size = Vector2(900, 200)
+	rtl.bbcode_text = "[center][size=56]Thank you for playing![/size][/center]"
+	rtl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(rtl)
 
 	cs.add_child(overlay)
 	return overlay
@@ -1172,8 +1176,7 @@ func _run_endgame_sequence(player: Node) -> void:
 	var overlay := _create_endgame_overlay()
 	var fade_rect := overlay.get_node("Fade") as ColorRect
 	var center := overlay.get_node("Center") as CenterContainer
-	var thank_lbl := center.get_node("ThankYou") as Label if center and center.has_node("ThankYou") else null
-
+	var thank_lbl := center.get_node("ThankYou") as RichTextLabel if center and center.has_node("ThankYou") else null
 	# Short delay so the player sees dialog close
 	await get_tree().create_timer(0.35).timeout
 
@@ -1181,7 +1184,6 @@ func _run_endgame_sequence(player: Node) -> void:
 	if fade_rect:
 		fade_rect.visible = true
 		var tw = get_tree().create_tween()
-		# tween the Color (modulate-like) to opaque black
 		tw.tween_property(fade_rect, "color", Color(0,0,0,1.0), 1.0).from(Color(0,0,0,0))
 		await tw.finished
 
@@ -1192,29 +1194,45 @@ func _run_endgame_sequence(player: Node) -> void:
 		tw2.tween_property(thank_lbl, "modulate", Color(1,1,1,1), 0.6).from(Color(1,1,1,0))
 		await tw2.finished
 
-	# Hold for a couple seconds so player can read
-	await get_tree().create_timer(2.0).timeout
+	# --- CHANGE SCENE WHILE THANK YOU IS VISIBLE ---
+	# Give a short readable pause (optional), then change scene immediately while overlay is still on screen.
+	# Adjust "delay_seconds" to keep the text on-screen longer before switching.
+	var delay_seconds := 1.2
+	await get_tree().create_timer(delay_seconds).timeout
 
-	# Optional: fade overlay back to transparent (0.8s) before changing scene
-	if fade_rect:
-		var tw3 = get_tree().create_tween()
-		tw3.tween_property(fade_rect, "color", Color(0,0,0,0), 0.8).from(Color(0,0,0,1))
-		await tw3.finished
-
-	# Unlock player controls (cleanup)
+	# Unlock controls & cleanup AFTER initiating scene change (optional; change happens immediately)
+	# If scene switch is instantaneous for you, you can do cleanup before or after — this keeps it tidy.
 	_lock_player_controls(player, false)
 
-	# Cleanup overlay
-	if overlay and is_instance_valid(overlay):
-		overlay.queue_free()
-
-	# Finally change to main menu (edit path as required)
-	var menu_path := "res://scenes/main_menu.tscn"
+	# Change to main menu while the thank you is visible
+	var menu_path := "res://scenes/start_screen.tscn"
 	if ResourceLoader.exists(menu_path):
 		get_tree().change_scene_to_file(menu_path)
 	else:
 		print("[Taara] _run_endgame_sequence: main menu scene not found at", menu_path, "- not changing scene.")
 
+	# (optional) don't run the fade-back in this branch because we already changed scene
+	# Cleanup overlay if the scene didn't change
+	if not ResourceLoader.exists(menu_path):
+		# fade overlay back to transparent (0.8s) before cleaning up
+		if fade_rect:
+			var tw3 = get_tree().create_tween()
+			tw3.tween_property(fade_rect, "color", Color(0,0,0,0), 0.8).from(Color(0,0,0,1))
+			await tw3.finished
+
+		_lock_player_controls(player, false)
+		if overlay and is_instance_valid(overlay):
+			overlay.queue_free()
+
 # debug helper — puts "taara" at start so your log filter catches it
 func _taara_debug_dialog_complete() -> void:
 	print("taara: _taara_debug_dialog_complete() fired on dlg ->", dlg)
+
+func _end_interaction_cleanup() -> void:
+	_unfreeze_game()
+	_hide_dim_overlay()
+	_restore_all_player_prompts()
+	# unlock current player's controls if present
+	if _current_player:
+		_lock_player_controls(_current_player, false)
+	is_interacting = false
