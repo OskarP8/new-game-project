@@ -84,7 +84,7 @@ speaker_role = ""
 
 [sub_resource type="Resource" id="Resource_3ea0m"]
 script = ExtResource("2_kqfv2")
-text = "What I CAN do is bend time."
+text = "What I CAN do is bend the future."
 speaker_name = ""
 speaker_role = ""
 

@@ -285,12 +285,16 @@ func interact(player: Node2D) -> void:
 	is_interacting = true
 	_show_prompt(false)
 
+	# lock player controls (movement + attack) immediately for the current player
+	if _current_player:
+		_lock_player_controls(_current_player, true)
+
 	print("[Taara] Sending lines to DialogBox (count):", lines.size(), " ->", lines)
 	if dlg == null:
 		_resolve_and_connect_dialogbox()
 	if dlg == null:
 		print("[Taara] ⚠ DialogBox still not found — aborting show_dialog()")
-		is_interacting = false
+		_end_interaction_cleanup()
 		_show_prompt(true)
 		return
 
@@ -1149,7 +1153,7 @@ func _create_endgame_overlay() -> CanvasLayer:
 	rtl.scroll_active = false            # no scrolling
 	# (removed invalid: rtl.fit_content_height = true)
 	rtl.custom_minimum_size = Vector2(900, 200)
-	rtl.bbcode_text = "[center][size=56]Thank you for playing![/size][/center]"
+	rtl.bbcode_text = "[center]Thank you for playing![/center]"
 	rtl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(rtl)
 
@@ -1197,7 +1201,7 @@ func _run_endgame_sequence(player: Node) -> void:
 	# --- CHANGE SCENE WHILE THANK YOU IS VISIBLE ---
 	# Give a short readable pause (optional), then change scene immediately while overlay is still on screen.
 	# Adjust "delay_seconds" to keep the text on-screen longer before switching.
-	var delay_seconds := 1.2
+	var delay_seconds := 3
 	await get_tree().create_timer(delay_seconds).timeout
 
 	# Unlock controls & cleanup AFTER initiating scene change (optional; change happens immediately)
@@ -1229,10 +1233,17 @@ func _taara_debug_dialog_complete() -> void:
 	print("taara: _taara_debug_dialog_complete() fired on dlg ->", dlg)
 
 func _end_interaction_cleanup() -> void:
+	# Save the current player reference now because _hide_dim_overlay()
+	# (-> _hide_after_dialog()) may clear _current_player.
+	var player_to_unlock := _current_player
+
+	# restore pause/UI state first
 	_unfreeze_game()
 	_hide_dim_overlay()
 	_restore_all_player_prompts()
-	# unlock current player's controls if present
-	if _current_player:
-		_lock_player_controls(_current_player, false)
+
+	# unlock the player we saved (if any)
+	if player_to_unlock:
+		_lock_player_controls(player_to_unlock, false)
+
 	is_interacting = false
