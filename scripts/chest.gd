@@ -151,9 +151,12 @@ func interact(player: Node2D) -> void:
 	if has_node("CollisionShape2D"):
 		$CollisionShape2D.disabled = true
 	# Register opened chest with GameState so it persists
+	# Register opened chest with GameState so it persists
 	var cid := _make_chest_id()
 	if has_node("/root/GameState"):
 		get_node("/root/GameState").register_opened_chest(cid)
+
+	TutorialManager.chest_opened()
 
 	print("[Chest] 🧹 Chest cleared and disabled after successful open")
 

@@ -34,6 +34,7 @@ var _greeted_once: bool = false
 var dlg: Node = null
 # cache if we've subscribed to quest manager registration
 var _connected_to_quest_mgr := false
+var _expecting_dialog_from_taara: bool = false
 
 # (pause handling) stash previous paused flag so we can restore it
 var _prev_tree_paused: bool = false
@@ -100,11 +101,11 @@ func _resolve_and_connect_dialogbox() -> void:
 	if dlg == null:
 		dlg = get_tree().root.find_node("DialogBox", true, false)
 	if dlg:
+		# keep per-line handler if you want
 		if not dlg.is_connected("line_finished", Callable(self, "_on_line_finished")):
 			dlg.connect("line_finished", Callable(self, "_on_line_finished"))
-		if not dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
-			dlg.connect("dialog_complete", Callable(self, "_on_dialog_complete"))
-		print("[Taara] DialogBox resolved and signals connected ->", dlg)
+		# DO NOT connect dialog_complete here globally - we'll connect per-interaction instead
+		print("[Taara] DialogBox resolved ->", dlg)
 	else:
 		print("[Taara] DialogBox not found yet (will retry on interact).")
 
@@ -310,7 +311,9 @@ func interact(player: Node2D) -> void:
 		_freeze_game()
 	else:
 		print("[Taara] Warning: couldn't make dialog UI process while paused — running dialog without pausing.")
-
+	_expecting_dialog_from_taara = true
+	if not dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
+		dlg.connect("dialog_complete", Callable(self, "_on_dialog_complete"))
 	# Finally show the dialog (dialog will remain interactive because we forced PROCESS mode if available)
 	dlg.show_dialog(lines, npc_name, "pop")
 	# ensure dialog UI is process-mode capable (best-effort)
@@ -390,6 +393,16 @@ func _claim_completed_quests() -> bool:
 
 # Modified _on_dialog_complete to ensure we unfreeze and proceed to offer next quest.
 func _on_dialog_complete() -> void:
+	# Ignore dialog_complete events Taara didn't start
+	if not _expecting_dialog_from_taara:
+		print("[Taara] dialog_complete received but not expected by Taara -> ignoring")
+		return
+
+	# consume the expected event immediately and disconnect our handler
+	_expecting_dialog_from_taara = false
+	if dlg and dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
+		dlg.disconnect("dialog_complete", Callable(self, "_on_dialog_complete"))
+
 	print("[Taara] _on_dialog_complete() called — beginning flow")
 	var QM := _get_quest_mgr()
 
