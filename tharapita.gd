@@ -74,6 +74,19 @@ func _ready() -> void:
 			if "speaker_role" in entry:
 				print("     .speaker_role =", entry.speaker_role)
 	_resolve_and_connect_dialogbox()
+	# --- restore persisted greeted flag from GameState (if available) ---
+	if Engine.has_singleton("GameState"):
+		var id := str(npc_id).strip_edges()
+		if id == "":
+			push_warning("[Taara] npc_id is empty — set npc_id in the inspector to persist greeted state.")
+		else:
+			# prefer helper API if you added it to GameState
+			if GameState.has_method("is_npc_greeted"):
+				_greeted_once = GameState.is_npc_greeted(id)
+			# fallback: if you added a simple array/dict on GameState called greeted_npcs
+			elif "greeted_npcs" in GameState:
+				_greeted_once = GameState.greeted_npcs.has(id)
+			# else leave _greeted_once as default false
 	var QM := _get_quest_mgr()
 	if QM != null and not _connected_to_quest_mgr:
 		if not QM.is_connected("quests_registered", Callable(self, "_on_quests_registered")):
@@ -230,11 +243,27 @@ func interact(player: Node2D) -> void:
 
 	var lines: Array = []
 
-	if not _greeted_once:
+	# Use persisted flag if available (require inspector npc_id to be set)
+	var npc_unique_id := str(npc_id).strip_edges()
+	if npc_unique_id == "":
+		push_warning("[Taara] npc_id is empty — greetings will not persist across saves unless you set npc_id in the inspector.")
+	var greeted_runtime := _greeted_once
+
+	# Check saved GameState first (persisted across saves)
+	if Engine.has_singleton("GameState") and npc_unique_id != "":
+		if GameState.is_npc_greeted(npc_unique_id):
+			greeted_runtime = true
+
+	if not greeted_runtime:
 		for entry in greeting_lines:
 			_push_normalized_entry(lines, entry, npc_name, "god")
 		print("Taara: prepared lines:", lines)
 		_greeted_once = true
+		# persist to GameState so this NPC won't greet again after reload
+		# inside Taara.interact() where you mark greeted:
+		if Engine.has_singleton("GameState") and npc_unique_id != "":
+			var save_err = GameState.register_npc_greeted(npc_unique_id)
+			print("[Taara] register_npc_greeted returned:", save_err)
 
 	print("[Taara] Debug: Gathering quest info for dialog:")
 	var any_quest_lines := false
@@ -715,12 +744,6 @@ func _show_prompt(visible: bool) -> void:
 				prompt.hide_prompt()
 			else:
 				prompt.visible = false
-
-func _make_npc_id() -> String:
-	if npc_id != "":
-		return npc_id
-	var scene_path := get_tree().current_scene.scene_file_path if get_tree().current_scene else ""
-	return "%s::%s" % [scene_path, str(global_position)]
 
 # DEBUG helper...
 func _debug_interaction_state() -> void:

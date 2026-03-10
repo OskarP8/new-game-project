@@ -1,4 +1,4 @@
-[gd_scene load_steps=81 format=3 uid="uid://bbv8wq1p3smc6"]
+[gd_scene load_steps=84 format=3 uid="uid://bbv8wq1p3smc6"]
 
 [ext_resource type="Texture2D" uid="uid://ds4oj081wq8id" path="res://sprites/sprites.kra" id="1_dmapu"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_gjq3l"]
@@ -179,6 +179,18 @@ region = Rect2(128, 128, 32, 32)
 [sub_resource type="AtlasTexture" id="AtlasTexture_6pbq6"]
 atlas = ExtResource("1_dmapu")
 region = Rect2(160, 128, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_f1eyb"]
+atlas = ExtResource("1_dmapu")
+region = Rect2(0, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ih4j5"]
+atlas = ExtResource("1_dmapu")
+region = Rect2(305, 0, 30, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_miuu1"]
+atlas = ExtResource("1_dmapu")
+region = Rect2(0, 128, 32, 32)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_ffgdo"]
 atlas = ExtResource("1_dmapu")
@@ -397,6 +409,20 @@ animations = [{
 }],
 "loop": false,
 "name": &"death",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_f1eyb")
+}, {
+"duration": 2.0,
+"texture": SubResource("AtlasTexture_ih4j5")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_miuu1")
+}],
+"loop": false,
+"name": &"hit",
 "speed": 10.0
 }, {
 "frames": [{

@@ -176,6 +176,7 @@ script = ExtResource("1_14x27")
 greeting_lines = Array[ExtResource("2_kqfv2")]([SubResource("Resource_4sika")])
 wish_lines = Array[ExtResource("2_kqfv2")]([SubResource("Resource_obo8b"), SubResource("Resource_8fmqb"), SubResource("Resource_mjsbi"), SubResource("Resource_kjp1l"), SubResource("Resource_dxpv1"), SubResource("Resource_7qrbm"), SubResource("Resource_3ic6x"), SubResource("Resource_0pa0y"), SubResource("Resource_lfdab"), SubResource("Resource_ijl70"), SubResource("Resource_j3kjm"), SubResource("Resource_cgrl8"), SubResource("Resource_3ea0m"), SubResource("Resource_118ss"), SubResource("Resource_oa4fo"), SubResource("Resource_u1ohf"), SubResource("Resource_ufib6")])
 quest_ids = ["taara_quest_1", "taara_quest_2"]
+npc_id = "taara"
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
 position = Vector2(-565, 150)

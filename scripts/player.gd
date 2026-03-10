@@ -86,6 +86,7 @@ func _dummy_set(v): pass
 # READY
 # ----------------------
 func _ready():
+	body_anim.animation_finished.connect(_on_body_animation_finished)
 	# --- RESPAWN POSITION ---
 	# (replace your existing checkpoint/save block with the following)
 	if GameState.has_checkpoint():
@@ -200,12 +201,12 @@ func _process(delta):
 	if dead or dying:
 		return
 	# weapon pivot and player flip are updated every frame; during attack weapon uses stored angle
-	if Input.is_action_just_pressed("test_add_item"):
-		print("Adding test item to inventory")
-		var test_item: InvItem = preload("res://resources/pitchfork_res.tres")
-		collect(test_item)
-		var test_item2: InvItem = preload("res://resources/sword.tres")
-		collect(test_item2)
+	#if Input.is_action_just_pressed("test_add_item"):
+		#print("Adding test item to inventory")
+		#var test_item: InvItem = preload("res://resources/pitchfork_res.tres")
+		#collect(test_item)
+		#var test_item2: InvItem = preload("res://resources/sword.tres")
+		#collect(test_item2)
 	if Input.is_action_just_pressed("swap_weapon"):
 		swap_weapons()
 	if Input.is_action_just_pressed("interact") and nearby_item:
@@ -383,11 +384,17 @@ func _on_attack_finished() -> void:
 	update_animation()
 	sync_head_to_body()
 
-# single handler connected in _ready for body anim
 func _on_body_animation_finished() -> void:
+	# Kui attack lõppes
 	if attacking:
-		# if body finished and we set attacking earlier, finalize cleanup
 		_on_attack_finished()
+		return
+
+	# Kui hit anim lõppes
+	if suppress_body_anim_frame:
+		suppress_body_anim_frame = false
+		update_animation()
+		sync_head_to_body()
 
 # ----------------------
 # ANIMATION (body & head & weapon idle/walk)
@@ -1051,12 +1058,18 @@ func _on_player_died() -> void:
 		weapon_anim_player.stop()
 	if weapon_sprite:
 		weapon_sprite.stop()
+	GameState.save()  # autoload global call
+	print("[DeathDirector] told GameState to save (from _on_player_died)")
 
 func apply_damage(damage: int = 1) -> void:
 	if dead or invincible or default_lives <= 0:
 		return
 
 	invincible = true
+	# Play hit animation
+	if body_anim and body_anim.sprite_frames.has_animation("hit"):
+		body_anim.play("hit")
+		suppress_body_anim_frame = true
 	decrease_lives(damage)
 
 	await get_tree().create_timer(invincible_time).timeout

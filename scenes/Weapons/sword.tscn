@@ -400,7 +400,7 @@ animations = [{
 
 [node name="Sword" type="Node2D"]
 script = ExtResource("1_naxxk")
-weapon_damage = 100
+weapon_damage = 4
 knockback_strength = 15.0
 
 [node name="Particles" type="AnimatedSprite2D" parent="."]

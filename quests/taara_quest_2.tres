@@ -11,7 +11,7 @@ speaker_role = ""
 
 [sub_resource type="Resource" id="Resource_vv5mh"]
 script = ExtResource("1_gfwvv")
-text = "The fairies in the forest are quicker and far less clumsy than iron men. Defeat five of them and I shall truly consider your wish."
+text = "The fairies in the forest are quicker and far less clumsy than iron men. Defeat six of them and I shall truly consider your wish."
 speaker_name = ""
 speaker_role = ""
 

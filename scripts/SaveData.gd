@@ -10,3 +10,6 @@ class_name SaveData
 @export var inventory: Array = []        # Array of dictionaries: { "scene_path": String, "amount": int }
 @export var opened_chests: Array = []    # Array of Strings (unique chest IDs)
 @export var saved_quests: Dictionary = {}  # { "states": {quest_id: state}, "kill_progress": {quest_id: count} }
+# SaveData.gd (add these exports near the top of the resource)
+@export var intro_shown: bool = false
+@export var greeted_npcs: Dictionary = {} # maps npc_id -> true
