@@ -36,7 +36,8 @@ func _persist_intro_shown_direct() -> void:
 		save_res = SaveDataResource.new()
 	# Defensive: if resource lacks the field, add it if possible (resources are dynamic)
 	# Set fields we care about (only modify what we intend)
-	if "intro_shown" in save_res:
+	if save_res.has_method("set"):
+		# generic set, works if resource wrapper exposes set()
 		save_res.set("intro_shown", true)
 	else:
 		# in case typed resource, try direct property (some resource classes expose the field)
@@ -48,6 +49,25 @@ func _persist_intro_shown_direct() -> void:
 		push_error("[IntroManager] Direct persist FAILED (err=%s)" % str(err))
 	else:
 		print("[IntroManager] Direct persist succeeded -> wrote intro_shown=true to", SAVE_FILE)
+
+# Safely read the saved intro_shown flag from disk (fallback when GameState not yet available)
+func _read_intro_shown_from_save_file() -> bool:
+	if not FileAccess.file_exists(SAVE_FILE):
+		return false
+	var res := ResourceLoader.load(SAVE_FILE)
+	if not res:
+		print("[IntroManager] _read_intro_shown_from_save_file -> ResourceLoader.load returned null")
+		return false
+
+	# try generic get() first (works with Resource wrappers)
+	if res.has_method("get"):
+		var val = res.get("intro_shown")
+		return bool(val) if val != null else false
+
+	# fallback property access
+	if "intro_shown" in res:
+		return bool(res.intro_shown)
+	return false
 
 # find first node in a tree that has the given method name
 func _find_node_with_method(root_node: Node, method_name: String) -> Node:
@@ -89,11 +109,21 @@ func _try_show_intro() -> void:
 	if not Engine.has_singleton("GameState"):
 		print("[IntroManager] WARNING: GameState not present after wait; continuing but GameState calls will be skipped")
 
-	# If GameState says intro already shown on disk, skip and log
+	# If GameState says intro already shown, skip and log
 	if Engine.has_singleton("GameState") and GameState.has_method("is_intro_shown") and GameState.is_intro_shown():
 		_shown = true
 		print("[IntroManager] skipping intro: GameState.is_intro_shown() returned true")
 		return
+
+	# If GameState is missing, check on-disk save as a fallback
+	if not Engine.has_singleton("GameState"):
+		var disk_intro := _read_intro_shown_from_save_file()
+		if disk_intro:
+			_shown = true
+			print("[IntroManager] skipping intro: on-disk save says intro_shown == true")
+			return
+		else:
+			print("[IntroManager] on-disk save reports intro_shown == false (or missing); will attempt to show intro")
 
 	# try to find a DialogBox-like node in multiple places
 	var dlg: Node = null
@@ -197,14 +227,8 @@ func _try_show_intro() -> void:
 		var ok := false
 		# try different argument patterns
 		for args in [[intro_lines, "", "pop"], [intro_lines, ""], [intro_lines]]:
-			# callv returns Variant - wrap in try/catch style using `push_error` not possible; use safe call pattern
-			# Godot's callv will error if wrong -> catch by checking return? We'll attempt and log exception if it crashes.
-			var res = null
-			var success_call := true
-			# callv can still throw — guard by using Engine.get_singleton? Godot GDScript lacks try/catch, so we rely on has_method and hope signatures accept these.
-			res = dlg.callv("show_dialog", args)
+			var res = dlg.callv("show_dialog", args)
 			print("[IntroManager] callv show_dialog with args count %d returned: %s" % [args.size(), str(res)])
-			# assume it displayed if it returns something or dialog has 'dialog_complete' or we set shown_success true unconditionally after call
 			shown_success = true
 			ok = true
 			break
@@ -224,14 +248,20 @@ func _try_show_intro() -> void:
 
 	# Final check: if shown_success is still false, attempt to set a property 'lines' then call 'play' or 'start'
 	if not shown_success:
-		if dlg.has_meta("lines") or dlg.has_method("set_lines"):
+		if dlg.has_method("set_lines") or "lines" in dlg:
 			print("[IntroManager] Trying to set lines via property/method fallback")
 			if dlg.has_method("set_lines"):
 				dlg.callv("set_lines", [intro_lines])
 			else:
-				# try to set a simple property if exposed
-				if "lines" in dlg:
+				# try to set a simple property if exposed, or use generic set() if available
+				if dlg.has_method("set"):
+					# generic setter often takes (name, value)
+					dlg.callv("set", ["lines", intro_lines])
+				elif "lines" in dlg:
 					dlg.lines = intro_lines
+				else:
+					print("[IntroManager] No 'set' method or 'lines' property available on dlg; skipping direct lines set")
+
 			# attempt a 'play' or 'start' call
 			for m2 in ["play", "start", "open"]:
 				if dlg.has_method(m2):

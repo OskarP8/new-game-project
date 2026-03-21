@@ -43,6 +43,111 @@ const PAUSE_MODE_PROCESS := 2
 
 # ------------------------------------------------------------------
 # Helper: return the best QuestManager instance available, or null.
+
+# ---------- save helpers (fallback persistence) ----------
+const SAVE_DATA_PATH := "res://scripts/SaveData.gd"
+const SAVE_FILE := "user://save.tres"
+var SaveDataResource := preload(SAVE_DATA_PATH) if ResourceLoader.exists(SAVE_DATA_PATH) else null
+
+# --------- Add these to TaaraNPC.gd ----------
+
+# Safely read the greeted flag for this npc_id from the save file (fallback)
+func _read_greeted_from_save_file(npc_unique_id: String) -> bool:
+	if npc_unique_id == "":
+		return false
+	if not FileAccess.file_exists(SAVE_FILE):
+		return false
+	var res := ResourceLoader.load(SAVE_FILE)
+	if not res:
+		print("[Taara] _read_greeted_from_save_file -> ResourceLoader.load returned null")
+		return false
+
+	# prefer generic get() (works for wrapper resource)
+	if res.has_method("get"):
+		var g = res.get("greeted_npcs")
+		# possible shapes: Dictionary, Array, null
+		if g == null:
+			return false
+		# If a Dictionary: check key presence
+		if typeof(g) == TYPE_DICTIONARY:
+			return g.has(npc_unique_id) and bool(g[npc_unique_id]) == true
+		# If an Array of ids
+		if typeof(g) == TYPE_ARRAY:
+			return g.has(npc_unique_id)
+		return false
+
+	# fallback property access
+	if "greeted_npcs" in res:
+		var maybe_g = res.greeted_npcs
+		if typeof(maybe_g) == TYPE_DICTIONARY:
+			return maybe_g.has(npc_unique_id) and bool(maybe_g[npc_unique_id]) == true
+		if typeof(maybe_g) == TYPE_ARRAY:
+			return maybe_g.has(npc_unique_id)
+	return false
+
+
+# Better persist: merge into a typed SaveData resource if possible.
+func _persist_greeted_direct(npc_unique_id: String) -> void:
+	if npc_unique_id == "":
+		return
+	var save_res: Resource = null
+	if FileAccess.file_exists(SAVE_FILE):
+		save_res = ResourceLoader.load(SAVE_FILE)
+	# If save_res is missing, try to create typed SaveData
+	if not save_res:
+		if SaveDataResource:
+			save_res = SaveDataResource.new()
+		else:
+			# fallback: create a minimal SaveData-like resource by using SaveDataResource if available,
+			# otherwise create a basic Resource and attach greeted_npcs as a Dictionary meta so it will at least exist on disk.
+			var tmp := Resource.new()
+			var dict := {}
+			dict[npc_unique_id] = true
+			tmp.set_meta("greeted_npcs", dict)
+			var errx := ResourceSaver.save(tmp, SAVE_FILE)
+			if errx != OK:
+				push_error("[Taara] _persist_greeted_direct: fallback save failed (err=%d)" % errx)
+			else:
+				print("[Taara] _persist_greeted_direct: wrote fallback save (meta) to", SAVE_FILE)
+			return
+
+	# If we have a SaveData-like resource, merge greeted_npcs safely
+	var cur_map := {}
+	# try get() first
+	if save_res.has_method("get"):
+		var mg = save_res.get("greeted_npcs")
+		if mg != null and typeof(mg) == TYPE_DICTIONARY:
+			cur_map = mg.duplicate(true)
+		elif mg != null and typeof(mg) == TYPE_ARRAY:
+			# convert array of ids into dict for compatibility
+			for idv in mg:
+				cur_map[str(idv)] = true
+	else:
+		# fallback property access
+		if "greeted_npcs" in save_res and save_res.greeted_npcs != null:
+			var mg2 = save_res.greeted_npcs
+			if typeof(mg2) == TYPE_DICTIONARY:
+				cur_map = mg2.duplicate(true)
+			elif typeof(mg2) == TYPE_ARRAY:
+				for idv in mg2:
+					cur_map[str(idv)] = true
+
+	# set our id true
+	cur_map[npc_unique_id] = true
+
+	# write back onto resource with either set() or direct property
+	if save_res.has_method("set"):
+		save_res.callv("set", ["greeted_npcs", cur_map])
+	else:
+		# try direct property
+		save_res.greeted_npcs = cur_map
+
+	var err := ResourceSaver.save(save_res, SAVE_FILE)
+	if err != OK:
+		push_error("[Taara] _persist_greeted_direct: ResourceSaver.save failed (err=%d)" % err)
+	else:
+		print("[Taara] _persist_greeted_direct: persisted greeted_npcs ->", SAVE_FILE)
+
 func _get_quest_mgr() -> Node:
 	if typeof(QuestManager) != TYPE_NIL:
 		return QuestManager
@@ -80,12 +185,19 @@ func _ready() -> void:
 		if id == "":
 			push_warning("[Taara] npc_id is empty — set npc_id in the inspector to persist greeted state.")
 		else:
-			# prefer helper API if you added it to GameState
+			# Prefer GameState API when present
 			if GameState.has_method("is_npc_greeted"):
 				_greeted_once = GameState.is_npc_greeted(id)
-			# fallback: if you added a simple array/dict on GameState called greeted_npcs
 			elif "greeted_npcs" in GameState:
 				_greeted_once = GameState.greeted_npcs.has(id)
+			# If GameState didn't say greeted, try on-disk fallback (handles startup ordering issues)
+			if not _greeted_once:
+				_greeted_once = _read_greeted_from_save_file(id)
+	else:
+		# No GameState singleton available — check save file like IntroManager does
+		var id2 := str(npc_id).strip_edges()
+		if id2 != "":
+			_greeted_once = _read_greeted_from_save_file(id2)
 			# else leave _greeted_once as default false
 	var QM := _get_quest_mgr()
 	if QM != null and not _connected_to_quest_mgr:
@@ -260,10 +372,14 @@ func interact(player: Node2D) -> void:
 		print("Taara: prepared lines:", lines)
 		_greeted_once = true
 		# persist to GameState so this NPC won't greet again after reload
-		# inside Taara.interact() where you mark greeted:
 		if Engine.has_singleton("GameState") and npc_unique_id != "":
-			var save_err = GameState.register_npc_greeted(npc_unique_id)
-			print("[Taara] register_npc_greeted returned:", save_err)
+			# Prefer GameState API when present; otherwise fallback to direct save
+			if GameState.has_method("register_npc_greeted"):
+				var save_err = GameState.register_npc_greeted(npc_unique_id)
+				print("[Taara] register_npc_greeted returned:", save_err)
+			else:
+				# best-effort fallback
+				_persist_greeted_direct(npc_unique_id)
 
 	print("[Taara] Debug: Gathering quest info for dialog:")
 	var any_quest_lines := false
@@ -344,7 +460,13 @@ func interact(player: Node2D) -> void:
 	if not dlg.is_connected("dialog_complete", Callable(self, "_on_dialog_complete")):
 		dlg.connect("dialog_complete", Callable(self, "_on_dialog_complete"))
 	# Finally show the dialog (dialog will remain interactive because we forced PROCESS mode if available)
-	dlg.show_dialog(lines, npc_name, "pop")
+	# Use defensive caller so different DialogBox implementations are tolerated
+	if not _safe_show_dialog(dlg, lines, npc_name, "pop"):
+		# fallback: show simple dialog text to console and end interaction
+		print("[Taara] Warning: dialog UI failed to open via _safe_show_dialog")
+		_end_interaction_cleanup()
+		_show_prompt(true)
+		return
 	# ensure dialog UI is process-mode capable (best-effort)
 	_ensure_dialog_process_mode()
 	# Bring dialog to front (if parent exists) and ensure visible
@@ -565,7 +687,10 @@ func _perform_wish_flow(player: Node) -> void:
 		print("taara: connected _on_wish_dialog_complete")
 
 	print("taara: calling dlg.show_dialog(lines_count=", lines.size(), ")")
-	dlg.show_dialog(lines, npc_name, "slide_up")
+	if not _safe_show_dialog(dlg, lines, npc_name, "slide_up"):
+		print("taara: WARNING: wish dialog UI failed; running end sequence directly.")
+		_run_endgame_sequence(player)
+		return
 
 	# wait for the dialog_complete signal
 	_wish_dialog_completed = false
@@ -1283,3 +1408,51 @@ func _end_interaction_cleanup() -> void:
 		_lock_player_controls(player_to_unlock, false)
 
 	is_interacting = false
+
+# ---------- Defensive dialog show helper ----------
+# Tries multiple common call patterns for dialog UIs and returns true if it invoked something.
+func _safe_show_dialog(dlg: Node, lines: Array, speaker: String = "", style: String = "pop") -> bool:
+	if dlg == null or not is_instance_valid(dlg):
+		print("[Taara] _safe_show_dialog: dlg null/invalid")
+		return false
+
+	print("[Taara] _safe_show_dialog: dlg:", dlg, "trying to show", lines.size(), "lines")
+
+	# try show_dialog patterns
+	if dlg.has_method("show_dialog"):
+		# try several arg combinations
+		var patterns := [[lines, speaker, style], [lines, speaker], [lines]]
+		for p in patterns:
+			var res = dlg.callv("show_dialog", p)
+			print("[Taara] callv show_dialog with args count %d returned: %s" % [p.size(), str(res)])
+			# assume success if callv didn't error
+			return true
+
+	# try other common names
+	for mname in ["start_dialog", "open_dialog", "show_lines", "show"]:
+		if dlg.has_method(mname):
+			dlg.callv(mname, [lines, speaker])
+			print("[Taara] callv %s returned (called) for lines count %d" % [mname, lines.size()])
+			return true
+
+	# fallback: try to set "lines" property and then "play"/"start"/"open"
+	if dlg.has_method("set"):
+		dlg.callv("set", ["lines", lines])
+		for m in ["play", "start", "open"]:
+			if dlg.has_method(m):
+				dlg.callv(m, [])
+				print("[Taara] fallback: set lines and called %s" % m)
+				return true
+	elif "lines" in dlg:
+		dlg.lines = lines
+		for m in ["play", "start", "open"]:
+			if dlg.has_method(m):
+				dlg.callv(m, [])
+				print("[Taara] fallback: assigned dlg.lines and called %s" % m)
+				return true
+
+	# last resort: print to console and return false
+	print("[Taara] _safe_show_dialog: failed to find a show method on dlg, printing lines as fallback:")
+	for l in lines:
+		print("  ", l)
+	return false

@@ -54,7 +54,19 @@ func _on_player_died():
 
 	if GameState.has_checkpoint():
 		var data = GameState.get_respawn_data()
-		fade_to_scene(data.scene)
+		# read from dict safely
+		var scene_path := ""
+		var pos := Vector2.ZERO
+		if typeof(data) == TYPE_DICTIONARY:
+			scene_path = str(data.get("scene", ""))
+			pos = data.get("position", Vector2.ZERO)
+		# fallback to current scene if empty
+		if scene_path == "":
+			scene_path = get_tree().current_scene.scene_file_path if get_tree().current_scene else ""
+		# remember pending spawn pos so Player can be placed after load if desired
+		if pos != Vector2.ZERO:
+			set_pending_spawn_position(pos)
+		fade_to_scene(scene_path)
 	else:
 		fade_to_scene(get_tree().current_scene.scene_file_path)
 
@@ -79,6 +91,38 @@ func _do_scene_change() -> void:
 
 	get_tree().change_scene_to_file(_target_scene)
 	print("[DeathDirector] 🔹 change_scene_to_file called")
+	# ensure GameState applies saved data to the newly loaded scene:
+	call_deferred("_apply_gamestate_after_scene_change")
+
+# DeathDirector.gd
+func _apply_gamestate_after_scene_change() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		print("[DeathDirector] WARNING: Engine.get_main_loop() returned null; skipping GameState load")
+		return
+
+	# Wait a couple frames so the scene/autoloads can finish instancing.
+	await tree.process_frame
+	await tree.process_frame
+
+	# Wait for GameState to exist, but be patient (cap to avoid infinite wait).
+	var attempts := 0
+	var max_attempts := 120  # ~2 seconds at 60 FPS; increase if your scene init is heavy
+	while not Engine.has_singleton("GameState") and attempts < max_attempts:
+		await tree.process_frame
+		attempts += 1
+
+	if Engine.has_singleton("GameState"):
+		# Defensive call
+		if GameState.has_method("load_save"):
+			print("[DeathDirector] _apply_gamestate_after_scene_change -> calling GameState.load_save() after %d frames wait" % attempts)
+			GameState.load_save()
+		else:
+			print("[DeathDirector] _apply_gamestate_after_scene_change -> GameState exists but has no load_save()")
+		return
+
+	# Fallback: GameState never appeared in time — log and return.
+	print("[DeathDirector] WARNING: GameState singleton not present after waiting %d frames; skipping load_save()" % attempts)
 
 func _on_fade_anim_finished(anim_name: String) -> void:
 	if anim_name != "fade":

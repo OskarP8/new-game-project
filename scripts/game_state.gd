@@ -18,6 +18,8 @@ var opened_chests: Array = []
 # GameState.gd - NEW runtime flags
 var intro_shown: bool = false
 var greeted_npcs: Dictionary = {}    # npc_id -> true
+# runtime helper: set true when load_save() has applied the save to runtime
+var applied_save: bool = false
 
 func _ready() -> void:
 	# load existing save (if any) on startup
@@ -279,7 +281,8 @@ func load_save() -> bool:
 				QuestManager.load_from_save(res.saved_quests)
 			else:
 				print("[GameState] Save contains quest data but QuestManager lacks apply_save_snapshot/load_from_save")
-
+		applied_save = true
+		print("[GameState] load_save() finished; applied_save ->", applied_save)
 		print("[GameState] ✅ Save loaded: %s %s" % [saved_scene, str(saved_position)])
 		print("[GameState] Loaded persisted flags -> intro_shown:", intro_shown, " greeted_npcs keys:", greeted_npcs.keys())
 		return true
