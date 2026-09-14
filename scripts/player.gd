@@ -80,8 +80,6 @@ var weapon_pivot: Node2D
 
 @onready var lives: CanvasLayer = $Lives
 
-func _dummy_set(v): pass
-
 # ----------------------
 # READY
 # ----------------------

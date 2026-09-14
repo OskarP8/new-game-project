@@ -519,19 +519,6 @@ func _can_accept_item(slot_type: String, item_type: String) -> bool:
 			# generic fallback for non-restricted slots
 			return true
 
-func get_slots_rects() -> Array[Rect2]:
-	var rects := []
-	for s in slots:
-		if s and s is Control:
-			rects.append(s.get_global_rect())
-	return rects
-
-func get_slot_under_mouse(pos: Vector2) -> int:
-	for i in range(slots.size()):
-		if slots[i].get_global_rect().has_point(pos):
-			return i
-	return -1
-
 func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
 	return get_global_rect().has_point(mouse_pos)
 

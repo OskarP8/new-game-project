@@ -137,7 +137,7 @@ func _on_fade_anim_finished(anim_name: String) -> void:
 	fade.visible = false
 	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-func _input(event):
+func _input(_event):
 	if _transitioning:
 		get_viewport().set_input_as_handled()
 

@@ -97,12 +97,6 @@ func _on_options_pressed() -> void:
 	return
 
 
-func _on_save_pressed() -> void:
-	# Not connected by default — left for completeness if you add a separate Save button
-	_save_game_once()
-	print("[PauseMenu] Saved")
-
-
 func _on_save_and_quit_pressed() -> void:
 	# Save then quit application
 	_save_game_once()

@@ -470,9 +470,6 @@ func reset_save(start_scene: String = "res://scenes/world.tscn") -> void:
 	print("[GameState] Reset save and wrote fresh start scene:", start_scene)
 
 # Query/set helpers for other scripts to call
-# Debugging helpers for intro_shown
-signal intro_shown_changed(new_val: bool)
-
 func set_intro_shown(value: bool) -> void:
 	# Print on every attempt to change the flag
 	if intro_shown == value:
@@ -483,7 +480,6 @@ func set_intro_shown(value: bool) -> void:
 	print("[GameState] call stack for intro_shown change:")
 	print_stack()
 	intro_shown = value
-	emit_signal("intro_shown_changed", value)
 
 func is_intro_shown() -> bool:
 	# small debug whenever someone queries it

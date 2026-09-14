@@ -398,24 +398,6 @@ func _is_non_stackable(item: InvItem) -> bool:
 	return item.type == "weapon" or item.type == "armor"
 
 
-func get_slots_rects() -> Array[Rect2]:
-	var rects := []
-	for s in slots:
-		if s and s is Control:
-			rects.append(s.get_global_rect())
-	return rects
-
-
-func get_slot_under_mouse(pos: Vector2) -> int:
-	for i in range(slots.size()):
-		if slots[i].get_global_rect().has_point(pos):
-			return i
-	return -1
-
-
-func is_mouse_over_ui(mouse_pos: Vector2) -> bool:
-	return get_global_rect().has_point(mouse_pos)
-
 func get_slot_by_type(slot_type: String) -> InvUISlot:
 	for slot in slots:
 		if slot and str(slot.slot_type).to_lower() == str(slot_type).to_lower():
