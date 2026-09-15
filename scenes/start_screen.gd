@@ -5,8 +5,9 @@ extends CanvasLayer
 func _ready():
 	Engine.time_scale = 1.0
 
-	# Ensure GameState has loaded any on-disk save so has_save() is accurate.
-	if has_node("/root/GameState") and GameState.has_method("load_save"):
+	# GameState autoload loads the save during its own _ready(). Avoid loading
+	# the same resource a second time during startup.
+	if has_node("/root/GameState") and GameState.has_method("load_save") and not GameState.applied_save:
 		GameState.load_save()
 
 	# Now check for save presence
@@ -15,7 +16,7 @@ func _ready():
 		resume_button.disabled = true
 
 func _on_start_pressed() -> void:
-	print("NEW GAME pressed")
+	print("[StartupTiming] start pressed at ms:", Time.get_ticks_msec())
 
 	# Ensure GameState exists and delete on-disk save so we start clean
 	if has_node("/root/GameState"):

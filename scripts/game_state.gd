@@ -315,6 +315,7 @@ func is_chest_opened(chest_id: String) -> bool:
 func restore_inventory_to_player(player: Node) -> void:
 	if player == null:
 		return
+	print("[StartupTiming] inventory restore begin ms:", Time.get_ticks_msec())
 	_restoring_inventory = true
 
 	# Restore the main inventory used by pickups and Inv_UI. PlayerInv is the
@@ -417,6 +418,7 @@ func restore_inventory_to_player(player: Node) -> void:
 						player.equip_weapon(primary_item.scene_path)
 						player.using_secondary = false
 		_restoring_inventory = false
+		print("[StartupTiming] inventory restore end ms:", Time.get_ticks_msec())
 		return
 
 	# Fallback: try player's public API (add_to_inventory) — this is safer for player-side logic

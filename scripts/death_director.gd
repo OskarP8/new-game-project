@@ -8,6 +8,8 @@ var _target_scene: String = ""
 var _transitioning := false
 var _pending_spawn_position: Vector2 = Vector2.ZERO
 var _use_custom_spawn := false
+var _scene_change_started := false
+var _threaded_scene_path := ""
 
 func _ready():
 	add_to_group("DeathDirector")
@@ -78,22 +80,46 @@ func _disable_enemy_ai():
 		if enemy.has_method("disable_ai_and_idle"):
 			enemy.disable_ai_and_idle()
 
-func fade_to_scene(scene_path: String) -> void:
+func fade_to_scene(scene_path: String, speed_scale: float = 1.0) -> void:
 	if _transitioning:
 		return
 
 	_transitioning = true
+	_scene_change_started = false
 	_target_scene = scene_path
+	_threaded_scene_path = ""
+	if scene_path != "":
+		var request_error := ResourceLoader.load_threaded_request(scene_path)
+		if request_error == OK:
+			_threaded_scene_path = scene_path
 	fade.visible = true
+	anim.speed_scale = speed_scale
 	anim.play("fade")
 
 func _do_scene_change() -> void:
-	print("[DeathDirector] 🔹 _do_scene_change() called, target_scene:", _target_scene)
+	if _scene_change_started:
+		return
+	_scene_change_started = true
+	print("[StartupTiming] scene change begin ms:", Time.get_ticks_msec(), " target:", _target_scene)
 	if _target_scene == "":
 		return
 
-	get_tree().change_scene_to_file(_target_scene)
-	print("[DeathDirector] 🔹 change_scene_to_file called")
+	var packed_scene: PackedScene = null
+	if _threaded_scene_path == _target_scene:
+		while true:
+			var load_status := ResourceLoader.load_threaded_get_status(_target_scene)
+			if load_status == ResourceLoader.THREAD_LOAD_LOADED:
+				packed_scene = ResourceLoader.load_threaded_get(_target_scene) as PackedScene
+				break
+			if load_status == ResourceLoader.THREAD_LOAD_FAILED or load_status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+				break
+			await get_tree().process_frame
+
+	if packed_scene != null:
+		get_tree().change_scene_to_packed(packed_scene)
+	else:
+		get_tree().change_scene_to_file(_target_scene)
+	print("[StartupTiming] change_scene_to_file returned ms:", Time.get_ticks_msec())
 	# ensure GameState applies saved data to the newly loaded scene:
 	call_deferred("_apply_gamestate_after_scene_change")
 
@@ -142,11 +168,12 @@ func _on_fade_anim_finished(anim_name: String) -> void:
 	if anim_name != "fade":
 		return
 
-	if _target_scene != "":
+	if _target_scene != "" and not _scene_change_started:
 		await _do_scene_change()
 
 	_transitioning = false
 	_target_scene = ""
+	anim.speed_scale = 1.0
 	fade.visible = false
 	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 

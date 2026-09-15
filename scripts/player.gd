@@ -84,6 +84,7 @@ var weapon_pivot: Node2D
 # READY
 # ----------------------
 func _ready():
+	print("[StartupTiming] player ready begin ms:", Time.get_ticks_msec())
 	body_anim.animation_finished.connect(_on_body_animation_finished)
 	# --- RESPAWN POSITION ---
 	# (replace your existing checkpoint/save block with the following)
@@ -156,6 +157,7 @@ func _ready():
 	call_deferred("_deferred_restore_from_gamestate")
 
 func _deferred_restore_from_gamestate():
+	print("[StartupTiming] player restore begin ms:", Time.get_ticks_msec())
 	# ensure GameState exists and has saved_inventory
 	if Engine.has_singleton("GameState") == false and typeof(GameState) == TYPE_OBJECT:
 		# fallback: use global GameState variable (you already use GameState directly)
@@ -172,6 +174,7 @@ func _deferred_restore_from_gamestate():
 	# refresh equips so player picks up correct weapon if any
 	if has_method("refresh_equipped_weapon_from_inventory"):
 		call_deferred("refresh_equipped_weapon_from_inventory")
+	print("[StartupTiming] player restore queued end ms:", Time.get_ticks_msec())
 
 # ----------------------
 # MAIN LOOP

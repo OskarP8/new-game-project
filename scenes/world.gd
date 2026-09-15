@@ -7,6 +7,7 @@ extends Node
 @export var radius_scale: float = 0.95 # scale the circle so it covers cluster (tweak if agents still slip through)
 
 func _ready() -> void:
+	print("[StartupTiming] world ready begin ms:", Time.get_ticks_msec())
 	print("[NavDebug] ClusterSpawner starting")
 	if not visual_blocker_layer_path or visual_blocker_layer_path == NodePath(""):
 		print("[NavDebug] ERROR: visual_blocker_layer_path not set")
