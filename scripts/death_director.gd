@@ -23,12 +23,15 @@ func _ready():
 		player.player_died.connect(_on_player_died)
 
 func _on_player_died():
-	print("[DeathDirector] 🔹 _on_player_died() called")
+	print("[DeathDirector] death received; checkpoint:", GameState.has_checkpoint())
 	if death_started:
 		return
 	death_started = true
+	# Capture the live inventory before the scene creates empty UI resources.
+	GameState.save()
+	GameState.suppress_inventory_autosave = true
 
-	print("[DeathDirector] ☠ Death sequence started")
+	print("[DeathDirector] respawn sequence started")
 
 	await get_tree().create_timer(0.2).timeout
 	Engine.time_scale = 0.35
@@ -108,28 +111,38 @@ func _apply_gamestate_after_scene_change() -> void:
 	# Wait for GameState to exist, but be patient (cap to avoid infinite wait).
 	var attempts := 0
 	var max_attempts := 120  # ~2 seconds at 60 FPS; increase if your scene init is heavy
-	while not Engine.has_singleton("GameState") and attempts < max_attempts:
+	var game_state := get_node_or_null("/root/GameState")
+	while game_state == null and attempts < max_attempts:
 		await tree.process_frame
 		attempts += 1
+		game_state = get_node_or_null("/root/GameState")
 
-	if Engine.has_singleton("GameState"):
+	if game_state != null:
+		print("[DeathDirector] GameState found after frames:", attempts)
 		# Defensive call
-		if GameState.has_method("load_save"):
+		if game_state.has_method("load_save"):
 			print("[DeathDirector] _apply_gamestate_after_scene_change -> calling GameState.load_save() after %d frames wait" % attempts)
-			GameState.load_save()
+			game_state.load_save()
+			# The new Player may have restored before load_save() refreshed the
+			# cached inventory. Restore once more with the freshly loaded data.
+			var player = tree.root.find_child("Player", true, false)
+			if player and game_state.has_method("restore_inventory_to_player"):
+				game_state.restore_inventory_to_player(player)
+				if player.has_method("refresh_equipped_weapon_from_inventory"):
+					player.call_deferred("refresh_equipped_weapon_from_inventory")
+			game_state.suppress_inventory_autosave = false
 		else:
 			print("[DeathDirector] _apply_gamestate_after_scene_change -> GameState exists but has no load_save()")
 		return
 
 	# Fallback: GameState never appeared in time — log and return.
-	print("[DeathDirector] WARNING: GameState singleton not present after waiting %d frames; skipping load_save()" % attempts)
+	print("[DeathDirector] WARNING: /root/GameState missing after frames:", attempts)
 
 func _on_fade_anim_finished(anim_name: String) -> void:
 	if anim_name != "fade":
 		return
 
-	var current := get_tree().current_scene
-	if _target_scene != "" and (not current or _target_scene != current.scene_file_path):
+	if _target_scene != "":
 		await _do_scene_change()
 
 	_transitioning = false

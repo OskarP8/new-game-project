@@ -642,6 +642,8 @@ func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 		if slot and slot.item == item and item.stackable:
 			slot.amount += quantity
 			inv_ui.update_slots()
+			if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+				GameState.schedule_save()
 			print("[player] ➕ Stacked", quantity, "x", item.name, "(now", slot.amount, ")")
 			return true
 
@@ -651,6 +653,8 @@ func add_to_inventory(item: InvItem, quantity: int = 1) -> bool:
 			slot.item = item
 			slot.amount = quantity
 			inv_ui.update_slots()
+			if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+				GameState.schedule_save()
 			print("[player] ✅ Added", item.name, "x", quantity, "to inventory")
 			return true
 

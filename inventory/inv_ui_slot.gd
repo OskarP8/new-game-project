@@ -114,6 +114,8 @@ func drop_data(_pos, data) -> void:
 			s.item = inv_item
 			s.amount = amount
 			owner_inv.slots.append(s)
+		if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+			GameState.schedule_save()
 
 	# --- NEW: Trigger equip if appropriate ---
 	var player := get_tree().root.find_child("Player", true, false)

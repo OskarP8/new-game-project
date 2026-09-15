@@ -38,6 +38,8 @@ func add_item(entry: InventoryEntry) -> void:
 				slots.append(new_slot)
 
 		emit_signal("inventory_changed")
+		if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+			GameState.schedule_save()
 		return
 
 	# --- STACKABLE ITEMS ---
@@ -55,6 +57,8 @@ func add_item(entry: InventoryEntry) -> void:
 			remaining -= to_add
 			if remaining <= 0:
 				emit_signal("inventory_changed")
+				if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+					GameState.schedule_save()
 				return
 
 	# 2) Fill first empty slot (by index)
@@ -65,6 +69,8 @@ func add_item(entry: InventoryEntry) -> void:
 			slots[j].item = item
 			slots[j].amount = remaining
 			emit_signal("inventory_changed")
+			if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+				GameState.schedule_save()
 			return
 
 	# 3) Expand inventory if no free slot
@@ -74,6 +80,8 @@ func add_item(entry: InventoryEntry) -> void:
 	slots.append(append_slot)
 
 	emit_signal("inventory_changed")
+	if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+		GameState.schedule_save()
 
 
 # initialize with slot_count new slots

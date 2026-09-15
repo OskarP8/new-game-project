@@ -378,6 +378,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if player_inv:
 			player_inv.update_slots()
 	emit_signal("inventory_changed")
+	if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+		GameState.schedule_save()
 
 func _update_item_in_hand():
 	if ghost_item == null:

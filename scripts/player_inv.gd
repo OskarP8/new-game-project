@@ -503,6 +503,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _dbg_player.has_method("update_weapon_visuals"):
 				_dbg_player.call_deferred("update_weapon_visuals")
 
+		if typeof(GameState) == TYPE_OBJECT and GameState.has_method("schedule_save"):
+			GameState.schedule_save()
+
 func _can_accept_item(slot_type: String, item_type: String) -> bool:
 	if slot_type == null or item_type == null:
 		return false

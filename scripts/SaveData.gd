@@ -8,6 +8,7 @@ class_name SaveData
 
 # New: persisted gameplay state
 @export var inventory: Array = []        # Array of dictionaries: { "scene_path": String, "amount": int }
+@export var equipment_inventory: Array = [] # PlayerInv equipment slots
 @export var opened_chests: Array = []    # Array of Strings (unique chest IDs)
 @export var saved_quests: Dictionary = {}  # { "states": {quest_id: state}, "kill_progress": {quest_id: count} }
 # SaveData.gd (add these exports near the top of the resource)

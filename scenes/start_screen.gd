@@ -28,6 +28,7 @@ func _on_start_pressed() -> void:
 		gs.saved_position = Vector2.ZERO
 		gs.opened_chests = []
 		gs.saved_inventory = []
+		gs.saved_equipment_inventory = []
 
 	# Now go to gameplay scene (your existing flow)
 	var dd := get_tree().get_first_node_in_group("DeathDirector")

@@ -12,6 +12,7 @@ var checkpoint_position: Vector2 = Vector2.ZERO
 var saved_scene: String = ""
 var saved_position: Vector2 = Vector2.ZERO
 var saved_inventory: Array = []
+var saved_equipment_inventory: Array = []
 
 # Runtime record of opened chests (keeps in-memory and saved to disk)
 var opened_chests: Array = []
@@ -20,6 +21,9 @@ var intro_shown: bool = false
 var greeted_npcs: Dictionary = {}    # npc_id -> true
 # runtime helper: set true when load_save() has applied the save to runtime
 var applied_save: bool = false
+var _save_scheduled: bool = false
+var _restoring_inventory: bool = false
+var suppress_inventory_autosave: bool = false
 
 func _ready() -> void:
 	# load existing save (if any) on startup
@@ -35,6 +39,17 @@ func _on_about_to_quit() -> void:
 	print("[GameState] _on_about_to_quit() -> saving before quit")
 	save()
 
+func schedule_save() -> void:
+	if _restoring_inventory or suppress_inventory_autosave or _save_scheduled:
+		return
+	_save_scheduled = true
+	call_deferred("_perform_scheduled_save")
+
+func _perform_scheduled_save() -> void:
+	_save_scheduled = false
+	if not _restoring_inventory:
+		save()
+
 func set_checkpoint(scene_path: String, pos: Vector2) -> void:
 	checkpoint_scene = scene_path
 	checkpoint_position = pos
@@ -48,14 +63,6 @@ func get_respawn_data() -> Dictionary:
 
 # change save() to return the ResourceSaver result code (int)
 func save() -> int:
-	print("[GameState] save() called; intro_shown ->", intro_shown)
-	# Log when save() is invoked and where it will attempt to save from
-	var current_scene_path := "NONE"
-	if get_tree().current_scene:
-		current_scene_path = get_tree().current_scene.scene_file_path
-	print("[GameState] save() called; has_checkpoint:", has_checkpoint(), " checkpoint_scene:", checkpoint_scene, " current_scene:", current_scene_path)
-
-	# call the real saver
 	var err := 0
 	var scene_path := ""
 	var pos := Vector2.ZERO
@@ -66,8 +73,26 @@ func save() -> int:
 		scene_path = get_tree().current_scene.scene_file_path
 	err = save_game(scene_path, pos)
 
-	print("[GameState] save() finished; ResourceSaver returned:", err)
+	print("[GameState] save() ->", err)
 	return err  # now returns int
+
+func _inventory_debug_label(inv_resource) -> String:
+	if inv_resource == null or not ("slots" in inv_resource):
+		return "missing"
+	var labels: Array[String] = []
+	for slot in inv_resource.slots:
+		if slot != null and "item" in slot and slot.item != null:
+			labels.append(str(slot.item.resource_path if slot.item is Resource else slot.item))
+		else:
+			labels.append("empty")
+	return ",".join(labels)
+
+func _saved_item_paths(entries: Array) -> String:
+	var labels: Array[String] = []
+	for entry in entries:
+		var path := str(entry.get("resource_path", entry.get("scene_path", ""))).strip_edges()
+		labels.append(path if path != "" else "empty")
+	return ",".join(labels)
 
 # change save_game to return the err code from ResourceSaver.save
 func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> int:
@@ -92,62 +117,45 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> int:
 	# --- Collect player's inventory into a simple serializable array ---
 	var inventory_array: Array = []
 
-	# Attempt to collect inventory from known runtime locations (safe best-effort)
-	# 1) Try PlayerInv UI resource at root (common pattern in this project)
-	var player_inv_ui = null
-	if get_tree().root.has_node(NodePath("/root/PlayerInv")):
-		player_inv_ui = get_tree().root.get_node(NodePath("/root/PlayerInv"))
-	# fallback find by name
-	if player_inv_ui == null:
-		player_inv_ui = get_tree().root.find_child("PlayerInv", true, false)
-
-	if player_inv_ui and "inv" in player_inv_ui and player_inv_ui.inv != null:
-		# collect inv slots into simple dict structures
-		for s in player_inv_ui.inv.slots:
-			var entry := {"scene_path": "", "amount": 0}
+	# Persist the main inventory used by pickups and Inv_UI. PlayerInv is a
+	# separate equipment inventory and must not be used for this save data.
+	var inventory_ui = get_tree().root.find_child("Inv_UI", true, false)
+	if inventory_ui and "inv" in inventory_ui and inventory_ui.inv != null:
+		for s in inventory_ui.inv.slots:
+			var entry := {"scene_path": "", "resource_path": "", "amount": 0}
 			if s != null:
-				if typeof(s) == TYPE_OBJECT and s.has_method("get"):
-					# try common properties
-					if "item" in s and s.item != null:
-						if "scene_path" in s.item:
-							entry.scene_path = str(s.item.scene_path)
-						elif s.item is Resource:
-							# attempt to use resource path if possible
-							entry.scene_path = str(s.item.resource_path)
-					if "amount" in s:
-						entry.amount = int(s.amount)
-				else:
-					# best-effort: try fields
-					if "item" in s and s.item != null and "scene_path" in s.item:
+				if "item" in s and s.item != null:
+					if s.item is Resource:
+						entry.resource_path = str(s.item.resource_path)
+					if "scene_path" in s.item and str(s.item.scene_path) != "":
 						entry.scene_path = str(s.item.scene_path)
-					if "amount" in s:
-						entry.amount = int(s.amount)
+				if "amount" in s:
+					entry.amount = int(s.amount)
 			inventory_array.append(entry)
-	else:
-		# second fallback: try to find a Player autoload node with get_inventory()
-		var player_node = null
-		if get_tree().root.has_node(NodePath("/root/Player")):
-			player_node = get_tree().root.get_node(NodePath("/root/Player"))
-		else:
-			player_node = get_tree().root.find_child("Player", true, false)
 
-		if player_node != null and player_node.has_method("get_inventory"):
-			var inv = player_node.get_inventory()
-			if inv != null and "slots" in inv:
-				for s in inv.slots:
-					var entry2 := {"scene_path": "", "amount": 0}
-					if s != null:
-						if "item" in s and s.item != null:
-							if "scene_path" in s.item:
-								entry2.scene_path = str(s.item.scene_path)
-							elif s.item is Resource:
-								entry2.scene_path = str(s.item.resource_path)
-						if "amount" in s:
-							entry2.amount = int(s.amount)
-					inventory_array.append(entry2)
+	var equipment_array: Array = []
+	var equipment_ui = get_tree().root.find_child("PlayerInv", true, false)
+	if equipment_ui and "inv" in equipment_ui and equipment_ui.inv != null:
+		print("[GameState] SAVE equipment slots:", _inventory_debug_label(equipment_ui.inv))
+		for s in equipment_ui.inv.slots:
+			var equipment_entry := {"scene_path": "", "resource_path": "", "amount": 0}
+			if s != null:
+				if "item" in s and s.item != null:
+					if s.item is Resource:
+						equipment_entry.resource_path = str(s.item.resource_path)
+					if "scene_path" in s.item and str(s.item.scene_path) != "":
+						equipment_entry.scene_path = str(s.item.scene_path)
+				if "amount" in s:
+					equipment_entry.amount = int(s.amount)
+			equipment_array.append(equipment_entry)
 
 	# store collected inventory (may be empty)
 	save_res.inventory = inventory_array
+	save_res.equipment_inventory = equipment_array
+	# Keep the in-memory cache synchronized with the same snapshot written to disk.
+	# Death respawn can restore before the autoload is reloaded from user://.
+	saved_inventory = inventory_array.duplicate(true)
+	saved_equipment_inventory = equipment_array.duplicate(true)
 	save_res.opened_chests = opened_chests.duplicate(true)
 	# --- protect existing on-disk intro_shown so we don't overwrite true with false ---
 	# --- protect existing on-disk intro_shown so we don't overwrite true with false ---
@@ -215,20 +223,12 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> int:
 	]
 	print("[GameState] (DEBUG) about to ResourceSaver.save; summary ->", summary)
 
-	# print stack so we can trace unexpected savers
-	print("[GameState] (DEBUG) call stack for this save:")
-	print_stack()
-
 	var err := ResourceSaver.save(save_res, SAVE_PATH)
 
 	if err != OK:
 		push_error("[GameState] Save failed (err=%s). SavePath=%s" % [str(err), SAVE_PATH])
 	else:
 		print("[GameState] 💾 ResourceSaver.save returned OK for", SAVE_PATH)
-	# confirm file exists
-	print("[GameState] (DEBUG) FileExists after save:", FileAccess.file_exists(SAVE_PATH))
-
-	# Also verbose print of what was actually written (compact)
 	print("[GameState] (DEBUG) saved_scene:", saved_scene, " saved_position:", saved_position, " inventory_count:", inv_count, " opened_count:", opened_count, " intro_shown:", preview_intro)
 	return err  # <<--- return the error code so callers can inspect it
 
@@ -252,6 +252,8 @@ func load_save() -> bool:
 		saved_position = res.position
 		opened_chests = res.opened_chests.duplicate(true) if res.opened_chests != null else []
 		saved_inventory = res.inventory.duplicate(true) if res.inventory != null else []
+		saved_equipment_inventory = res.equipment_inventory.duplicate(true) if res.equipment_inventory != null else []
+		print("[GameState] LOAD cache main:", saved_inventory.size(), " equipment:", saved_equipment_inventory.size(), " paths:", _saved_item_paths(saved_equipment_inventory))
 
 		# --- new: load intro/greet fields safely (defensive) ---
 		var maybe_intro = null
@@ -313,21 +315,19 @@ func is_chest_opened(chest_id: String) -> bool:
 func restore_inventory_to_player(player: Node) -> void:
 	if player == null:
 		return
-	if saved_inventory == null or saved_inventory.size() == 0:
-		return
+	_restoring_inventory = true
 
-	# Try to find the runtime PlayerInv UI (prefer this — it's the 4-slot runtime inv)
-	var player_inv_ui := get_tree().root.find_child("PlayerInv", true, false)
-	var target_inv_res = null
+	# Restore the main inventory used by pickups and Inv_UI. PlayerInv is the
+	# separate equipment inventory and should remain independent.
+	var inventory_ui := get_tree().root.find_child("Inv_UI", true, false)
+	var target_inv_res = inventory_ui.inv if inventory_ui and "inv" in inventory_ui else null
 
-	if player_inv_ui and "inv" in player_inv_ui and player_inv_ui.inv != null:
-		target_inv_res = player_inv_ui.inv
-		print("[GameState] Restoring saved inventory -> PlayerInv.inv (slots:", target_inv_res.slots.size(), ")")
+	if target_inv_res != null:
+		print("[GameState] Restoring saved inventory -> Inv_UI.inv (saved slots:", saved_inventory.size(), ")")
 		# Clear existing and re-populate
-		# inside the PlayerInv.inv restore branch (replace the existing loop)
 		target_inv_res.slots.clear()
 		for e in saved_inventory:
-			var scene_path := str(e.get("scene_path", "")).strip_edges()
+			var scene_path := str(e.get("resource_path", e.get("scene_path", ""))).strip_edges()
 			var amount := int(e.get("amount", 0))
 
 			var item_res: Resource = null
@@ -387,8 +387,36 @@ func restore_inventory_to_player(player: Node) -> void:
 			target_inv_res.slots.append(slot)
 
 		# Notify UI
-		if player_inv_ui.has_method("update_slots"):
-			player_inv_ui.update_slots()
+		if inventory_ui.has_method("update_slots"):
+			inventory_ui.update_slots()
+
+		var equipment_ui := get_tree().root.find_child("PlayerInv", true, false)
+		if equipment_ui and "inv" in equipment_ui and equipment_ui.inv != null:
+			equipment_ui.inv.slots.clear()
+			for e in saved_equipment_inventory:
+				var item_path := str(e.get("resource_path", e.get("scene_path", ""))).strip_edges()
+				var item_res: Resource = null
+				if item_path != "":
+					item_res = load(item_path)
+				print("[GameState] RESTORE equipment item:", item_path if item_path != "" else "empty", " loaded:", item_res != null)
+				if item_res != null and item_res.get_class() != "PackedScene":
+					var equipment_slot := InvSlot.new()
+					equipment_slot.item = item_res
+					equipment_slot.amount = int(e.get("amount", 0))
+					equipment_ui.inv.slots.append(equipment_slot)
+			if equipment_ui.has_method("update_slots"):
+				equipment_ui.update_slots()
+			print("[GameState] RESTORE equipment slots:", _inventory_debug_label(equipment_ui.inv))
+
+			# Re-equip the primary weapon from the restored resource slot. This
+			# avoids depending on UI visuals or an earlier refresh during respawn.
+			if equipment_ui.slots.size() > 0 and equipment_ui.inv.slots.size() > 0:
+				var primary_item = equipment_ui.inv.slots[0].item
+				if primary_item != null and "scene_path" in primary_item and str(primary_item.scene_path) != "":
+					if player.has_method("equip_weapon"):
+						player.equip_weapon(primary_item.scene_path)
+						player.using_secondary = false
+		_restoring_inventory = false
 		return
 
 	# Fallback: try player's public API (add_to_inventory) — this is safer for player-side logic
@@ -405,6 +433,7 @@ func restore_inventory_to_player(player: Node) -> void:
 			else:
 				# if not able to load, try passing path as fallback
 				player.add_to_inventory(item_path, amount)
+		_restoring_inventory = false
 		return
 
 	# Last resort: populate the player's inventory resource directly
@@ -428,6 +457,7 @@ func restore_inventory_to_player(player: Node) -> void:
 				slot.amount = amount
 				inv_res.slots.append(slot)
 		print("[GameState] Restored saved inventory into fallback player.inv")
+	_restoring_inventory = false
 
 # Overwrite save with an empty SaveData resource (safer than attempting to delete file)
 # in GameState.gd (replace existing delete_save_file)
@@ -439,6 +469,7 @@ func delete_save_file() -> void:
 	blank.scene_path = ""
 	blank.position = Vector2.ZERO
 	blank.inventory = []
+	blank.equipment_inventory = []
 	blank.opened_chests = []
 	blank.intro_shown = false
 	blank.greeted_npcs = {}
@@ -452,6 +483,7 @@ func delete_save_file() -> void:
 	saved_scene = ""
 	saved_position = Vector2.ZERO
 	saved_inventory = []
+	saved_equipment_inventory = []
 	opened_chests = []
 	set_intro_shown(false)   # use setter so debug/emit_signal runs
 	greeted_npcs = {}
@@ -463,6 +495,7 @@ func reset_save(start_scene: String = "res://scenes/world.tscn") -> void:
 	saved_scene = ""
 	saved_position = Vector2.ZERO
 	saved_inventory = []
+	saved_equipment_inventory = []
 	opened_chests.clear()
 	intro_shown = false
 	# persist cleared state (write start scene so resume doesn't resurrect old save)
