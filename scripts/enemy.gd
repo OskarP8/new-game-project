@@ -699,8 +699,9 @@ func _perform_attack() -> void:
 	if is_instance_valid(weapon) and weapon.has_method("start_attack"):
 		weapon.start_attack()
 
-	# ⏱ keep hit window open briefly
-	await get_tree().create_timer(0.2).timeout
+	# Keep damage active for the full sword attack animation. The hitbox is
+	# visually active until roughly 0.4 seconds into the attack.
+	await get_tree().create_timer(0.4).timeout
 
 	attack_can_hit = false
 	print("[Enemy ATTACK] hit window CLOSED")

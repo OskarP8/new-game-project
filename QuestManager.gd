@@ -52,6 +52,8 @@ func _register_quest_resources() -> void:
 							print("[QuestManager] WARNING: quest resource", full, "has empty id; set its id property.")
 						else:
 							quests[res.id] = res
+							if _saved_states.has(res.id) and "state" in res:
+								res.state = str(_saved_states[res.id])
 							print("[QuestManager] Registered quest resource:", res.id)
 					else:
 						print("[QuestManager] Skipping non-Quest resource:", full, "class:", res.get_class())
@@ -127,6 +129,8 @@ func notify_enemy_killed(enemy_type: String) -> void:
 			emit_signal("quest_updated", qid, "progress:" + str(_kill_progress[key]) + "/" + str(needed))
 			if _kill_progress[key] >= needed:
 				complete_quest(qid)
+			else:
+				save()
 
 func complete_quest(id:String) -> void:
 	var q = get_quest(id)
@@ -175,6 +179,17 @@ func save() -> void:
 		if "state" in q:
 			cfg.set_value("quests", id + "/state", q.state)
 	cfg.save(SAVE_PATH)
+	if typeof(GameState) == TYPE_OBJECT and GameState.has_method("save"):
+		GameState.save()
+
+func reset_for_new_game() -> void:
+	_saved_states.clear()
+	_kill_progress.clear()
+	for q in quests.values():
+		if q != null and "state" in q:
+			q.state = "available"
+	save()
+	print("[QuestManager] Reset quests for new game")
 
 func _load() -> void:
 	_saved_states.clear()
@@ -242,7 +257,11 @@ func apply_save_snapshot(snapshot: Dictionary) -> void:
 			emit_signal("quest_updated", qid, "active")
 	# also update progress signals
 	for qid in _kill_progress.keys():
-		var needed := int(quests.get(qid, {}).get("objective", {}).get("count", 1)) if quests.has(qid) else 0
+		var needed := 0
+		if quests.has(qid):
+			var quest = quests[qid]
+			if quest != null and "objective" in quest and quest.objective is Dictionary:
+				needed = int(quest.objective.get("count", 1))
 		emit_signal("quest_updated", qid, "progress:%d/%d" % [_kill_progress[qid], needed])
 
 # debug helper

@@ -178,9 +178,8 @@ func save_game(scene_path: String = "", pos: Vector2 = Vector2.ZERO) -> int:
 	save_res.intro_shown = final_intro
 	save_res.greeted_npcs = greeted_npcs.duplicate(true)
 
-	# quests snapshot code (if your SaveData has a saved_quests field, populate it here)
-	# if Engine.has_singleton("QuestManager") and QuestManager.has_method("snapshot_save"):
-	#     save_res.saved_quests = QuestManager.snapshot_save()
+	if typeof(QuestManager) == TYPE_OBJECT and QuestManager.has_method("get_save_snapshot"):
+		save_res.saved_quests = QuestManager.get_save_snapshot()
 
 	# --- Persist resource to disk (correct order: resource, path) ---
 	# Debug: preview and summary before saving
@@ -274,7 +273,7 @@ func load_save() -> bool:
 		greeted_npcs = maybe_g.duplicate(true) if maybe_g != null else {}
 		print("[GameState] load() finished; intro_shown ->", intro_shown)
 		# --- Restore quests into QuestManager if data present ---
-		if Engine.has_singleton("QuestManager") and res.saved_quests != null:
+		if typeof(QuestManager) == TYPE_OBJECT and res.saved_quests != null:
 			# prefer new API name apply_save_snapshot(snapshot)
 			if QuestManager.has_method("apply_save_snapshot"):
 				QuestManager.apply_save_snapshot(res.saved_quests)

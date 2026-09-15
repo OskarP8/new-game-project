@@ -180,7 +180,7 @@ func _ready() -> void:
 				print("     .speaker_role =", entry.speaker_role)
 	_resolve_and_connect_dialogbox()
 	# --- restore persisted greeted flag from GameState (if available) ---
-	if Engine.has_singleton("GameState"):
+	if typeof(GameState) == TYPE_OBJECT:
 		var id := str(npc_id).strip_edges()
 		if id == "":
 			push_warning("[Taara] npc_id is empty — set npc_id in the inspector to persist greeted state.")
@@ -362,7 +362,7 @@ func interact(player: Node2D) -> void:
 	var greeted_runtime := _greeted_once
 
 	# Check saved GameState first (persisted across saves)
-	if Engine.has_singleton("GameState") and npc_unique_id != "":
+	if typeof(GameState) == TYPE_OBJECT and npc_unique_id != "":
 		if GameState.is_npc_greeted(npc_unique_id):
 			greeted_runtime = true
 
@@ -372,7 +372,7 @@ func interact(player: Node2D) -> void:
 		print("Taara: prepared lines:", lines)
 		_greeted_once = true
 		# persist to GameState so this NPC won't greet again after reload
-		if Engine.has_singleton("GameState") and npc_unique_id != "":
+		if typeof(GameState) == TYPE_OBJECT and npc_unique_id != "":
 			# Prefer GameState API when present; otherwise fallback to direct save
 			if GameState.has_method("register_npc_greeted"):
 				var save_err = GameState.register_npc_greeted(npc_unique_id)

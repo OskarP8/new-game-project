@@ -30,6 +30,8 @@ func _on_start_pressed() -> void:
 		gs.opened_chests = []
 		gs.saved_inventory = []
 		gs.saved_equipment_inventory = []
+	if typeof(QuestManager) == TYPE_OBJECT and QuestManager.has_method("reset_for_new_game"):
+		QuestManager.reset_for_new_game()
 
 	# Now go to gameplay scene (your existing flow)
 	var dd := get_tree().get_first_node_in_group("DeathDirector")
