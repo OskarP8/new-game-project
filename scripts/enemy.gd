@@ -14,6 +14,7 @@ class_name Enemy
 @export var corpse_lifetime: float = 20.0
 @export var fade_duration: float = 2.0
 @export var enemy_type: String = ""
+@export var is_flying: bool = false
 
 var _loot_dropped: bool = false
 
@@ -145,6 +146,7 @@ func _play_anim_if_exists(name: String) -> void:
 # ------------------------------
 func _ready() -> void:
 	hp = max_hp
+	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING if is_flying else CharacterBody2D.MOTION_MODE_GROUNDED
 	var players: Array = get_tree().get_nodes_in_group("Player")
 	player = players[0] if players.size() > 0 else null
 	weapon_pivot = weapon_pivot_front

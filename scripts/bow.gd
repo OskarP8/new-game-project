@@ -3,9 +3,13 @@ class_name Bow
 
 @export var arrow_scene: PackedScene
 @export var max_charge_time: float = 1.2
+@export var aim_sensitivity: float = 9.0
+@export var charge_aim_sensitivity: float = 11.0
 
 var is_charging: bool = false
 var charge_timer: float = 0.0
+var attack_timer: float = 0.0
+@export var attack_duration: float = 0.25
 
 # Target tracking for height mode
 var is_air_target: bool = false
@@ -19,15 +23,30 @@ func _ready():
 		hitbox.monitorable = false
 
 func update_weapon(delta: float) -> void:
-	# Keep standard rotation / pivot logic from Weapon
-	super.update_weapon(delta)
-	
-	# Update aiming & target altitude checks every frame
+	if weapon_pivot:
+		var aim_direction := get_global_mouse_position() - weapon_pivot.global_position
+		if aim_direction.length_squared() > 0.0:
+			var target_angle := aim_direction.angle()
+			var sensitivity := charge_aim_sensitivity if is_charging else aim_sensitivity
+			var blend := 1.0 - exp(-sensitivity * delta)
+			weapon_pivot.rotation = lerp_angle(weapon_pivot.rotation, target_angle, blend)
+			if weapon_holder:
+				weapon_holder.scale.x = 1.0
+
+			if weapon_owner:
+				weapon_owner.facing_left = aim_direction.x < 0.0
+				weapon_owner.bow_aiming_up = aim_direction.y < 0.0
+				weapon_owner.post_attack_left = weapon_owner.facing_left
+				weapon_owner.hor_dir = "left" if weapon_owner.facing_left else "right"
+
 	_update_aim_mode()
 
-	# Charge logic
 	if is_charging:
 		charge_timer = min(charge_timer + delta, max_charge_time)
+	if attack_timer > 0.0:
+		attack_timer -= delta
+		if attack_timer <= 0.0:
+			end_attack()
 
 func _update_aim_mode() -> void:
 	var mouse_pos = get_global_mouse_position()
@@ -44,9 +63,9 @@ func _update_aim_mode() -> void:
 	
 	for hit in hits:
 		var parent = hit.collider.get_parent()
-		if parent is FlyingEnemy or hit.collider.is_in_group("flying_enemies"):
+		if (parent is Enemy and parent.is_flying) or hit.collider.is_in_group("flying_enemies"):
 			is_air_target = true
-			target_z = parent.flight_height if "flight_height" in parent else 100.0
+			target_z = parent.flight_height if parent is Enemy and "flight_height" in parent else 100.0
 			target_ground_pos = hit.collider.global_position + Vector2(0, target_z)
 			break
 
@@ -58,10 +77,10 @@ func start_attack() -> void:
 	is_charging = true
 	charge_timer = 0.0
 	
-	if anim_player and anim_player.has_animation("draw_bow"):
-		anim_player.play("draw_bow")
-	elif sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("draw"):
-		sprite.play("draw")
+	if anim_player and anim_player.has_animation("charge"):
+		anim_player.play("charge")
+	elif sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("charge"):
+		sprite.play("charge")
 
 # Called by player when releasing the attack button
 func release_attack() -> void:
@@ -70,6 +89,7 @@ func release_attack() -> void:
 		
 	is_charging = false
 	attacking = true
+	attack_timer = attack_duration
 	
 	_spawn_arrow()
 	
@@ -87,10 +107,9 @@ func _spawn_arrow() -> void:
 	var arrow = arrow_scene.instantiate()
 	get_tree().current_scene.add_child(arrow)
 	
-	var charge_ratio = clamp(charge_timer / max_charge_time, 0.3, 1.0)
-	
 	# Pass launch details to the arrow
-	arrow.launch(global_position, target_ground_pos, target_z)
+	if arrow.has_method("launch"):
+		arrow.launch(global_position, target_ground_pos, target_z)
 
 func _on_anim_finished(anim_name: String) -> void:
 	if anim_name.begins_with("attack"):

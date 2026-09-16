@@ -218,9 +218,6 @@ func end_attack() -> void:
 	print("🛑 WEAPON END ATTACK")
 	attacking = false
 
-	# reset transforms similar to player behaviour
-	if weapon_pivot:
-		weapon_pivot.rotation = 0
 	if weapon_holder:
 		weapon_holder.scale.x = -1 if post_attack_left else 1
 

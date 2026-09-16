@@ -27,6 +27,7 @@ var weapon_logic: Node = null
 var attacking = false
 var has_weapon = false
 var facing_left = false           # persistent facing state (keeps after attack)
+var bow_aiming_up := false
 var attack_angle: float = 0.0     # stored attack angle
 var attack_flip: bool = false   # true when attack was aimed to the left
 
@@ -74,6 +75,11 @@ var suppress_body_anim_frame := false
 @onready var head_anim := $Head as AnimatedSprite2D
 @onready var weapon_pivot_back := $Graphics/WeaponPivotBack/WeaponPivot
 @onready var weapon_pivot_front := $Graphics/WeaponPivotFront/WeaponPivot
+@onready var bow_layer_back := $Graphics/BowPivotBack
+@onready var bow_layer_front := $BowPivotFront
+@onready var bow_pivot_back := $Graphics/BowPivotBack/BowPivot
+@onready var bow_pivot_front := $BowPivotFront/BowPivot
+var bow_pivot: Node2D
 var weapon_pivot: Node2D
 
 @onready var weapon_anim := $Graphics/WeaponPivot/Weapon as AnimatedSprite2D
@@ -114,11 +120,13 @@ func _ready():
 		player_inv.inventory_changed.connect(refresh_equipped_weapon_from_inventory)
 
 	has_weapon = false
+	bow_pivot = bow_pivot_front
 
 	if last_equipped_scene_path != "":
 		equip_weapon(last_equipped_scene_path)
 
-	weapon_pivot = weapon_pivot_front
+	if not current_weapon_scene is Bow:
+		weapon_pivot = weapon_pivot_front
 	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
 	if not weapon_holder:
 		weapon_holder = Node2D.new()
@@ -202,16 +210,20 @@ func _process(delta):
 	if dead or dying:
 		return
 	# weapon pivot and player flip are updated every frame; during attack weapon uses stored angle
-	#if Input.is_action_just_pressed("test_add_item"):
-		#print("Adding test item to inventory")
-		#var test_item: InvItem = preload("res://resources/pitchfork_res.tres")
-		#collect(test_item)
-		#var test_item2: InvItem = preload("res://resources/sword.tres")
-		#collect(test_item2)
+	if Input.is_action_just_pressed("test_add_item"):
+		print("Adding test item to inventory")
+		var test_item: InvItem = preload("res://resources/pitchfork_res.tres")
+		collect(test_item)
+		var test_item2: InvItem = preload("res://resources/sword.tres")
+		collect(test_item2)
+		var test_item3: InvItem = preload("res://resources/bow.tres")
+		collect(test_item3)
 	if Input.is_action_just_pressed("swap_weapon"):
 		swap_weapons()
 	if Input.is_action_just_pressed("interact") and nearby_item:
 		nearby_item.collect(self)
+	if current_weapon_scene and current_weapon_scene.has_method("update_weapon"):
+		current_weapon_scene.update_weapon(delta)
 	update_weapon_rotation()
 	update_player_flip()
 	sync_head_to_body()
@@ -286,7 +298,18 @@ func _update_last_dir() -> void:
 func handle_attack() -> void:
 	if dead:
 		return
-	if not has_weapon or attacking:
+	if not has_weapon:
+		return
+
+	var bow := current_weapon_scene as Bow
+	if bow:
+		if Input.is_action_just_pressed("attack"):
+			bow.start_attack()
+		if Input.is_action_just_released("attack"):
+			bow.release_attack()
+		return
+
+	if attacking:
 		return
 
 	if Input.is_action_just_pressed("attack"):
@@ -362,8 +385,6 @@ func handle_attack() -> void:
 # Called by AnimatedSprite2D animation_finished or body animation finished signal
 func _on_attack_finished() -> void:
 	# single handler for AnimatedSprite2D attack finished
-	suppress_weapon_rotation_frame = true
-
 	attacking = false
 	suppress_body_anim_frame = true
 
@@ -371,8 +392,6 @@ func _on_attack_finished() -> void:
 	if current_weapon_scene and current_weapon_scene.has_method("end_attack"):
 		current_weapon_scene.end_attack()
 
-	if weapon_pivot:
-		weapon_pivot.rotation = 0
 	if weapon_holder:
 		weapon_holder.scale.x = -1 if post_attack_left else 1
 	# resume weapon idle/walk
@@ -522,6 +541,14 @@ func update_layers() -> void:
 	if not weapon_pivot:
 		return
 
+	if current_weapon_scene is Bow:
+		var target_parent := bow_layer_back if vert_dir == "up" else bow_layer_front
+		if bow_pivot.get_parent() != target_parent:
+			bow_pivot.reparent(target_parent)
+			bow_pivot.position = Vector2(0, -4)
+			weapon_holder = bow_pivot.get_node("WeaponHolder")
+		return
+
 	var target_parent: Node
 
 	if vert_dir == "up":
@@ -565,6 +592,8 @@ func sync_head_to_body() -> void:
 # -------------------------------------------------------------------------
 func update_weapon_rotation():
 	if dead or dying:
+		return
+	if current_weapon_scene is Bow:
 		return
 	# ensure holder is grabbed
 	if attacking:
@@ -737,6 +766,10 @@ func equip_weapon(packed_or_path) -> void:
 		print("[player] equip_weapon: nothing equipped")
 		return
 
+	var is_bow := packed.resource_path == "res://scenes/Weapons/bow.tscn"
+	weapon_pivot = bow_pivot if is_bow else weapon_pivot_front
+	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
+
 	# ---- ENSURE HOLDER ----
 	if not weapon_holder:
 		weapon_holder = Node2D.new()
@@ -858,10 +891,6 @@ func _on_weapon_animation_finished(anim_name: String) -> void:
 	facing_left = post_attack_left
 
 	# Reset pivot rotation
-	if weapon_pivot:
-		if not attacking:
-			weapon_pivot.rotation = 0
-
 	# Ensure holder flip matches final facing
 	if weapon_holder:
 		weapon_holder.scale.x = -1 if facing_left else 1

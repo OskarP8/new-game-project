@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="InvItem" load_steps=2 format=3 uid="uid://oj2oim8eydg2"]
+
+[ext_resource type="Script" path="res://inventory/inventory_item.gd" id="1_s0pko"]
+
+[resource]
+script = ExtResource("1_s0pko")
+id = ""
+name = "Bow"
+type = "weapon"
+max_stack = 1
+scene_path = "res://scenes/Weapons/bow.tscn"
+stackable = false

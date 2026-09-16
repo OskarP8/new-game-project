@@ -739,6 +739,14 @@ libraries = {
 
 [node name="Graphics" type="Node2D" parent="."]
 
+[node name="BowPivotBack" type="Node2D" parent="Graphics"]
+
+[node name="BowPivot" type="Node2D" parent="Graphics/BowPivotBack"]
+position = Vector2(0, -4)
+
+[node name="WeaponHolder" type="Node2D" parent="Graphics/BowPivotBack/BowPivot"]
+y_sort_enabled = true
+
 [node name="WeaponPivotBack" type="Node2D" parent="Graphics"]
 position = Vector2(0, -3)
 
@@ -776,5 +784,13 @@ y_sort_enabled = true
 sprite_frames = SubResource("SpriteFrames_8ngrp")
 animation = &"attack_down_right_weapon"
 offset = Vector2(0, -16)
+
+[node name="BowPivotFront" type="Node2D" parent="."]
+
+[node name="BowPivot" type="Node2D" parent="BowPivotFront"]
+position = Vector2(0, -4)
+
+[node name="WeaponHolder" type="Node2D" parent="BowPivotFront/BowPivot"]
+y_sort_enabled = true
 
 [connection signal="animation_finished" from="Graphics/Body" to="." method="_on_body_animation_finished"]
