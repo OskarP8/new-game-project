@@ -77,6 +77,10 @@ func initialize(owner, pivot: Node2D, holder: Node2D) -> void:
 	if anim_player:
 		if not anim_player.is_connected("animation_finished", Callable(self, "_on_anim_finished")):
 			anim_player.animation_finished.connect(Callable(self, "_on_anim_finished"))
+		if weapon_owner.has_method("_on_weapon_animation_finished"):
+			var owner_callback := Callable(weapon_owner, "_on_weapon_animation_finished")
+			if not anim_player.animation_finished.is_connected(owner_callback):
+				anim_player.animation_finished.connect(owner_callback)
 
 	# connect hitbox callback
 	# connect hitbox callback (FORCED, SAFE)

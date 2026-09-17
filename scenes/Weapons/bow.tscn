@@ -1,17 +1,36 @@
-[gd_scene load_steps=6 format=3 uid="uid://bdr2sbix80bnb"]
+[gd_scene load_steps=10 format=3 uid="uid://bdr2sbix80bnb"]
 
 [ext_resource type="Script" path="res://scripts/bow.gd" id="1_3uoa5"]
 [ext_resource type="Texture2D" uid="uid://cryydh7tovpk2" path="res://sprites/weapons.kra" id="2_d3u5v"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_1e7vn"]
+atlas = ExtResource("2_d3u5v")
+region = Rect2(32, 128, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_ns8th"]
+atlas = ExtResource("2_d3u5v")
+region = Rect2(96, 128, 32, 32)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_4xwo8"]
 atlas = ExtResource("2_d3u5v")
 region = Rect2(0, 128, 32, 32)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_uxsjs"]
+atlas = ExtResource("2_d3u5v")
+region = Rect2(32, 128, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_fyaow"]
+atlas = ExtResource("2_d3u5v")
+region = Rect2(64, 128, 32, 32)
+
 [sub_resource type="SpriteFrames" id="SpriteFrames_hwmam"]
 animations = [{
 "frames": [{
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_4xwo8")
+"texture": SubResource("AtlasTexture_1e7vn")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_ns8th")
 }],
 "loop": false,
 "name": &"attack",
@@ -20,14 +39,17 @@ animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_4xwo8")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_uxsjs")
 }],
-"loop": true,
+"loop": false,
 "name": &"charge",
 "speed": 10.0
 }, {
 "frames": [{
 "duration": 1.0,
-"texture": SubResource("AtlasTexture_4xwo8")
+"texture": SubResource("AtlasTexture_fyaow")
 }],
 "loop": true,
 "name": &"idle",
@@ -59,13 +81,18 @@ func _on_body_entered(body: Node) -> void:
 "
 
 [node name="Bow" type="Node2D"]
+position = Vector2(9, -8)
 script = ExtResource("1_3uoa5")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+position = Vector2(-12, 8)
 sprite_frames = SubResource("SpriteFrames_hwmam")
-animation = &"idle"
+animation = &"attack"
+frame = 1
+frame_progress = 1.0
+offset = Vector2(12, -8)
 
 [node name="Hitbox" type="Area2D" parent="."]
 collision_layer = 4

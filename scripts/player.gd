@@ -75,8 +75,8 @@ var suppress_body_anim_frame := false
 @onready var head_anim := $Head as AnimatedSprite2D
 @onready var weapon_pivot_back := $Graphics/WeaponPivotBack/WeaponPivot
 @onready var weapon_pivot_front := $Graphics/WeaponPivotFront/WeaponPivot
-@onready var bow_layer_back := $Graphics/BowPivotBack
-@onready var bow_layer_front := $BowPivotFront
+@onready var bow_layer_back := $Graphics/BowPivotBack/BowPivot
+@onready var bow_layer_front := $BowPivotFront/BowPivot
 @onready var bow_pivot_back := $Graphics/BowPivotBack/BowPivot
 @onready var bow_pivot_front := $BowPivotFront/BowPivot
 var bow_pivot: Node2D
@@ -498,7 +498,8 @@ func update_animation() -> void:
 	# ----------------------
 	# WEAPON IDLE / WALK
 	# ----------------------
-	if has_weapon and not attacking:
+	var bow_in_action: bool = current_weapon_scene is Bow and (current_weapon_scene.is_charging or current_weapon_scene.attacking)
+	if has_weapon and not attacking and not bow_in_action:
 		var weapon_anim := "idle" if input == Vector2.ZERO else "walk"
 		_play_weapon_anim(weapon_anim)
 
@@ -542,11 +543,18 @@ func update_layers() -> void:
 		return
 
 	if current_weapon_scene is Bow:
-		var target_parent := bow_layer_back if vert_dir == "up" else bow_layer_front
-		if bow_pivot.get_parent() != target_parent:
-			bow_pivot.reparent(target_parent)
-			bow_pivot.position = Vector2(0, -4)
-			weapon_holder = bow_pivot.get_node("WeaponHolder")
+		if current_weapon_scene.is_charging or current_weapon_scene.attacking:
+			var target_parent := bow_layer_back if vert_dir == "up" else bow_layer_front
+			if weapon_pivot.get_parent() != target_parent:
+				weapon_pivot.reparent(target_parent)
+				weapon_pivot.position = Vector2.ZERO
+				weapon_holder = weapon_pivot.get_node("WeaponHolder")
+		else:
+			var target_parent := $Graphics/WeaponPivotBack if vert_dir == "up" else $Graphics/WeaponPivotFront
+			if weapon_pivot.get_parent() != target_parent:
+				weapon_pivot.reparent(target_parent)
+				weapon_pivot.position = Vector2.ZERO
+				weapon_holder = weapon_pivot.get_node("WeaponHolder")
 		return
 
 	var target_parent: Node
@@ -593,7 +601,7 @@ func sync_head_to_body() -> void:
 func update_weapon_rotation():
 	if dead or dying:
 		return
-	if current_weapon_scene is Bow:
+	if current_weapon_scene is Bow and (current_weapon_scene.is_charging or current_weapon_scene.attacking):
 		return
 	# ensure holder is grabbed
 	if attacking:
@@ -766,8 +774,7 @@ func equip_weapon(packed_or_path) -> void:
 		print("[player] equip_weapon: nothing equipped")
 		return
 
-	var is_bow := packed.resource_path == "res://scenes/Weapons/bow.tscn"
-	weapon_pivot = bow_pivot if is_bow else weapon_pivot_front
+	weapon_pivot = weapon_pivot_front
 	weapon_holder = weapon_pivot.get_node_or_null("WeaponHolder")
 
 	# ---- ENSURE HOLDER ----

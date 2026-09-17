@@ -21,7 +21,7 @@ func _ready():
 	anim.animation_finished.connect(_on_fade_anim_finished)
 
 	var player = get_tree().root.find_child("Player", true, false)
-	if player:
+	if player and player.has_signal("player_died"):
 		player.player_died.connect(_on_player_died)
 
 func _on_player_died():

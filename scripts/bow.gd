@@ -8,8 +8,6 @@ class_name Bow
 
 var is_charging: bool = false
 var charge_timer: float = 0.0
-var attack_timer: float = 0.0
-@export var attack_duration: float = 0.25
 
 # Target tracking for height mode
 var is_air_target: bool = false
@@ -23,30 +21,18 @@ func _ready():
 		hitbox.monitorable = false
 
 func update_weapon(delta: float) -> void:
-	if weapon_pivot:
-		var aim_direction := get_global_mouse_position() - weapon_pivot.global_position
-		if aim_direction.length_squared() > 0.0:
-			var target_angle := aim_direction.angle()
-			var sensitivity := charge_aim_sensitivity if is_charging else aim_sensitivity
-			var blend := 1.0 - exp(-sensitivity * delta)
-			weapon_pivot.rotation = lerp_angle(weapon_pivot.rotation, target_angle, blend)
-			if weapon_holder:
-				weapon_holder.scale.x = 1.0
+	if is_charging and weapon_pivot:
+		_update_aim(delta)
+	if attacking and sprite and sprite.animation == &"attack":
+		var final_frame := sprite.sprite_frames.get_frame_count(&"attack") - 1
+		if sprite.frame == final_frame and sprite.frame_progress >= 0.99:
+			end_attack()
 
-			if weapon_owner:
-				weapon_owner.facing_left = aim_direction.x < 0.0
-				weapon_owner.bow_aiming_up = aim_direction.y < 0.0
-				weapon_owner.post_attack_left = weapon_owner.facing_left
-				weapon_owner.hor_dir = "left" if weapon_owner.facing_left else "right"
-
-	_update_aim_mode()
+	if is_charging:
+		_update_aim_mode()
 
 	if is_charging:
 		charge_timer = min(charge_timer + delta, max_charge_time)
-	if attack_timer > 0.0:
-		attack_timer -= delta
-		if attack_timer <= 0.0:
-			end_attack()
 
 func _update_aim_mode() -> void:
 	var mouse_pos = get_global_mouse_position()
@@ -69,18 +55,44 @@ func _update_aim_mode() -> void:
 			target_ground_pos = hit.collider.global_position + Vector2(0, target_z)
 			break
 
+func _update_aim(delta: float, snap: bool = false) -> void:
+	var aim_direction := get_global_mouse_position() - weapon_pivot.global_position
+	if aim_direction.length_squared() == 0.0:
+		return
+
+	var target_angle := aim_direction.angle()
+	if snap:
+		weapon_pivot.rotation = target_angle
+	else:
+		var blend := 1.0 - exp(-charge_aim_sensitivity * delta)
+		weapon_pivot.rotation = lerp_angle(weapon_pivot.rotation, target_angle, blend)
+
+	if weapon_holder:
+		weapon_holder.scale.x = 1.0
+
+	if weapon_owner:
+		weapon_owner.facing_left = aim_direction.x < 0.0
+		weapon_owner.bow_aiming_up = aim_direction.y < 0.0
+		weapon_owner.post_attack_left = weapon_owner.facing_left
+		weapon_owner.hor_dir = "left" if weapon_owner.facing_left else "right"
+
 # Called by player when pressing the attack button
 func start_attack() -> void:
 	if attacking or is_charging:
 		return
+	if sprite and not sprite.animation_finished.is_connected(_on_sprite_animation_finished):
+		sprite.animation_finished.connect(_on_sprite_animation_finished)
 		
 	is_charging = true
 	charge_timer = 0.0
+	if weapon_owner and weapon_owner.has_method("update_layers"):
+		weapon_owner.update_layers()
+	_update_aim(0.0, true)
 	
-	if anim_player and anim_player.has_animation("charge"):
-		anim_player.play("charge")
-	elif sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("charge"):
+	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("charge"):
 		sprite.play("charge")
+	elif anim_player and anim_player.has_animation("charge"):
+		anim_player.play("charge")
 
 # Called by player when releasing the attack button
 func release_attack() -> void:
@@ -89,15 +101,25 @@ func release_attack() -> void:
 		
 	is_charging = false
 	attacking = true
-	attack_timer = attack_duration
+	if weapon_owner and weapon_owner.has_method("update_layers"):
+		weapon_owner.update_layers()
 	
 	_spawn_arrow()
 	
-	# Play shoot animation
-	if anim_player and anim_player.has_animation("attack"):
-		anim_player.play("attack")
-	elif sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("attack"):
+	# Play shoot animation from the bow sprite while keeping the release angle locked.
+	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("attack"):
 		sprite.play("attack")
+	elif anim_player and anim_player.has_animation("attack"):
+		anim_player.play("attack")
+
+func end_attack() -> void:
+	if not attacking:
+		return
+	super.end_attack()
+	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("idle"):
+		sprite.play("idle")
+	if weapon_owner and weapon_owner.has_method("update_layers"):
+		weapon_owner.update_layers()
 
 func _spawn_arrow() -> void:
 	if not arrow_scene:
@@ -113,4 +135,8 @@ func _spawn_arrow() -> void:
 
 func _on_anim_finished(anim_name: String) -> void:
 	if anim_name.begins_with("attack"):
+		end_attack()
+
+func _on_sprite_animation_finished(anim_name: StringName) -> void:
+	if anim_name == &"attack":
 		end_attack()
